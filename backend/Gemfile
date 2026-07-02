@@ -15,6 +15,7 @@ gem "rack-cors"
 
 # File uploads
 gem "image_processing", "~> 1.2"
+gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 
 # Deploy
 gem "kamal", require: false

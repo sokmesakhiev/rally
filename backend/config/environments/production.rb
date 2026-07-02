@@ -21,14 +21,17 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
 
-  # Store uploaded files on the local file system (see config/storage.yml for options).
-  config.active_storage.service = :local
+  # Store uploaded files in S3 (credentials supplied via ECS IAM task role).
+  config.active_storage.service = :amazon
 
-  # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  # config.assume_ssl = true
+  # The app runs behind an ALB that terminates SSL — trust the X-Forwarded-* headers.
+  config.assume_ssl = true
 
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  # config.force_ssl = true
+  # Force HTTPS at the application level (ALB already redirects 80→443).
+  config.force_ssl = true
+
+  # Skip SSL redirect for the ALB health check endpoint.
+  config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
 
   # Skip http-to-https redirect for the default health check endpoint.
   # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }

@@ -1,0 +1,29 @@
+# Copy this file to terraform.tfvars and fill in the values.
+# NEVER commit terraform.tfvars to version control — it contains secrets.
+
+# ── General ───────────────────────────────────────────────────────────────────
+aws_region  = "us-east-1"
+environment = "production"
+app_name    = "rally"
+
+# ── Domains (optional — remove if you don't have a domain yet) ───────────────
+# api_domain      = "api.example.com"
+# frontend_domain = "example.com"
+# route53_zone_id = "Z1234567890ABCDEF"
+
+# ── Secrets (required) ────────────────────────────────────────────────────────
+# Get master key from: cat backend/config/master.key
+rails_master_key = "YOUR_MASTER_KEY_HERE"
+
+# Leave empty to auto-generate a secure random JWT secret
+# jwt_secret = ""
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db_instance_class = "db.t3.micro"
+db_name           = "event_management_production"
+db_username       = "rally"
+
+# ── ECS ───────────────────────────────────────────────────────────────────────
+ecs_task_cpu      = 512
+ecs_task_memory   = 1024
+ecs_desired_count = 1

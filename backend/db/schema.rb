@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_02_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -43,6 +43,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "event_types", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.integer "capacity"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.uuid "event_id", null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.integer "price_cents"
+    t.datetime "updated_at", null: false
+    t.index ["event_id", "position"], name: "index_event_types_on_event_id_and_position"
+    t.index ["event_id"], name: "index_event_types_on_event_id"
+  end
+
   create_table "events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "banner_url"
     t.string "brand_color", default: "#6366f1", null: false
@@ -58,11 +71,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
     t.string "logo_url"
     t.integer "price_cents", default: 0, null: false
     t.datetime "start_at", null: false
+    t.uuid "survey_id"
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["creator_id"], name: "index_events_on_creator_id"
     t.index ["is_published"], name: "index_events_on_is_published"
     t.index ["start_at"], name: "index_events_on_start_at"
+    t.index ["survey_id"], name: "index_events_on_survey_id"
   end
 
   create_table "profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -72,6 +87,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_profiles_on_user_id", unique: true
+  end
+
+  create_table "registration_answers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.jsonb "answer_options", default: [], null: false
+    t.text "answer_text"
+    t.datetime "created_at", null: false
+    t.uuid "registration_id", null: false
+    t.uuid "survey_question_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["registration_id", "survey_question_id"], name: "index_reg_answers_on_reg_and_question", unique: true
+    t.index ["registration_id"], name: "index_registration_answers_on_registration_id"
+    t.index ["survey_question_id"], name: "index_registration_answers_on_survey_question_id"
+  end
+
+  create_table "registration_event_types", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "event_type_id", null: false
+    t.uuid "registration_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_type_id"], name: "index_registration_event_types_on_event_type_id"
+    t.index ["registration_id", "event_type_id"], name: "index_reg_event_types_on_reg_and_type", unique: true
+    t.index ["registration_id"], name: "index_registration_event_types_on_registration_id"
   end
 
   create_table "registrations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -87,6 +124,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
     t.index ["user_id"], name: "index_registrations_on_user_id"
   end
 
+  create_table "survey_questions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.jsonb "options", default: [], null: false
+    t.integer "position", default: 0, null: false
+    t.text "question_text", null: false
+    t.string "question_type", default: "text", null: false
+    t.boolean "required", default: false, null: false
+    t.uuid "survey_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["survey_id", "position"], name: "index_survey_questions_on_survey_id_and_position"
+    t.index ["survey_id"], name: "index_survey_questions_on_survey_id"
+  end
+
+  create_table "surveys", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "creator_id", null: false
+    t.string "title", default: "Registration Survey", null: false
+    t.datetime "updated_at", null: false
+    t.index ["creator_id"], name: "index_surveys_on_creator_id"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -97,8 +155,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_094124) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "event_types", "events"
+  add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "profiles", "users"
+  add_foreign_key "registration_answers", "registrations"
+  add_foreign_key "registration_answers", "survey_questions"
+  add_foreign_key "registration_event_types", "event_types"
+  add_foreign_key "registration_event_types", "registrations"
   add_foreign_key "registrations", "events"
   add_foreign_key "registrations", "users"
+  add_foreign_key "survey_questions", "surveys"
+  add_foreign_key "surveys", "users", column: "creator_id"
 end

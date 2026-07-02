@@ -21,11 +21,13 @@ RUN apt-get update -qq && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 # Set production environment variables and enable jemalloc for reduced memory usage and latency.
+# HTTP_PORT: port Thruster listens on (ECS ALB target group should match).
 ENV RAILS_ENV="production" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development" \
-    LD_PRELOAD="/usr/local/lib/libjemalloc.so"
+    LD_PRELOAD="/usr/local/lib/libjemalloc.so" \
+    HTTP_PORT="3001"
 
 # Throw-away build stage to reduce size of final image
 FROM base AS build
@@ -48,11 +50,9 @@ RUN bundle install && \
 COPY . .
 
 # Precompile bootsnap code for faster boot times.
+# API-only app — no asset pipeline, skip assets:precompile.
 # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
-
-# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
 
 
@@ -73,5 +73,5 @@ COPY --chown=rails:rails --from=build /rails /rails
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 # Start server via Thruster by default, this can be overwritten at runtime
-EXPOSE 80
+EXPOSE 3001
 CMD ["./bin/thrust", "./bin/rails", "server"]
