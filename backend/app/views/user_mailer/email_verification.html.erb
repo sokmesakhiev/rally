@@ -1,0 +1,9 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>Thanks for signing up for Rally! Please confirm your email address to finish setting up your account.</p>
+
+<p><a href="<%= @verify_url %>">Verify my email</a></p>
+
+<p>This link expires in 3 days.</p>
+
+<p>— The Rally team</p>

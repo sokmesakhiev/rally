@@ -10,10 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EventsIndexRouteImport } from './routes/events.index'
+import { Route as VerifyEmailTokenRouteImport } from './routes/verify-email.$token'
+import { Route as ResetPasswordTokenRouteImport } from './routes/reset-password.$token'
 import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events.new'
@@ -22,6 +25,11 @@ import { Route as AuthenticatedDashboardEventsEventIdRouteImport } from './route
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -41,6 +49,16 @@ const IndexRoute = IndexRouteImport.update({
 const EventsIndexRoute = EventsIndexRouteImport.update({
   id: '/events/',
   path: '/events/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailTokenRoute = VerifyEmailTokenRouteImport.update({
+  id: '/verify-email/$token',
+  path: '/verify-email/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordTokenRoute = ResetPasswordTokenRouteImport.update({
+  id: '/reset-password/$token',
+  path: '/reset-password/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventsEventIdRoute = EventsEventIdRouteImport.update({
@@ -68,9 +86,12 @@ const AuthenticatedDashboardEventsEventIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/events/$eventId': typeof EventsEventIdRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events/': typeof EventsIndexRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/dashboard/events/$eventId': typeof AuthenticatedDashboardEventsEventIdRoute
@@ -78,9 +99,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/events/$eventId': typeof EventsEventIdRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events': typeof EventsIndexRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/dashboard/events/$eventId': typeof AuthenticatedDashboardEventsEventIdRoute
@@ -90,9 +114,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/events/$eventId': typeof EventsEventIdRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events/': typeof EventsIndexRoute
   '/_authenticated/events/new': typeof AuthenticatedEventsNewRoute
   '/_authenticated/dashboard/events/$eventId': typeof AuthenticatedDashboardEventsEventIdRoute
@@ -102,9 +129,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/forgot-password'
     | '/sitemap.xml'
     | '/dashboard'
     | '/events/$eventId'
+    | '/reset-password/$token'
+    | '/verify-email/$token'
     | '/events/'
     | '/events/new'
     | '/dashboard/events/$eventId'
@@ -112,9 +142,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/forgot-password'
     | '/sitemap.xml'
     | '/dashboard'
     | '/events/$eventId'
+    | '/reset-password/$token'
+    | '/verify-email/$token'
     | '/events'
     | '/events/new'
     | '/dashboard/events/$eventId'
@@ -123,9 +156,12 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/forgot-password'
     | '/sitemap.xml'
     | '/_authenticated/dashboard'
     | '/events/$eventId'
+    | '/reset-password/$token'
+    | '/verify-email/$token'
     | '/events/'
     | '/_authenticated/events/new'
     | '/_authenticated/dashboard/events/$eventId'
@@ -135,8 +171,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   EventsEventIdRoute: typeof EventsEventIdRoute
+  ResetPasswordTokenRoute: typeof ResetPasswordTokenRoute
+  VerifyEmailTokenRoute: typeof VerifyEmailTokenRoute
   EventsIndexRoute: typeof EventsIndexRoute
 }
 
@@ -147,6 +186,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -175,6 +221,20 @@ declare module '@tanstack/react-router' {
       path: '/events'
       fullPath: '/events/'
       preLoaderRoute: typeof EventsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email/$token': {
+      id: '/verify-email/$token'
+      path: '/verify-email/$token'
+      fullPath: '/verify-email/$token'
+      preLoaderRoute: typeof VerifyEmailTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password/$token': {
+      id: '/reset-password/$token'
+      path: '/reset-password/$token'
+      fullPath: '/reset-password/$token'
+      preLoaderRoute: typeof ResetPasswordTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/events/$eventId': {
@@ -240,8 +300,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   EventsEventIdRoute: EventsEventIdRoute,
+  ResetPasswordTokenRoute: ResetPasswordTokenRoute,
+  VerifyEmailTokenRoute: VerifyEmailTokenRoute,
   EventsIndexRoute: EventsIndexRoute,
 }
 export const routeTree = rootRouteImport

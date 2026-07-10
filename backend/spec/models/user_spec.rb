@@ -65,4 +65,67 @@ RSpec.describe User, type: :model do
       expect(user.reload.email).to eq("user@example.com")
     end
   end
+
+  # ── Email verification ────────────────────────────────────────────────────────
+  describe "email verification" do
+    it "is assigned a verification token automatically on create" do
+      user = create(:user)
+      expect(user.email_verification_token).to be_present
+      expect(user.email_verified?).to be(false)
+    end
+
+    it "verify_email! clears the token and sets email_verified_at" do
+      user = create(:user)
+      user.verify_email!
+      expect(user.email_verified?).to be(true)
+      expect(user.email_verification_token).to be_nil
+    end
+
+    it "finds a user by a valid token" do
+      user = create(:user)
+      expect(User.find_by_valid_email_verification_token(user.email_verification_token)).to eq(user)
+    end
+
+    it "does not find a user by an expired token" do
+      user = create(:user)
+      user.update_column(:email_verification_sent_at, 4.days.ago)
+      expect(User.find_by_valid_email_verification_token(user.email_verification_token)).to be_nil
+    end
+
+    it "returns nil for an unknown token" do
+      expect(User.find_by_valid_email_verification_token("bogus")).to be_nil
+    end
+  end
+
+  # ── Password reset ────────────────────────────────────────────────────────────
+  describe "password reset" do
+    it "generate_password_reset_token! sets a token and timestamp" do
+      user = create(:user)
+      user.generate_password_reset_token!
+      expect(user.password_reset_token).to be_present
+      expect(user.password_reset_token_valid?).to be(true)
+    end
+
+    it "is invalid once expired" do
+      user = create(:user)
+      user.generate_password_reset_token!
+      user.update_column(:password_reset_sent_at, 3.hours.ago)
+      expect(user.password_reset_token_valid?).to be(false)
+    end
+
+    it "finds a user by a valid reset token" do
+      user = create(:user)
+      user.generate_password_reset_token!
+      expect(User.find_by_valid_password_reset_token(user.password_reset_token)).to eq(user)
+    end
+
+    it "reset_password! updates the password and clears the token" do
+      user = create(:user, password: "oldpassword")
+      user.generate_password_reset_token!
+      user.reset_password!("newpassword123")
+
+      expect(user.reload.authenticate("newpassword123")).to eq(user)
+      expect(user.password_reset_token).to be_nil
+    end
+  end
 end

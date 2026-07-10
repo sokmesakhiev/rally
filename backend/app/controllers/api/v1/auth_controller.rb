@@ -18,6 +18,8 @@ module Api
           user.save!
         end
 
+        UserMailer.email_verification(user).deliver_later
+
         token = JsonWebToken.encode(user_id: user.id)
         render json: user_payload(user, token), status: :created
       rescue ActiveRecord::RecordInvalid => e
@@ -52,6 +54,7 @@ module Api
             email: user.email,
             display_name: profile&.display_name,
             avatar_url: profile&.avatar_url,
+            email_verified: user.email_verified?,
             created_at: user.created_at
           }
         }

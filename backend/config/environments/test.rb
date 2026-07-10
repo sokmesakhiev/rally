@@ -36,6 +36,12 @@ Rails.application.configure do
   # ActionMailer::Base.deliveries array.
   config.action_mailer.delivery_method = :test
 
+  # Enqueue background jobs (mailers use deliver_later) without executing
+  # them automatically — specs opt in via `perform_enqueued_jobs { ... }`
+  # (see spec/rails_helper.rb). Avoids flaky async execution across the
+  # per-test DB transaction boundary.
+  config.active_job.queue_adapter = :test
+
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "example.com" }
 

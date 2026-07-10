@@ -69,6 +69,7 @@ export interface ApiUser {
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+  email_verified: boolean;
   created_at: string;
 }
 
@@ -198,6 +199,38 @@ export const authApi = {
 
   signout() {
     clearToken();
+  },
+};
+
+// ─── Password resets ────────────────────────────────────────────────────────
+
+export const passwordResetsApi = {
+  request(email: string) {
+    return api.post<{ message: string }>("/password_resets", { email });
+  },
+
+  reset(token: string, password: string, passwordConfirmation: string) {
+    return api
+      .patch<{ message: string; token: string }>(`/password_resets/${token}`, {
+        password,
+        password_confirmation: passwordConfirmation,
+      })
+      .then((res) => {
+        setToken(res.token);
+        return res;
+      });
+  },
+};
+
+// ─── Email verification ──────────────────────────────────────────────────────
+
+export const emailVerificationsApi = {
+  resend() {
+    return api.post<{ message: string }>("/email_verifications");
+  },
+
+  confirm(token: string) {
+    return api.get<{ message: string }>(`/email_verifications/${token}`);
   },
 };
 
@@ -345,5 +378,32 @@ export const surveyResponsesApi = {
     return api.get<{ survey: ApiSurvey; responses: ApiSurveyResponse[] }>(
       `/events/${eventId}/survey_responses`
     );
+  },
+};
+
+// ─── Payments (ABA PayWay KHQR) ────────────────────────────────────────────────
+
+export type PaymentStatus = "pending" | "approved" | "declined" | "cancelled" | "expired" | "refunded";
+
+export interface ApiPayment {
+  id: string;
+  registration_id: string;
+  status: PaymentStatus;
+  amount_cents: number;
+  currency: string;
+  qr_string: string | null;
+  abapay_deeplink: string | null;
+  expires_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export const paymentsApi = {
+  create(registrationId: string) {
+    return api.post<{ payment: ApiPayment }>(`/registrations/${registrationId}/payments`);
+  },
+
+  status(paymentId: string) {
+    return api.get<{ payment: ApiPayment }>(`/payments/${paymentId}`);
   },
 };

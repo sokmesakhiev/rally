@@ -1,0 +1,10 @@
+Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,
+
+We've received your payment for <%= @event.title %>.
+<% if @payment -%>
+Amount: <%= @payment.formatted_amount %> <%= @payment.currency.to_s.upcase %>
+<% end -%>
+
+You're all set — see you at the event!
+
+— The Rally team

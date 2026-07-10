@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_02_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_10_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -78,6 +78,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_02_000002) do
     t.index ["is_published"], name: "index_events_on_is_published"
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
+  end
+
+  create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.datetime "expires_at"
+    t.datetime "paid_at"
+    t.string "provider", default: "aba_payway", null: false
+    t.text "qr_string"
+    t.text "abapay_deeplink"
+    t.jsonb "raw_response", default: {}, null: false
+    t.uuid "registration_id", null: false
+    t.string "status", default: "pending", null: false
+    t.string "tran_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["registration_id", "status"], name: "index_payments_on_registration_id_and_status"
+    t.index ["registration_id"], name: "index_payments_on_registration_id"
+    t.index ["tran_id"], name: "index_payments_on_tran_id", unique: true
   end
 
   create_table "profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -148,9 +167,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_02_000002) do
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
+    t.datetime "email_verification_sent_at"
+    t.string "email_verification_token"
+    t.datetime "email_verified_at"
     t.string "password_digest", null: false
+    t.datetime "password_reset_sent_at"
+    t.string "password_reset_token"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["email_verification_token"], name: "index_users_on_email_verification_token", unique: true
+    t.index ["password_reset_token"], name: "index_users_on_password_reset_token", unique: true
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
@@ -158,6 +184,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_02_000002) do
   add_foreign_key "event_types", "events"
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
+  add_foreign_key "payments", "registrations"
   add_foreign_key "profiles", "users"
   add_foreign_key "registration_answers", "registrations"
   add_foreign_key "registration_answers", "survey_questions"

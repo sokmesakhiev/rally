@@ -69,6 +69,8 @@ module Api
             end
           end
 
+          RegistrationMailer.confirmation(registration).deliver_later
+
           render json: { registration: registration_json(registration, include_types: true) }, status: :created
         end
       rescue ActiveRecord::RecordInvalid => e

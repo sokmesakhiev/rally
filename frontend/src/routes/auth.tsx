@@ -156,7 +156,12 @@ function AuthPage() {
                 <Input id="email-in" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pw-in">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pw-in">Password</Label>
+                  <Link to="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground">
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input id="pw-in" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
               </div>
               <Button variant="hero" className="w-full" onClick={handleSignIn} disabled={loading}>

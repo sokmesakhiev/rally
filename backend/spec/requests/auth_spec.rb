@@ -53,6 +53,14 @@ RSpec.describe "Auth API", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
     end
+
+    it "sends a verification email and marks the account unverified" do
+      expect {
+        perform_enqueued_jobs { post "/api/v1/auth/signup", params: valid_params, as: :json }
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      expect(json["user"]["email_verified"]).to be(false)
+    end
   end
 
   # ── POST /api/v1/auth/signin ─────────────────────────────────────────────────

@@ -53,3 +53,31 @@ resource "aws_secretsmanager_secret_version" "rails_master_key" {
   secret_id     = aws_secretsmanager_secret.rails_master_key.id
   secret_string = var.rails_master_key
 }
+
+# ── ABA_PAYWAY_MERCHANT_ID / ABA_PAYWAY_API_KEY ────────────────────────────────
+# Third-party payment gateway credentials — not AWS-native, so unlike SES
+# there's no IAM-role shortcut here. Get these from ABA Bank (see
+# ABA_PAYWAY_SETUP.md) and set aba_payway_merchant_id / aba_payway_api_key in
+# terraform.tfvars.
+
+resource "aws_secretsmanager_secret" "aba_payway_merchant_id" {
+  name                    = "${local.prefix}/aba-payway-merchant-id"
+  description             = "ABA PayWay merchant ID"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "aba_payway_merchant_id" {
+  secret_id     = aws_secretsmanager_secret.aba_payway_merchant_id.id
+  secret_string = var.aba_payway_merchant_id
+}
+
+resource "aws_secretsmanager_secret" "aba_payway_api_key" {
+  name                    = "${local.prefix}/aba-payway-api-key"
+  description             = "ABA PayWay API key (used for HMAC request signing)"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "aba_payway_api_key" {
+  secret_id     = aws_secretsmanager_secret.aba_payway_api_key.id
+  secret_string = var.aba_payway_api_key
+}

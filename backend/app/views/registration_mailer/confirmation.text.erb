@@ -1,0 +1,17 @@
+Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,
+
+You're registered for <%= @event.title %>.
+
+When: <%= @event.start_at.strftime("%A, %B %-d, %Y at %-I:%M %p") %>
+<% if @event.location.present? -%>
+Where: <%= @event.location %>
+<% end -%>
+
+<% if @owed_cents.positive? && @registration.payment_status != "paid" -%>
+Payment pending — please complete your payment to secure your spot. You can pay by KHQR from the event page:
+<%= @event_url %>
+<% else -%>
+See you there!
+<% end -%>
+
+— The Rally team

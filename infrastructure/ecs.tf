@@ -57,15 +57,20 @@ resource "aws_ecs_task_definition" "app" {
       { name = "AWS_REGION",             value = var.aws_region },
       { name = "AWS_BUCKET",             value = aws_s3_bucket.uploads.bucket },
       { name = "FRONTEND_URL",           value = local.custom_frontend_domain ? "https://${var.frontend_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}" },
+      { name = "BACKEND_URL",            value = local.custom_api_domain ? "https://${var.api_domain}" : "http://${aws_lb.main.dns_name}" },
+      { name = "ABA_PAYWAY_BASE_URL",    value = var.aba_payway_base_url },
+      { name = "MAILER_FROM_EMAIL",      value = var.mailer_from_email },
     ]
 
     # Secrets injected at task startup from Secrets Manager
     # The ECS agent fetches these using the execution role, so they are never
     # visible in the task definition or AWS console.
     secrets = [
-      { name = "DATABASE_URL",      valueFrom = aws_secretsmanager_secret.database_url.arn },
-      { name = "JWT_SECRET",        valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
-      { name = "RAILS_MASTER_KEY",  valueFrom = aws_secretsmanager_secret.rails_master_key.arn },
+      { name = "DATABASE_URL",             valueFrom = aws_secretsmanager_secret.database_url.arn },
+      { name = "JWT_SECRET",               valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
+      { name = "RAILS_MASTER_KEY",         valueFrom = aws_secretsmanager_secret.rails_master_key.arn },
+      { name = "ABA_PAYWAY_MERCHANT_ID",   valueFrom = aws_secretsmanager_secret.aba_payway_merchant_id.arn },
+      { name = "ABA_PAYWAY_API_KEY",       valueFrom = aws_secretsmanager_secret.aba_payway_api_key.arn },
     ]
 
     # Health check — Rails 8 ships the /up endpoint out of the box

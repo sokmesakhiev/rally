@@ -18,6 +18,21 @@ rails_master_key = "YOUR_MASTER_KEY_HERE"
 # Leave empty to auto-generate a secure random JWT secret
 # jwt_secret = ""
 
+# ── Payments (ABA PayWay KHQR) ─────────────────────────────────────────────────
+# Sign up for sandbox credentials at https://sandbox.payway.com.kh, or contact
+# paywaysales@ababank.com for production access. See ABA_PAYWAY_SETUP.md.
+# Note: ABA requires the webhook callback URL to be HTTPS, which means
+# api_domain (above) must be set for automatic payment confirmation to work —
+# without it, payments still confirm via polling, just with a few seconds' delay.
+aba_payway_merchant_id = "YOUR_ABA_MERCHANT_ID"
+aba_payway_api_key     = "YOUR_ABA_API_KEY"
+# aba_payway_base_url  = "https://checkout-sandbox.payway.com.kh" # switch to https://checkout.payway.com.kh for production
+
+# ── Mail (Amazon SES) ───────────────────────────────────────────────────────────
+# The "from" address's domain must be a verified SES identity, and the AWS
+# account must be out of the SES sandbox to email real (non-verified) users.
+mailer_from_email = "Rally <no-reply@example.com>"
+
 # ── Database ──────────────────────────────────────────────────────────────────
 db_instance_class = "db.t3.micro"
 db_name           = "event_management_production"

@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
+import { PaymentPanel } from "@/components/payment-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime, formatPrice, categoryLabel } from "@/lib/event-utils";
@@ -54,14 +55,19 @@ function EventDetail() {
   const register = useMutation({
     mutationFn: (opts?: { answers?: ApiRegistrationAnswer[]; eventTypeIds?: string[] }) =>
       registrationsApi.create(eventId, opts),
-    onSuccess: () => {
+    onSuccess: (res) => {
       setRegStep("idle");
       setSelectedTypeIds([]);
       queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-count", eventId] });
       queryClient.invalidateQueries({ queryKey: ["my-registrations"] });
-      toast.success("You're registered! Add the event to your calendar.");
-      if (ev) downloadICS(ev);
+
+      if (res.registration.payment_status === "unpaid") {
+        toast.success("You're registered — complete payment to secure your spot.");
+      } else {
+        toast.success("You're registered! Add the event to your calendar.");
+        if (ev) downloadICS(ev);
+      }
     },
     onError: (e: any) => toast.error(e.message ?? "Could not register"),
   });
@@ -231,8 +237,18 @@ function EventDetail() {
                   onBack={() => setRegStep(hasTypes ? "types" : "idle")}
                   onSubmit={handleSurveyDone}
                 />
+              ) : regQuery.data && regQuery.data.payment_status === "unpaid" ? (
+                /* Registered, payment still pending */
+                <PaymentPanel
+                  registrationId={regQuery.data.id}
+                  brandColor={brandColor}
+                  onPaid={() => {
+                    queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
+                    if (ev) downloadICS(ev);
+                  }}
+                />
               ) : regQuery.data ? (
-                /* Already registered */
+                /* Already registered and paid (or free) */
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p className="flex items-center gap-2 font-medium" style={{ color: brandColor }}>
@@ -275,7 +291,7 @@ function EventDetail() {
                     </p>
                     {!hasTypes && ev.price_cents > 0 && (
                       <p className="text-sm text-muted-foreground">
-                        Payment collected by the organizer.
+                        Pay instantly by KHQR after you register.
                       </p>
                     )}
                     {hasTypes && (

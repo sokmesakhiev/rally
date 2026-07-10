@@ -39,6 +39,8 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
         aws_secretsmanager_secret.database_url.arn,
         aws_secretsmanager_secret.jwt_secret.arn,
         aws_secretsmanager_secret.rails_master_key.arn,
+        aws_secretsmanager_secret.aba_payway_merchant_id.arn,
+        aws_secretsmanager_secret.aba_payway_api_key.arn,
       ]
     }]
   })
@@ -80,6 +82,26 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
         aws_s3_bucket.uploads.arn,
         "${aws_s3_bucket.uploads.arn}/*",
       ]
+    }]
+  })
+}
+
+# Allow the app to send transactional email via SES (registration
+# confirmations, password resets, email verification). No static AWS keys —
+# the SDK picks up credentials from this task role automatically.
+resource "aws_iam_role_policy" "ecs_task_ses" {
+  name = "${local.prefix}-ecs-task-ses"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+      ]
+      Resource = "*"
     }]
   })
 }

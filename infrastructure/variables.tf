@@ -111,3 +111,31 @@ variable "jwt_secret" {
   sensitive   = true
   default     = ""
 }
+
+variable "aba_payway_merchant_id" {
+  description = "ABA PayWay merchant ID (from ABA Bank — see ABA_PAYWAY_SETUP.md). Required for payments to work."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "aba_payway_api_key" {
+  description = "ABA PayWay API key used to sign requests (from ABA Bank). Required for payments to work."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "aba_payway_base_url" {
+  description = "ABA PayWay environment base URL — sandbox until ABA approves production access."
+  type        = string
+  default     = "https://checkout-sandbox.payway.com.kh"
+}
+
+# ── Mail ──────────────────────────────────────────────────────────────────────
+
+variable "mailer_from_email" {
+  description = "From address for transactional email, sent via SES. Must be a verified SES identity/domain."
+  type        = string
+  default     = "Rally <no-reply@example.com>"
+}

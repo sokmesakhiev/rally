@@ -3,6 +3,7 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require "rspec/rails"
+require "active_job/test_helper"
 
 # Load support files
 Dir[Rails.root.join("spec/support/**/*.rb")].sort.each { |f| require f }
@@ -21,6 +22,9 @@ RSpec.configure do |config|
 
   config.include FactoryBot::Syntax::Methods
   config.include RequestHelpers, type: :request
+  # Lets request specs assert on ActionMailer::Base.deliveries by wrapping
+  # `deliver_later` calls in `perform_enqueued_jobs { ... }`.
+  config.include ActiveJob::TestHelper, type: :request
 
   # DatabaseCleaner
   config.before(:suite) { DatabaseCleaner.strategy = :transaction }
