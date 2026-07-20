@@ -15,7 +15,7 @@ module Api
         end
 
         registrations = event.registrations
-          .includes(:user, :user => :profile, :registration_answers => :survey_question)
+          .includes(:user, user: :profile, registration_answers: :survey_question)
           .order(created_at: :asc)
 
         render json: {

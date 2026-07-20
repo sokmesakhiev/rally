@@ -17,7 +17,7 @@ class EventType < ApplicationRecord
   def spots_remaining
     return nil if capacity.nil?
     taken = registration_event_types.count
-    [capacity - taken, 0].max
+    [ capacity - taken, 0 ].max
   end
 
   def full?
