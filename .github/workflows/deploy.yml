@@ -62,4 +62,64 @@ jobs:
       - name: Invalidate CloudFront
         run: aws cloudfront create-invalidation  --distribution-id ${{secrets.CLOUDFRONT_DIST_ID}} --paths "/*"
 
+  deploy-backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Fargate task definitions run linux/amd64; build for that explicitly
+      # so this also works when the runner/build host is arm64.
+      - name: Build and push image to ECR
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t "$REGISTRY/$REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$REPOSITORY:latest" \
+            .
+          docker push "$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+
+      # The ECS task definition always points at the ":latest" tag (see
+      # infrastructure/ecs.tf, var.rails_image_tag) and Terraform ignores
+      # container_definitions after the first apply — so a deploy is just
+      # "push a new :latest and tell the service to re-pull it", the same
+      # thing scripts/deploy.sh does for manual/local deploys. Migrations
+      # run automatically on boot via bin/docker-entrypoint (db:prepare).
+      - name: Deploy to ECS
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --output json > /dev/null
+
+          echo "Waiting for the ECS service to stabilise..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

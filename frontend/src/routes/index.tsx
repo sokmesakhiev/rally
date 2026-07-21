@@ -30,6 +30,7 @@ export const Route = createFileRoute("/")({
           "Rally lets anyone organize running races, group rides, and community gatherings in minutes. Manage registrations, send updates, and grow your community.",
       },
       { property: "og:title", content: "Rally — Create & Join Running Events" },
+      { property: "og:type", content: "website" },
       {
         property: "og:description",
         content: "Organize running races, group rides, and community gatherings in minutes.",
