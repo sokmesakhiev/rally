@@ -15,10 +15,36 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { useAuth } from "@/lib/use-auth";
 import { VerifyEmailBanner } from "@/components/verify-email-banner";
 
+// Shared by every top-level nav item (both TanStack Router `Link`s and plain
+// `<a>` section anchors) so hover/focus/active treatment stays consistent.
+// `Link` automatically sets `data-status="active"` (and `aria-current`) on
+// its rendered <a> when the route matches — the `data-[status=active]:`
+// variants below key off that, so no manual pathname comparison is needed.
+// Plain <a> tags simply never get that attribute, so those variants are a
+// no-op for them; they still get hover/focus treatment.
+const navLinkClass =
+  "relative rounded-sm border-b-2 border-transparent px-0.5 pb-1.5 pt-1 outline-none transition-colors hover:border-border hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground";
+
 export function SiteHeader() {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // location.hash is stored without the leading "#" (e.g. "features").
+  const hash = useRouterState({ select: (s) => s.location.hash });
+
+  // The Features/Pricing/How-it-works items are plain <a href="/#section">
+  // anchors, not TanStack Router `Link`s, so they never get the automatic
+  // data-status="active" that Link sets on route change. They also don't
+  // navigate to a different URL *pathname* — just a hash on the same "/" —
+  // so we track which section is current from the hash instead and apply
+  // the same active styling by hand.
+  function sectionNavProps(section: string) {
+    const isActive = hash === section;
+    return {
+      "data-status": isActive ? ("active" as const) : undefined,
+      "aria-current": isActive ? ("location" as const) : undefined,
+    };
+  }
 
   const greetingName =
     user?.display_name?.trim() || user?.email.split("@")[0] || t("header.fallbackName");
@@ -39,22 +65,22 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-          <Link to="/events" className="transition-colors hover:text-foreground">
+          <Link to="/events" className={navLinkClass}>
             {t("header.browseEvents")}
           </Link>
           {user ? (
-            <Link to="/dashboard" className="transition-colors hover:text-foreground">
+            <Link to="/dashboard" className={navLinkClass}>
               {t("header.dashboard")}
             </Link>
           ) : (
             <>
-              <a href="/#features" className="transition-colors hover:text-foreground">
+              <a href="/#features" className={navLinkClass} {...sectionNavProps("features")}>
                 {t("header.features")}
               </a>
-              <a href="/#pricing" className="transition-colors hover:text-foreground">
+              <a href="/#pricing" className={navLinkClass} {...sectionNavProps("pricing")}>
                 {t("header.pricing")}
               </a>
-              <a href="/#how" className="transition-colors hover:text-foreground">
+              <a href="/#how" className={navLinkClass} {...sectionNavProps("how")}>
                 {t("header.howItWorks")}
               </a>
             </>
