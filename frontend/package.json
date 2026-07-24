@@ -62,7 +62,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-day-picker": "^10.0.1",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.2.8",
     "react-hook-form": "^7.71.2",
     "react-i18next": "^17.0.10",
     "react-resizable-panels": "^4.6.5",
