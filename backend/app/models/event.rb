@@ -31,6 +31,15 @@ class Event < ApplicationRecord
   validates :start_at, presence: true
   validates :price_cents, numericality: { greater_than_or_equal_to: 0 }
   validates :plan, inclusion: { in: PLANS.keys }, allow_nil: true
+  validates :latitude, numericality: { greater_than_or_equal_to: -90, less_than_or_equal_to: 90 },
+    allow_nil: true
+  validates :longitude, numericality: { greater_than_or_equal_to: -180, less_than_or_equal_to: 180 },
+    allow_nil: true
+  # Set by the frontend's Google Maps location picker — both or neither, so a
+  # pin never ends up half-placed (e.g. after a partial client-side bug).
+  validate :lat_lng_present_together
+  validates :route_map_url, format: { with: URI::DEFAULT_PARSER.make_regexp(%w[http https]),
+    message: "must be a valid http(s) URL" }, allow_blank: true
   validate :end_after_start
   # Only meaningful once a plan has actually set a capacity — a draft event
   # with types but no plan yet (capacity nil) isn't constrained by this.
@@ -62,6 +71,11 @@ class Event < ApplicationRecord
   def end_after_start
     return unless end_at && start_at
     errors.add(:end_at, "must be after start time") if end_at <= start_at
+  end
+
+  def lat_lng_present_together
+    return if latitude.present? == longitude.present?
+    errors.add(:base, "latitude and longitude must both be set, or both left blank")
   end
 
   def capacity_covers_event_types

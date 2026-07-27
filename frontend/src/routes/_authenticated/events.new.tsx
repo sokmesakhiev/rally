@@ -15,6 +15,7 @@ import { SurveyBuilder } from "@/components/survey-builder";
 import { EventTypeBuilder, newEventType } from "@/components/event-type-builder";
 import { SiteHeader } from "@/components/site-header";
 import { ImageUpload } from "@/components/image-upload";
+import { LocationPicker } from "@/components/location-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +59,9 @@ function NewEvent() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("running");
   const [location, setLocation] = useState("");
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [routeMapUrl, setRouteMapUrl] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [isPaid, setIsPaid] = useState(false);
@@ -101,6 +105,9 @@ function NewEvent() {
         description: description.trim() || null,
         category,
         location: location.trim() || null,
+        latitude,
+        longitude,
+        route_map_url: routeMapUrl.trim() || null,
         start_at: new Date(startAt).toISOString(),
         end_at: endAt ? new Date(endAt).toISOString() : null,
         price_cents: isPaid ? Math.round(Number(price) * 100) : 0,
@@ -168,31 +175,41 @@ function NewEvent() {
             />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>{t("eventForm.category")}</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventCategoryOptions().map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="loc">{t("eventForm.location")}</Label>
-              <Input
-                id="loc"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder={t("eventForm.locationPlaceholder")}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>{t("eventForm.category")}</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {eventCategoryOptions().map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <LocationPicker
+            value={{ location, latitude, longitude }}
+            onChange={(v) => {
+              setLocation(v.location);
+              setLatitude(v.latitude);
+              setLongitude(v.longitude);
+            }}
+          />
+
+          <div className="space-y-2">
+            <Label htmlFor="route-map">{t("eventForm.routeMapUrl")}</Label>
+            <Input
+              id="route-map"
+              type="url"
+              value={routeMapUrl}
+              onChange={(e) => setRouteMapUrl(e.target.value)}
+              placeholder={t("eventForm.routeMapUrlPlaceholder")}
+            />
+            <p className="text-xs text-muted-foreground">{t("eventForm.routeMapUrlHint")}</p>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">

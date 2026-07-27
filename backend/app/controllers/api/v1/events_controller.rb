@@ -80,6 +80,7 @@ module Api
       def event_params
         params.require(:event).permit(
           :title, :description, :category, :location,
+          :latitude, :longitude, :route_map_url,
           :start_at, :end_at, :price_cents, :currency,
           :brand_color, :banner_url, :logo_url, :survey_id,
           event_types_attributes: [
@@ -97,6 +98,11 @@ module Api
           description: event.description,
           category: event.category,
           location: event.location,
+          # decimal columns serialize as strings by default (BigDecimal#as_json)
+          # — cast to Float so the frontend gets real JSON numbers.
+          latitude: event.latitude&.to_f,
+          longitude: event.longitude&.to_f,
+          route_map_url: event.route_map_url,
           start_at: event.start_at,
           end_at: event.end_at,
           capacity: event.capacity,

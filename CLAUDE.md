@@ -68,6 +68,8 @@ Core relationships (see `app/models/`):
 
 When changing pricing/capacity logic, check both the `Event`-level and `EventType`-level paths — most events support both a single flat price/capacity and per-type overrides. Also check `Event#combined_event_type_capacity` (sum of each type's own capacity) against `Event::PLANS[plan][:capacity]` — publishing under a plan too small for the event's types is rejected server-side (`Event#capacity_covers_event_types`) before any payment is attempted, not just disabled client-side.
 
+`Event#location` (free-text address) stays the source of truth for display; `latitude`/`longitude` are optional and only ever set by the frontend's Google Maps location picker (nil for events created before this existed, or when the picker fell back to plain text — see "Frontend: Google Maps location picker" below). `Event#lat_lng_present_together` enforces both-or-neither. `route_map_url` is just an optional link (e.g. a Google My Maps URL) for point-to-point events — there's no server-side route drawing/waypoints.
+
 ### Backend: publishing & payments (ABA PayWay / KHQR)
 
 Two separate payment flows share one gateway (`app/services/aba_payway/client.rb`), and it's easy to conflate them:
@@ -100,6 +102,16 @@ The frontend is fully wired for translation via `i18next`/`react-i18next` — ev
 - Zod validation schemas (`auth.tsx`, `forgot-password.tsx`, etc.) intentionally carry no error message strings (e.g. `z.string().min(8)`, not `.min(8, "...")`) — the translated message is chosen at the `safeParse` call site based on which check failed, since zod's own message API isn't translation-aware.
 - Route `head()` meta (page `<title>`, SEO `<meta description>`) is deliberately left in English — it's not run through `t()`.
 - `EVENT_CATEGORIES` (a `{value, label}[]` constant) no longer exists in `event-utils.ts`; use `eventCategoryOptions()` (a function, so it re-evaluates per-render/per-language) or the bare `EVENT_CATEGORY_VALUES` string array instead.
+
+### Frontend: Google Maps location picker
+
+`LocationPicker` (`src/components/location-picker.tsx`), used on the create-event form (`events.new.tsx`), is a search-as-you-type Places Autocomplete input plus a draggable pin on an embedded map. It's built on `@googlemaps/js-api-loader`'s v2 functional API (`setOptions()` once, then `importLibrary("places" | "maps" | "marker")`), not the older `Loader` class.
+
+- **Gated entirely behind `VITE_GOOGLE_MAPS_API_KEY`** (see `.env.example`). Without it, `LocationPicker` renders a plain text `<Input>` instead — no map, no autocomplete, `latitude`/`longitude` stay `null` — so event creation still works with zero Google Cloud setup. Don't assume the key is present when touching this component.
+- The text input is deliberately **uncontrolled** (`defaultValue`, not `value`) once the map key is present — Google's `Autocomplete` widget writes directly into the input's DOM value when a suggestion is picked, which would fight a React-controlled value. The authoritative source for the selected address is the `place_changed` listener, not the input's `onChange` (which only tracks manual free-typing between selections).
+- Uses the classic `google.maps.Marker` (via `importLibrary("marker")`), not `AdvancedMarkerElement` — the latter needs a Cloud Console "Map ID" to be configured, which is one more setup step this intentionally avoids.
+- `tsconfig.json`'s `compilerOptions.types` explicitly includes `"google.maps"` (alongside `"vite/client"`) — without that, `@types/google.maps`'s global `google` namespace won't resolve even though the package is installed, since `types` being present at all restricts automatic global type inclusion to just what's listed.
+- `googleMapsViewUrl()` in `event-utils.ts` builds a plain `https://www.google.com/maps?q=lat,lng` link for the "View on map" links on the event detail/manage pages — this needs no API key at all (it's just an outbound link, not an embed), so those pages work regardless of whether `VITE_GOOGLE_MAPS_API_KEY` is configured.
 
 ### Infrastructure
 

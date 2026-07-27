@@ -4,9 +4,11 @@ import { useState } from "react";
 import {
   CalendarDays,
   MapPin,
+  Milestone,
   Users,
   ArrowLeft,
   Download,
+  ExternalLink,
   Loader2,
   Check,
   QrCode,
@@ -22,7 +24,7 @@ import { EventTypeSelector } from "@/components/event-type-selector";
 import { PaymentPanel } from "@/components/payment-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatPrice, categoryLabel } from "@/lib/event-utils";
+import { formatDateTime, formatPrice, categoryLabel, googleMapsViewUrl } from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 
 export const Route = createFileRoute("/events/$eventId")({
@@ -186,6 +188,29 @@ function EventDetail() {
               {ev.location && (
                 <p className="flex items-center gap-2">
                   <MapPin className="h-5 w-5" /> {ev.location}
+                  {ev.latitude != null && ev.longitude != null && (
+                    <a
+                      href={googleMapsViewUrl(ev.latitude, ev.longitude)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-sm underline underline-offset-2 hover:text-foreground"
+                    >
+                      {t("eventDetail.viewOnMap")} <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </p>
+              )}
+              {ev.route_map_url && (
+                <p className="flex items-center gap-2">
+                  <Milestone className="h-5 w-5" />
+                  <a
+                    href={ev.route_map_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sm underline underline-offset-2 hover:text-foreground"
+                  >
+                    {t("eventDetail.viewRoute")} <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </p>
               )}
               <p className="flex items-center gap-2">

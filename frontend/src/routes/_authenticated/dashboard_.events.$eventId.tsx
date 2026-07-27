@@ -4,7 +4,9 @@ import { useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
+  ExternalLink,
   MapPin,
+  Milestone,
   Users,
   DollarSign,
   Trash2,
@@ -48,7 +50,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { formatDateTime, formatDate, formatPrice, categoryLabel } from "@/lib/event-utils";
+import {
+  formatDateTime,
+  formatDate,
+  formatPrice,
+  categoryLabel,
+  googleMapsViewUrl,
+} from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 import { cn } from "@/lib/utils";
 
@@ -230,6 +238,29 @@ function ManageEvent() {
                 {ev.location && (
                   <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                     <MapPin className="h-4 w-4" /> {ev.location}
+                    {ev.latitude != null && ev.longitude != null && (
+                      <a
+                        href={googleMapsViewUrl(ev.latitude, ev.longitude)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
+                      >
+                        {t("eventDetail.viewOnMap")} <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </p>
+                )}
+                {ev.route_map_url && (
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Milestone className="h-4 w-4" />
+                    <a
+                      href={ev.route_map_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
+                    >
+                      {t("eventDetail.viewRoute")} <ExternalLink className="h-3 w-3" />
+                    </a>
                   </p>
                 )}
               </div>

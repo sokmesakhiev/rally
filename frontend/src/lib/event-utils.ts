@@ -54,3 +54,9 @@ export function categoryLabel(value: string): string {
   }
   return i18n.t("eventCategories.event");
 }
+
+/** A plain "View on map" link — works with no Google Maps API key, since
+ * it just opens Google Maps in a new tab rather than embedding anything. */
+export function googleMapsViewUrl(latitude: number, longitude: number): string {
+  return `https://www.google.com/maps?q=${latitude},${longitude}`;
+}

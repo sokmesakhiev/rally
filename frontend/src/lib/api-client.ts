@@ -147,6 +147,12 @@ export interface ApiEvent {
   description: string | null;
   category: string;
   location: string | null;
+  /** Set by the Google Maps location picker; null if the organizer never
+   * picked a point (or the picker fell back to plain text — no API key). */
+  latitude: number | null;
+  longitude: number | null;
+  /** Optional Google My Maps / Maps route link for point-to-point events. */
+  route_map_url: string | null;
   start_at: string;
   end_at: string | null;
   capacity: number | null;

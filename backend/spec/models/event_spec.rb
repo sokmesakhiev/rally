@@ -39,6 +39,49 @@ RSpec.describe Event, type: :model do
       event.end_at = event.start_at + 2.hours
       expect(event).to be_valid
     end
+
+    it "accepts a valid latitude/longitude pair" do
+      event.latitude = 11.5564
+      event.longitude = 104.9282
+      expect(event).to be_valid
+    end
+
+    it "rejects latitude only, without longitude" do
+      event.latitude = 11.5564
+      event.longitude = nil
+      expect(event).not_to be_valid
+      expect(event.errors[:base]).to be_present
+    end
+
+    it "rejects longitude only, without latitude" do
+      event.latitude = nil
+      event.longitude = 104.9282
+      expect(event).not_to be_valid
+      expect(event.errors[:base]).to be_present
+    end
+
+    it "rejects an out-of-range latitude" do
+      event.latitude = 200
+      event.longitude = 104.9282
+      expect(event).not_to be_valid
+      expect(event.errors[:latitude]).to be_present
+    end
+
+    it "accepts a blank route_map_url" do
+      event.route_map_url = nil
+      expect(event).to be_valid
+    end
+
+    it "accepts a valid http(s) route_map_url" do
+      event.route_map_url = "https://www.google.com/maps/d/edit?mid=abc123"
+      expect(event).to be_valid
+    end
+
+    it "rejects a non-URL route_map_url" do
+      event.route_map_url = "not a url"
+      expect(event).not_to be_valid
+      expect(event.errors[:route_map_url]).to be_present
+    end
   end
 
   # ── Capacity vs. combined event type limits ─────────────────────────────────

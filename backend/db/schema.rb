@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_21_050000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_24_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -88,10 +88,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_050000) do
     t.text "description"
     t.datetime "end_at"
     t.boolean "is_published", default: false, null: false
+    t.decimal "latitude", precision: 10, scale: 6
     t.string "location"
     t.string "logo_url"
+    t.decimal "longitude", precision: 10, scale: 6
     t.string "plan"
     t.integer "price_cents", default: 0, null: false
+    t.string "route_map_url"
     t.datetime "start_at", null: false
     t.uuid "survey_id"
     t.string "title", null: false
