@@ -9,6 +9,7 @@ gem "tzinfo-data", platforms: %i[ windows jruby ]
 # Auth
 gem "bcrypt", "~> 3.1.7"
 gem "jwt", "~> 3.2"
+gem "googleauth", "~> 1.11" # verifies Google ID tokens for "Sign in with Google" (see AuthController#google)
 
 # CORS
 gem "rack-cors"
@@ -27,6 +28,9 @@ gem "thruster", require: false
 
 gem "importmap-rails"
 
+gem "solid_queue"
+gem "solid_cache"
+
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", require: false
@@ -41,3 +45,4 @@ group :test do
   gem "shoulda-matchers", "~> 8.0"
   gem "database_cleaner-active_record"
 end
+

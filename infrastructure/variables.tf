@@ -132,6 +132,14 @@ variable "aba_payway_base_url" {
   default     = "https://checkout-sandbox.payway.com.kh"
 }
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+variable "google_client_id" {
+  description = "OAuth 2.0 Client ID from Google Cloud Console, used to verify \"Sign in with Google\" ID tokens (AuthController#google). Not a secret — also set as VITE_GOOGLE_CLIENT_ID when building the frontend. Leave empty to keep the feature disabled."
+  type        = string
+  default     = ""
+}
+
 # ── Mail ──────────────────────────────────────────────────────────────────────
 
 variable "mailer_from_email" {

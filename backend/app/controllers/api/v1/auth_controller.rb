@@ -39,6 +39,33 @@ module Api
         render json: user_payload(user, token)
       end
 
+      # POST /api/v1/auth/google
+      # Body: { id_token: "<Google ID token from Google Identity Services>" }
+      #
+      # The frontend never talks to Google's OAuth token endpoint directly —
+      # it uses Google Identity Services' JS SDK to get a signed ID token,
+      # and this action is the only place that token is verified (signature,
+      # expiry, issuer, and that it was issued for *our* GOOGLE_CLIENT_ID).
+      # See config/initializers or GOOGLE_CLIENT_ID in production.rb wiring
+      # (infrastructure/ecs.tf) for where the client ID comes from.
+      def google
+        payload = Google::Auth::IDTokens.verify_oidc(params[:id_token], aud: ENV.fetch("GOOGLE_CLIENT_ID", nil))
+
+        user = User.find_or_create_from_google!(
+          google_uid: payload["sub"],
+          email: payload["email"],
+          email_verified: ActiveModel::Type::Boolean.new.cast(payload["email_verified"]),
+          name: payload["name"]
+        )
+
+        token = JsonWebToken.encode(user_id: user.id)
+        render json: user_payload(user, token)
+      rescue Google::Auth::IDTokens::VerificationError => e
+        render json: { error: "Invalid Google credential: #{e.message}" }, status: :unauthorized
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # GET /api/v1/auth/me
       def me
         render json: user_payload(current_user, nil).except(:token)

@@ -18,6 +18,12 @@ rails_master_key = "YOUR_MASTER_KEY_HERE"
 # Leave empty to auto-generate a secure random JWT secret
 # jwt_secret = ""
 
+# ── Auth: "Sign in with Google" (optional) ───────────────────────────────────
+# From a Google Cloud Console OAuth 2.0 Client ID (Web application type).
+# Add both the ALB/api_domain URL as an authorized JavaScript origin.
+# Leave unset to keep the Google sign-in button hidden on the frontend.
+# google_client_id = "YOUR_CLIENT_ID.apps.googleusercontent.com"
+
 # ── Payments (ABA PayWay KHQR) ─────────────────────────────────────────────────
 # Sign up for sandbox credentials at https://sandbox.payway.com.kh, or contact
 # paywaysales@ababank.com for production access. See ABA_PAYWAY_SETUP.md.

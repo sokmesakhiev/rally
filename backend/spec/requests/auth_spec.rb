@@ -103,6 +103,69 @@ RSpec.describe "Auth API", type: :request do
     end
   end
 
+  # ── POST /api/v1/auth/google ─────────────────────────────────────────────────
+  # Google::Auth::IDTokens.verify_oidc makes a real network call to fetch
+  # Google's signing keys, so it's stubbed here — these specs are about our
+  # own find-or-create/link/sign-in logic, not Google's token format.
+  describe "POST /api/v1/auth/google" do
+    def stub_google_payload(payload)
+      allow(Google::Auth::IDTokens).to receive(:verify_oidc).and_return(payload.stringify_keys)
+    end
+
+    let(:google_payload) do
+      { sub: "google-uid-123", email: "runner@example.com", email_verified: true, name: "Alex Runner" }
+    end
+
+    it "creates a new account on first sign-in and returns a token" do
+      stub_google_payload(google_payload)
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["token"]).to be_present
+      expect(json["user"]["email"]).to eq("runner@example.com")
+      expect(json["user"]["email_verified"]).to be(true)
+      expect(json["user"]["display_name"]).to eq("Alex Runner")
+
+      user = User.find(json["user"]["id"])
+      expect(user.google_uid).to eq("google-uid-123")
+      expect(user.provider).to eq("google")
+    end
+
+    it "signs in the same user on a later visit without creating a duplicate" do
+      stub_google_payload(google_payload)
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+      first_user_id = json["user"]["id"]
+
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["id"]).to eq(first_user_id)
+      expect(User.where(google_uid: "google-uid-123").count).to eq(1)
+    end
+
+    it "links an existing password account by matching email instead of duplicating it" do
+      existing = create(:user, email: "runner@example.com")
+      stub_google_payload(google_payload)
+
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["id"]).to eq(existing.id)
+      expect(existing.reload.google_uid).to eq("google-uid-123")
+      expect(existing.email_verified?).to be(true)
+    end
+
+    it "returns 401 for a token that fails verification" do
+      allow(Google::Auth::IDTokens).to receive(:verify_oidc)
+        .and_raise(Google::Auth::IDTokens::SignatureError, "bad signature")
+
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(json["error"]).to be_present
+    end
+  end
+
   # ── GET /api/v1/auth/me ──────────────────────────────────────────────────────
   describe "GET /api/v1/auth/me" do
     let!(:user) { create(:user) }

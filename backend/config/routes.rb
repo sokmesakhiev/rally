@@ -11,6 +11,7 @@ Rails.application.routes.draw do
       # Auth
       post "auth/signup", to: "auth#signup"
       post "auth/signin", to: "auth#signin"
+      post "auth/google", to: "auth#google"
       get  "auth/me",     to: "auth#me"
 
       # Password resets

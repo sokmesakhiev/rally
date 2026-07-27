@@ -18,6 +18,9 @@ class User < ApplicationRecord
 
   validates :email, presence: true, uniqueness: { case_sensitive: false }, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :password, length: { minimum: 8 }, if: :password_required?
+  # "Sign in with Google" accounts (see .find_or_create_from_google!) — the
+  # DB has a matching unique index; this just gives a friendlier error.
+  validates :google_uid, uniqueness: true, allow_nil: true
 
   before_validation { self.email = email.downcase.strip if email.present? }
   after_create :create_profile!
@@ -63,6 +66,37 @@ class User < ApplicationRecord
       user = find_by(email_verification_token: token)
       return nil unless user
       return nil if user.email_verification_sent_at.present? && user.email_verification_sent_at < EMAIL_VERIFICATION_EXPIRY.ago
+      user
+    end
+
+    # Called from AuthController#google *after* the ID token has already
+    # been cryptographically verified server-side — `google_uid`/`email`
+    # are trusted at this point, not user input.
+    #
+    # Three cases, in order:
+    #   1. We've seen this Google account before (google_uid matches) — sign them in.
+    #   2. No Google link yet, but the email matches an existing password
+    #      account — link Google to it (so switching to "Sign in with
+    #      Google" later doesn't create a second account) and, since Google
+    #      already verified the address, mark it verified if it wasn't.
+    #   3. Neither — create a brand new Google-only account. It still gets a
+    #      real (unusable, never shown) random password so the existing
+    #      has_secure_password/password_digest NOT NULL invariant holds and
+    #      no schema/validation special-casing is needed for OAuth users.
+    def find_or_create_from_google!(google_uid:, email:, email_verified:, name:)
+      user = find_by(google_uid: google_uid)
+      return user if user
+
+      user = find_by(email: email.downcase.strip)
+      if user
+        user.update!(google_uid: google_uid, provider: user.provider || "google")
+        user.verify_email! if email_verified && !user.email_verified?
+        return user
+      end
+
+      user = create!(email: email, password: SecureRandom.hex(32), google_uid: google_uid, provider: "google")
+      user.verify_email! if email_verified
+      user.profile.update!(display_name: name) if name.present?
       user
     end
   end

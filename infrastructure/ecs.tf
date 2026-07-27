@@ -60,6 +60,14 @@ resource "aws_ecs_task_definition" "app" {
       { name = "BACKEND_URL",            value = local.custom_api_domain ? "https://${var.api_domain}" : "http://${aws_lb.main.dns_name}" },
       { name = "ABA_PAYWAY_BASE_URL",    value = var.aba_payway_base_url },
       { name = "MAILER_FROM_EMAIL",      value = var.mailer_from_email },
+      # Google's OAuth Client ID is not a secret — it's compiled into the
+      # frontend JS bundle anyway. The backend only needs it to check the
+      # `aud` claim on ID tokens (see AuthController#google).
+      { name = "GOOGLE_CLIENT_ID",       value = var.google_client_id },
+      # Runs the Solid Queue supervisor inside the same Puma process
+      # (config/puma.rb) rather than a separate worker task/service — the
+      # supported single-server pattern, appropriate at this app's job volume.
+      { name = "SOLID_QUEUE_IN_PUMA",    value = "true" },
     ]
 
     # Secrets injected at task startup from Secrets Manager

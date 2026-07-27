@@ -231,6 +231,17 @@ export const authApi = {
     return api.get<{ user: ApiUser }>("/auth/me");
   },
 
+  /** idToken is the credential JWT from Google Identity Services' sign-in
+   * button (see GoogleSignInButton) — verified server-side, never trusted
+   * as-is here. */
+  async google(idToken: string) {
+    const res = await api.post<{ token: string; user: ApiUser }>("/auth/google", {
+      id_token: idToken,
+    });
+    setToken(res.token);
+    return res;
+  },
+
   signout() {
     clearToken();
   },

@@ -151,7 +151,6 @@
       "subtitle": "Set up races, rides and gatherings, open registrations and manage the whole day from one dashboard."
     },
     "tabs": { "signIn": "Sign in", "signUp": "Create account" },
-    "continueWithGoogle": "Continue with Google",
     "orWithEmail": "or with email",
     "fields": {
       "email": "Email",
@@ -163,7 +162,6 @@
     "forgotPassword": "Forgot password?",
     "welcomeBack": "Welcome back!",
     "accountCreated": "Account created! Welcome to Rally.",
-    "googleUnavailable": "Google sign-in is not yet available. Please use email & password.",
     "errors": {
       "invalidEmail": "Enter a valid email",
       "passwordTooShort": "Password must be at least 8 characters",
