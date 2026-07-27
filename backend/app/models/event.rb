@@ -23,7 +23,7 @@ class Event < ApplicationRecord
     "small" =>       { label: "Small",       capacity: 200,    price_cents: 10_000 },
     "medium" =>      { label: "Medium",      capacity: 1_000,  price_cents: 30_000 },
     "large" =>       { label: "Large",       capacity: 10_000, price_cents: 100_000 },
-    "extra_large" => { label: "Extra Large", capacity: 30_000, price_cents: 200_000 },
+    "extra_large" => { label: "Extra Large", capacity: 30_000, price_cents: 200_000 }
   }.freeze
 
   validates :title, presence: true, length: { maximum: 120 }
