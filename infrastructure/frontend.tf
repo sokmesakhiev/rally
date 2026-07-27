@@ -60,7 +60,7 @@ resource "aws_s3_bucket_policy" "frontend" {
   })
 }
 
-# ── ACM Certificate for CloudFront (MUST be in ap-southeast-1) ────────────────────
+# ── ACM Certificate for CloudFront (MUST be in us-east-1) ─────────────────────
 
 resource "aws_acm_certificate" "frontend" {
   count    = local.custom_frontend_domain ? 1 : 0

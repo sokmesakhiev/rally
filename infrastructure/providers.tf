@@ -48,10 +48,11 @@ provider "aws" {
   }
 }
 
-# ── ap-southeast-1 alias ── CloudFront ACM certificates MUST live in ap-southeast-1
+# ── us-east-1 alias ── CloudFront ACM certificates MUST live in us-east-1,
+# regardless of which region the rest of the app (ECS, RDS, S3, etc.) runs in.
 provider "aws" {
   alias  = "us_east_1"
-  region = "ap-southeast-1"
+  region = "us-east-1"
 
   default_tags {
     tags = {
