@@ -23,15 +23,27 @@ terraform {
   #     --bucket <YOUR_BUCKET_NAME> \
   #     --versioning-configuration Status=Enabled
   #
-  # Then init with:
-  #   terraform init \
-  #     -backend-config="bucket=<YOUR_BUCKET_NAME>" \
-  #     -backend-config="key=event-management/production/terraform.tfstate" \
-  #     -backend-config="region=ap-southeast-1"
+  # bucket/key can't be set here directly — Terraform parses the backend
+  # block during `terraform init`, before the root module's variables (and
+  # terraform.tfvars) exist, so var.xxx is never valid inside `backend {}`.
+  # Provide them either way:
   #
+  #   (a) cp backend.hcl.example backend.hcl, fill in your bucket name, then:
+  #         terraform init -backend-config=backend.hcl
+  #
+  #   (b) or pass them individually:
+  #         terraform init \
+  #           -backend-config="bucket=<YOUR_BUCKET_NAME>" \
+  #           -backend-config="key=event-management/production/terraform.tfstate"
+  #
+  # (region is hardcoded below — it's not account-specific like bucket/key,
+  # so there's nothing to pass at init time for it. If a missing-region
+  # error still shows up, you likely have a stale partial backend config
+  # cached from an earlier init — run `terraform init -reconfigure`.)
   backend "s3" {
+    region  = "ap-southeast-1"
     encrypt = true
-    # bucket, key, and region are supplied via -backend-config flags above
+    # bucket and key are supplied via -backend-config at init time — see above
   }
 }
 

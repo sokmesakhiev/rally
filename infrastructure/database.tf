@@ -14,8 +14,16 @@ resource "aws_db_instance" "main" {
   identifier = "${local.prefix}-postgres"
 
   # Engine
-  engine         = "postgres"
-  engine_version = "16.3"
+  engine = "postgres"
+  # Major version only, not a pinned minor (e.g. "16.3") — AWS periodically
+  # deprecates old minors from CreateDBInstance entirely (which is exactly
+  # what broke here), so pinning one means this breaks again whenever AWS
+  # retires it. With just "16", RDS picks its current default minor for
+  # that major version, and the provider suppresses the resulting
+  # state diff (real version like "16.8" vs configured "16") as long as the
+  # major version matches, so this doesn't cause perpetual plan churn.
+  # auto_minor_version_upgrade (below) keeps it current after creation too.
+  engine_version = "16"
   instance_class = var.db_instance_class
 
   # Credentials

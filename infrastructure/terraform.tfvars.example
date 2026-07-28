@@ -7,8 +7,8 @@ environment = "production"
 app_name    = "rally"
 
 # ── Domains (optional — remove if you don't have a domain yet) ───────────────
-# api_domain      = "api.example.com"
-# frontend_domain = "example.com"
+# api_domain      = "rally-api.rails-dev.com"
+# frontend_domain = "rally.rails-dev.com"
 # route53_zone_id = "Z1234567890ABCDEF"
 
 # ── Secrets (required) ────────────────────────────────────────────────────────

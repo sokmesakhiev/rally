@@ -61,6 +61,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
     id     = "transition-old-uploads"
     status = "Enabled"
 
+    # Required since AWS provider v4+: the rule needs an explicit scope
+    # (filter or prefix) so it's unambiguous which objects it applies to.
+    # Empty filter = the whole bucket, no prefix restriction.
+    filter {}
+
     transition {
       days          = 90
       storage_class = "STANDARD_IA"

@@ -35,3 +35,7 @@
 
 # Ignore failure reports.
 /spec/examples.txt
+
+# Ignore key files for decrypting credentials and more.
+/config/credentials/*.key
+

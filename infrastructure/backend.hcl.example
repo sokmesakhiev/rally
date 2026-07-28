@@ -1,0 +1,17 @@
+# Partial backend config for `terraform init -backend-config=backend.hcl`.
+#
+# This is NOT a .tfvars file — Terraform's backend block is configured
+# during `terraform init`, before the root module's variables (and
+# terraform.tfvars) are parsed, so `var.xxx` can never be used inside
+# `backend "s3" {}`. This file uses the same key = "value" HCL syntax
+# terraform.tfvars uses, but it's a distinct mechanism read only by `init`.
+#
+# Copy this to backend.hcl and fill in your bucket name, then:
+#   terraform init -backend-config=backend.hcl
+#
+# Neither value is sensitive, but backend.hcl is still gitignored since the
+# bucket name is account-specific — see terraform.tfvars.example for the
+# same reasoning applied to real secrets.
+
+bucket = "YOUR_STATE_BUCKET_NAME"
+key    = "event-management/production/terraform.tfstate"

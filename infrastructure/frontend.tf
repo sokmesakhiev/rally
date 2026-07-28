@@ -126,15 +126,12 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized (managed)
-
-    # Forward nothing to S3 — it's a static site
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
+    # CachingOptimized (managed) — forwards no query string/cookies to the
+    # origin already, which is all a static site needs. forwarded_values is
+    # the legacy pre-cache-policy mechanism for expressing that same thing
+    # and can't be combined with cache_policy_id (CloudFront rejects both
+    # being set on one behavior), so there's no forwarded_values block here.
+    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   }
 
   # SPA routing: return index.html for all 404s so React Router handles them
@@ -158,22 +155,17 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # acm_certificate_arn and cloudfront_default_certificate are plain
+  # attributes of this single block (CloudFront's API requires exactly one
+  # of them set), not separate nested block types — so this just toggles
+  # which attributes are non-null rather than using `dynamic`. Terraform
+  # treats a `null` optional attribute as unconfigured, which satisfies the
+  # provider's exactly-one-of validation on the other branch.
   viewer_certificate {
-    dynamic "acm_certificate" {
-      for_each = local.custom_frontend_domain ? [1] : []
-      content {
-        acm_certificate_arn      = aws_acm_certificate_validation.frontend[0].certificate_arn
-        ssl_support_method       = "sni-only"
-        minimum_protocol_version = "TLSv1.2_2021"
-      }
-    }
-
-    dynamic "cloudfront_default_certificate" {
-      for_each = local.custom_frontend_domain ? [] : [1]
-      content {
-        cloudfront_default_certificate = true
-      }
-    }
+    cloudfront_default_certificate = local.custom_frontend_domain ? null : true
+    acm_certificate_arn            = local.custom_frontend_domain ? aws_acm_certificate_validation.frontend[0].certificate_arn : null
+    ssl_support_method             = local.custom_frontend_domain ? "sni-only" : null
+    minimum_protocol_version       = local.custom_frontend_domain ? "TLSv1.2_2021" : null
   }
 }
 

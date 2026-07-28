@@ -1,0 +1,21 @@
+# Local Terraform state and provider plugin cache
+.terraform/
+.terraform.tfstate.lock.info
+
+# State files — this project uses a remote S3 backend, but a local .tfstate
+# can still appear if init/backend config is ever skipped or misconfigured.
+*.tfstate
+*.tfstate.*
+
+# Real values — see terraform.tfvars.example / backend.hcl.example for the
+# templates these are copied from. terraform.tfvars holds real secrets
+# (rails_master_key, ABA PayWay credentials, etc.); backend.hcl just holds
+# an account-specific bucket name, but there's no reason to commit it either.
+terraform.tfvars
+*.auto.tfvars
+backend.hcl
+
+# Plan output, if ever saved to a file (e.g. `terraform plan -out=tfplan`)
+*.tfplan
+crash.log
+crash.*.log
