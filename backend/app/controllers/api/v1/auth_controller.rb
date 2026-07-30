@@ -88,6 +88,10 @@ module Api
             display_name: profile&.display_name,
             avatar_url: profile&.avatar_url,
             email_verified: user.email_verified?,
+            # Drives whether the frontend shows the admin nav link. Not a
+            # security boundary — every admin endpoint checks server-side via
+            # require_admin! regardless of what the client believes.
+            admin: user.admin?,
             created_at: user.created_at
           }
         }

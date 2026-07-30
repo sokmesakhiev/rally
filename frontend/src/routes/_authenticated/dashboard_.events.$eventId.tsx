@@ -33,6 +33,7 @@ import {
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
+import { EventDetailsEditor } from "@/components/event-details-editor";
 import { ImageUpload } from "@/components/image-upload";
 import { PlanPaymentPanel } from "@/components/plan-payment-panel";
 import { Button } from "@/components/ui/button";
@@ -554,6 +555,9 @@ function ManageEvent() {
                   <p className="text-sm text-muted-foreground mb-6">{t("manageEvent.qrDesc")}</p>
                   <EventQRCode eventId={eventId} brandColor={activeBrandColor} />
                 </div>
+
+                {/* Core details editor — title/date/price/etc. */}
+                <EventDetailsEditor event={ev} />
 
                 {/* Branding editor card */}
                 <div className="rounded-2xl border border-border bg-card p-6 space-y-5">

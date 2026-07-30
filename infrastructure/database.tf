@@ -42,8 +42,11 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = false
 
-  # Availability — set to true for production critical apps (doubles cost)
-  multi_az = false
+  # Availability — Multi-AZ keeps a synchronous standby in a second AZ and
+  # fails over automatically. Roughly doubles instance cost, which is why
+  # it's a variable rather than hardcoded: keep it on for production, turn
+  # it off for a staging/scratch environment where an outage is acceptable.
+  multi_az = var.db_multi_az
 
   # Backups — 7-day retention, automated daily backup
   backup_retention_period   = 7

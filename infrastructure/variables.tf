@@ -59,6 +59,12 @@ variable "db_username" {
   default     = "rally"
 }
 
+variable "db_multi_az" {
+  description = "Run RDS with a synchronous standby in a second AZ and automatic failover. Defaults to true for production redundancy; roughly doubles the instance cost, so set false for staging/scratch environments."
+  type        = bool
+  default     = true
+}
+
 variable "db_allocated_storage" {
   description = "Initial storage in GB for RDS"
   type        = number
@@ -86,9 +92,14 @@ variable "ecs_task_memory" {
 }
 
 variable "ecs_desired_count" {
-  description = "Number of ECS tasks to run"
+  description = "Number of ECS tasks to run. Defaults to 2 so a single task (or the AZ it lives in) failing doesn't take the API down, and so deploys roll rather than causing a gap in service. Drop to 1 only for a non-critical environment."
   type        = number
-  default     = 1
+  default     = 2
+
+  validation {
+    condition     = var.ecs_desired_count >= 1
+    error_message = "ecs_desired_count must be at least 1."
+  }
 }
 
 variable "rails_image_tag" {
@@ -136,6 +147,14 @@ variable "aba_payway_base_url" {
 
 variable "google_client_id" {
   description = "OAuth 2.0 Client ID from Google Cloud Console, used to verify \"Sign in with Google\" ID tokens (AuthController#google). Not a secret — also set as VITE_GOOGLE_CLIENT_ID when building the frontend. Leave empty to keep the feature disabled."
+  type        = string
+  default     = ""
+}
+
+# ── Observability ─────────────────────────────────────────────────────────────
+
+variable "sentry_dsn" {
+  description = "Sentry DSN for backend error tracking. Not marked sensitive: a DSN is a write-only ingest endpoint, not a credential (the frontend embeds its own in the JS bundle by design). Leave empty to leave Sentry uninitialized — every Sentry call then no-ops."
   type        = string
   default     = ""
 }

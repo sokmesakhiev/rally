@@ -17,7 +17,9 @@
     "download": "Download",
     "rallyLogoAlt": "Rally logo",
     "bannerAlt": "{{title}} banner",
-    "eventLogoAlt": "Event logo"
+    "eventLogoAlt": "Event logo",
+    "next": "Next",
+    "previous": "Previous"
   },
   "eventCategories": {
     "running": "Running",
@@ -45,7 +47,8 @@
     "welcome": "Welcome, {{name}}",
     "fallbackName": "there",
     "editProfile": "Edit profile",
-    "paymentSettings": "Payment settings"
+    "paymentSettings": "Payment settings",
+    "admin": "Moderation"
   },
   "verifyEmailBanner": {
     "message": "Please verify your email address ({{email}}).",
@@ -72,9 +75,18 @@
       "title": "Built for every kind of gathering",
       "subtitle": "Whether it's a competitive race or a relaxed weekend meetup, Rally has you covered.",
       "items": {
-        "running": { "label": "Running races", "note": "5K, 10K, half & full marathons" },
-        "rides": { "label": "Group rides", "note": "Casual spins to century challenges" },
-        "gatherings": { "label": "Community gatherings", "note": "Meetups, clinics & social runs" }
+        "running": {
+          "label": "Running races",
+          "note": "5K, 10K, half & full marathons"
+        },
+        "rides": {
+          "label": "Group rides",
+          "note": "Casual spins to century challenges"
+        },
+        "gatherings": {
+          "label": "Community gatherings",
+          "note": "Meetups, clinics & social runs"
+        }
       }
     },
     "features": {
@@ -150,7 +162,10 @@
       "titleHighlight": "love to join",
       "subtitle": "Set up races, rides and gatherings, open registrations and manage the whole day from one dashboard."
     },
-    "tabs": { "signIn": "Sign in", "signUp": "Create account" },
+    "tabs": {
+      "signIn": "Sign in",
+      "signUp": "Create account"
+    },
     "orWithEmail": "or with email",
     "fields": {
       "email": "Email",
@@ -218,7 +233,15 @@
     "filterAll": "All",
     "emptyAll": "No upcoming events yet. Check back soon!",
     "emptyCategory": "No events in this category right now.",
-    "viewAndRegister": "View & register"
+    "viewAndRegister": "View & register",
+    "searchPlaceholder": "Search events by name, description or place",
+    "searchLabel": "Search events",
+    "clearFilters": "Clear filters",
+    "emptyFiltered": "No events match your search. Try a different term or category.",
+    "resultCount_one": "{{count}} event",
+    "resultCount_other": "{{count}} events",
+    "pageOf": "Page {{page}} of {{totalPages}}",
+    "paginationLabel": "Event list pagination"
   },
   "eventDetail": {
     "allEvents": "All events",
@@ -324,7 +347,13 @@
     "toastParticipantRemoved": "Participant removed",
     "toastBrandingSaved": "Branding saved",
     "toastEventDeleted": "Event deleted",
-    "toastEventUnpublished": "Event unpublished"
+    "toastEventUnpublished": "Event unpublished",
+    "detailsTitle": "Event details",
+    "detailsDesc": "Fix a typo or update the date, place or price. Changes show on the public page immediately.",
+    "saveDetails": "Save details",
+    "toastDetailsSaved": "Event details saved",
+    "mapPinPreserved": "The existing map pin is kept when you edit this text.",
+    "priceChangeHint": "Changing the price does not alter what existing participants already owe or paid."
   },
   "eventForm": {
     "title": "Create an event",
@@ -360,7 +389,12 @@
     "errorAddTitle": "Add a title",
     "errorAddStart": "Add a start date & time",
     "errorEndAfterStart": "End time must be after start time",
-    "errorValidPrice": "Add a valid price"
+    "errorValidPrice": "Add a valid price",
+    "errors": {
+      "titleRequired": "Give the event a title.",
+      "titleTooLong": "Keep the title to 120 characters or fewer.",
+      "endBeforeStart": "The end time must be after the start time."
+    }
   },
   "profile": {
     "title": "Your profile",
@@ -468,5 +502,59 @@
   "eventQrCode": {
     "scanToRegister": "Scan to register for this event",
     "downloadQr": "Download QR"
+  },
+  "admin": {
+    "title": "Moderation",
+    "subtitle": "Suspend abusive accounts and take down events that break the rules.",
+    "tabUsers": "Users",
+    "tabEvents": "Events",
+    "notAuthorizedTitle": "Not available",
+    "notAuthorizedDesc": "This area is for Rally staff only.",
+    "searchUsers": "Search by email or name",
+    "searchEvents": "Search by title, description or place",
+    "userStatus": {
+      "all": "All",
+      "active": "Active",
+      "suspended": "Suspended"
+    },
+    "eventStatus": {
+      "all": "All",
+      "published": "Published",
+      "draft": "Drafts"
+    },
+    "colUser": "User",
+    "colEvents": "Events",
+    "colJoined": "Joined",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "colEvent": "Event",
+    "colOrganizer": "Organizer",
+    "colRegistrations": "Registrations",
+    "badgeAdmin": "Staff",
+    "badgeSuspended": "Suspended",
+    "badgeActive": "Active",
+    "badgeUnverified": "Unverified",
+    "badgePublished": "Published",
+    "badgeDraft": "Draft",
+    "noUsers": "No users match these filters.",
+    "noEvents": "No events match these filters.",
+    "noActionsForAdmin": "Staff account",
+    "suspend": "Suspend",
+    "unsuspend": "Restore",
+    "suspendTitle": "Suspend {{email}}?",
+    "suspendDesc": "They will be signed out immediately and all their published events will be taken down. Their own registrations for other events are not affected.",
+    "suspendReason": "Reason (optional)",
+    "suspendReasonPlaceholder": "Recorded for your reference — not shown to the user.",
+    "confirmSuspend": "Suspend account",
+    "unpublish": "Unpublish",
+    "deleteEventTitle": "Delete \"{{title}}\"?",
+    "deleteEventDesc_one": "This permanently deletes the event and its {{count}} registration. This cannot be undone — unpublish it instead if you may want it back.",
+    "deleteEventDesc_other": "This permanently deletes the event and its {{count}} registrations. This cannot be undone — unpublish it instead if you may want it back.",
+    "confirmDelete": "Delete permanently",
+    "toastSuspended": "Account suspended",
+    "toastUnsuspended": "Account restored",
+    "toastUnpublished": "Event unpublished",
+    "toastEventDeleted": "Event deleted",
+    "paginationLabel": "Table pagination"
   }
 }

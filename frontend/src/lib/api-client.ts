@@ -82,6 +82,9 @@ export interface ApiUser {
   display_name: string | null;
   avatar_url: string | null;
   email_verified: boolean;
+  /** Drives whether the admin nav link renders. NOT a security boundary —
+   * every admin endpoint re-checks server-side. */
+  admin?: boolean;
   created_at: string;
 }
 
@@ -135,6 +138,15 @@ export interface ApiEventTypeDraft {
   capacity?: number | null;
   price_cents?: number | null;
   position: number;
+}
+
+/** Pagination envelope returned alongside paginated collections. */
+export interface ApiPageMeta {
+  page: number;
+  per_page: number;
+  total_count: number;
+  /** 0 when nothing matched, so `page > total_pages` is a safe emptiness check. */
+  total_pages: number;
 }
 
 export interface ApiEvent {
@@ -282,8 +294,23 @@ export const emailVerificationsApi = {
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 export const eventsApi = {
-  list() {
-    return api.get<{ events: ApiEvent[] }>("/events");
+  /**
+   * Public event browsing. All options are optional — omitting them returns the
+   * first page at the server's default page size, so callers that don't care
+   * about paging can keep calling `list()` with no arguments.
+   *
+   * `category` must be one of EVENT_CATEGORY_VALUES; the backend returns 422
+   * for anything else rather than silently returning nothing.
+   */
+  list(opts?: { q?: string; category?: string; page?: number; perPage?: number }) {
+    const params = new URLSearchParams();
+    if (opts?.q?.trim()) params.set("q", opts.q.trim());
+    if (opts?.category) params.set("category", opts.category);
+    if (opts?.page) params.set("page", String(opts.page));
+    if (opts?.perPage) params.set("per_page", String(opts.perPage));
+
+    const qs = params.toString();
+    return api.get<{ events: ApiEvent[]; meta: ApiPageMeta }>(`/events${qs ? `?${qs}` : ""}`);
   },
 
   my() {
@@ -506,5 +533,105 @@ export const eventPlanPaymentsApi = {
     return api.get<{ plan_payment: ApiEventPlanPayment; event: ApiEvent }>(
       `/plan_payments/${planPaymentId}`,
     );
+  },
+};
+
+// ─── Admin / moderation ───────────────────────────────────────────────────────
+
+export interface ApiAdminUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  email_verified: boolean;
+  admin: boolean;
+  suspended: boolean;
+  suspended_at: string | null;
+  suspension_reason: string | null;
+  provider: string | null;
+  /** Only populated by the index endpoint, which selects it. */
+  events_count: number | null;
+  created_at: string;
+}
+
+export interface ApiAdminEvent {
+  id: string;
+  title: string;
+  category: string;
+  location: string | null;
+  start_at: string;
+  is_published: boolean;
+  plan: string | null;
+  capacity: number | null;
+  price_cents: number;
+  currency: string;
+  registrations_count: number;
+  creator: {
+    id: string;
+    email: string;
+    display_name: string | null;
+    suspended: boolean;
+  };
+  created_at: string;
+}
+
+/**
+ * Rally staff moderation endpoints. Every call requires an admin account;
+ * non-admins get a 404 (not a 403) so the surface isn't discoverable, which
+ * surfaces here as an ApiError with "Not found".
+ */
+export const adminApi = {
+  users(opts?: { q?: string; status?: "all" | "active" | "suspended"; page?: number; perPage?: number }) {
+    const params = new URLSearchParams();
+    if (opts?.q?.trim()) params.set("q", opts.q.trim());
+    if (opts?.status && opts.status !== "all") params.set("status", opts.status);
+    if (opts?.page) params.set("page", String(opts.page));
+    if (opts?.perPage) params.set("per_page", String(opts.perPage));
+
+    const qs = params.toString();
+    return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(`/admin/users${qs ? `?${qs}` : ""}`);
+  },
+
+  /** Also unpublishes every event the user created — see User#suspend!. */
+  suspendUser(id: string, reason?: string) {
+    return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/suspend`, { reason });
+  },
+
+  /** Does NOT re-publish events the suspension took down. */
+  unsuspendUser(id: string) {
+    return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/unsuspend`);
+  },
+
+  events(opts?: {
+    q?: string;
+    status?: "all" | "published" | "draft";
+    category?: string;
+    page?: number;
+    perPage?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (opts?.q?.trim()) params.set("q", opts.q.trim());
+    if (opts?.status && opts.status !== "all") params.set("status", opts.status);
+    if (opts?.category) params.set("category", opts.category);
+    if (opts?.page) params.set("page", String(opts.page));
+    if (opts?.perPage) params.set("per_page", String(opts.perPage));
+
+    const qs = params.toString();
+    return api.get<{ events: ApiAdminEvent[]; meta: ApiPageMeta }>(
+      `/admin/events${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  /** Reversible: leaves registrations and the paid plan intact. */
+  unpublishEvent(id: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unpublish`);
+  },
+
+  /**
+   * Irreversible, and rejected server-side if the event has paid
+   * registrations. `confirm` is required by the API — passed explicitly rather
+   * than defaulted so a stray call can't delete anything.
+   */
+  deleteEvent(id: string) {
+    return api.delete<{ message: string }>(`/admin/events/${id}?confirm=true`);
   },
 };

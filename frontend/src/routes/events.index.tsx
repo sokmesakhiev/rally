@@ -1,15 +1,31 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, MapPin, ArrowRight, Ticket, Users } from "lucide-react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  CalendarDays,
+  MapPin,
+  ArrowRight,
+  Ticket,
+  Users,
+  Search,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { eventsApi } from "@/lib/api-client";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatPrice, categoryLabel } from "@/lib/event-utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  formatDateTime,
+  formatPrice,
+  categoryLabel,
+  eventCategoryOptions,
+} from "@/lib/event-utils";
 
-// Only worth showing a filter once there's enough to filter through.
-const FILTER_THRESHOLD = 10;
+const PER_PAGE = 12;
 
 const VALUE_PROP_ITEMS = [
   { icon: CalendarDays, key: "realDates" },
@@ -32,31 +48,50 @@ export const Route = createFileRoute("/events/")({
 
 function BrowseEvents() {
   const { t } = useTranslation();
+
+  // `searchInput` is what the user is typing; `search` is the debounced value
+  // actually sent to the API. Without the split, every keystroke would fire a
+  // request.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Any change to what's being searched/filtered invalidates the current page
+  // number — staying on page 4 of a new, shorter result set would show nothing.
+  useEffect(() => {
+    setPage(1);
+  }, [search, category]);
+
   const query = useQuery({
-    queryKey: ["published-events"],
-    queryFn: async () => {
-      const { events } = await eventsApi.list();
-      return events;
-    },
+    queryKey: ["published-events", search, category, page],
+    queryFn: () =>
+      eventsApi.list({
+        q: search || undefined,
+        category: category ?? undefined,
+        page,
+        perPage: PER_PAGE,
+      }),
+    // Keeps the previous page's results on screen while the next page loads,
+    // instead of flashing an empty grid on every page change.
+    placeholderData: keepPreviousData,
   });
 
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const events = query.data?.events;
+  const meta = query.data?.meta;
+  const totalPages = meta?.total_pages ?? 0;
+  const isFiltering = Boolean(search) || Boolean(category);
 
-  const showFilter = (query.data?.length ?? 0) > FILTER_THRESHOLD;
-
-  // Only offer categories that actually have events, each with a count.
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const ev of query.data ?? []) {
-      counts.set(ev.category, (counts.get(ev.category) ?? 0) + 1);
-    }
-    return counts;
-  }, [query.data]);
-
-  const filteredEvents = useMemo(() => {
-    if (!showFilter || categoryFilter === "all") return query.data;
-    return query.data?.filter((ev) => ev.category === categoryFilter);
-  }, [query.data, showFilter, categoryFilter]);
+  const clearFilters = () => {
+    setSearchInput("");
+    setSearch("");
+    setCategory(null);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,37 +130,63 @@ function BrowseEvents() {
 
         <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
           <h2 className="font-display text-xl font-semibold">{t("eventsList.upcomingEvents")}</h2>
-          {showFilter && (
-            <div className="flex flex-wrap gap-2">
-              <FilterChip
-                label={t("eventsList.filterAll")}
-                count={query.data?.length}
-                active={categoryFilter === "all"}
-                onClick={() => setCategoryFilter("all")}
-              />
-              {[...categoryCounts.entries()].map(([value, count]) => (
-                <FilterChip
-                  key={value}
-                  label={categoryLabel(value)}
-                  count={count}
-                  active={categoryFilter === value}
-                  onClick={() => setCategoryFilter(value)}
-                />
-              ))}
-            </div>
+          {typeof meta?.total_count === "number" && (
+            <p className="text-sm text-muted-foreground">
+              {t("eventsList.resultCount", { count: meta.total_count })}
+            </p>
           )}
         </div>
 
+        {/* Search + category filter. Both are applied server-side, so they
+            search the whole catalogue rather than only the current page. */}
+        <div className="mt-5 space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t("eventsList.searchPlaceholder")}
+              aria-label={t("eventsList.searchLabel")}
+              className="pl-9"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <FilterChip
+              label={t("eventsList.filterAll")}
+              active={category === null}
+              onClick={() => setCategory(null)}
+            />
+            {eventCategoryOptions().map((option) => (
+              <FilterChip
+                key={option.value}
+                label={option.label}
+                active={category === option.value}
+                onClick={() => setCategory(option.value)}
+              />
+            ))}
+            {isFiltering && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
+                <X className="h-3.5 w-3.5" />
+                {t("eventsList.clearFilters")}
+              </Button>
+            )}
+          </div>
+        </div>
+
         {query.isLoading && <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>}
-        {query.data?.length === 0 && (
-          <p className="mt-16 text-center text-muted-foreground">{t("eventsList.emptyAll")}</p>
+        {query.isError && (
+          <p className="mt-8 text-destructive">{(query.error as Error).message}</p>
         )}
-        {showFilter && filteredEvents?.length === 0 && (
-          <p className="mt-16 text-center text-muted-foreground">{t("eventsList.emptyCategory")}</p>
+        {!query.isLoading && events?.length === 0 && (
+          <p className="mt-16 text-center text-muted-foreground">
+            {isFiltering ? t("eventsList.emptyFiltered") : t("eventsList.emptyAll")}
+          </p>
         )}
 
         <div className="mt-8 grid gap-5 sm:grid-cols-2">
-          {filteredEvents?.map((ev) => {
+          {events?.map((ev) => {
             const brandColor = ev.brand_color ?? "#6366f1";
             return (
               <Link
@@ -193,6 +254,38 @@ function BrowseEvents() {
             );
           })}
         </div>
+        {totalPages > 1 && (
+          <nav
+            className="mt-10 flex items-center justify-center gap-3"
+            aria-label={t("eventsList.paginationLabel")}
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || query.isFetching}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {t("common.previous")}
+            </Button>
+
+            <span className="text-sm text-muted-foreground" aria-live="polite">
+              {t("eventsList.pageOf", { page, totalPages })}
+            </span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || query.isFetching}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="gap-1"
+            >
+              {t("common.next")}
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </nav>
+        )}
       </main>
     </div>
   );
@@ -200,12 +293,10 @@ function BrowseEvents() {
 
 function FilterChip({
   label,
-  count,
   active,
   onClick,
 }: {
   label: string;
-  count?: number;
   active: boolean;
   onClick: () => void;
 }) {
@@ -213,6 +304,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
         active
           ? "border-primary bg-primary text-primary-foreground"
@@ -220,7 +312,6 @@ function FilterChip({
       }`}
     >
       {label}
-      {typeof count === "number" && <span className="ml-1 opacity-70">({count})</span>}
     </button>
   );
 }

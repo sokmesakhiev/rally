@@ -30,6 +30,17 @@ jobs:
     if: needs.detect-changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
 
+    # Deploy approval gate. This job pauses until a required reviewer
+    # approves it, provided the "production" environment has protection
+    # rules configured in GitHub (Settings → Environments → production →
+    # "Required reviewers"). Declaring the environment here is only half
+    # the gate — WITHOUT those repo-side protection rules this changes
+    # nothing and a push to main still deploys straight through, so that
+    # setting must be turned on for this to actually block anything.
+    environment:
+      name: production
+      url: ${{ vars.FRONTEND_URL }}
+
     defaults:
       run:
         working-directory: frontend
@@ -48,6 +59,17 @@ jobs:
 
       - name: Build React app
         run: npm run build
+        env:
+          # VITE_* vars are inlined at build time, so anything the bundle needs
+          # has to be present here rather than at runtime. All optional — each
+          # feature degrades gracefully when its var is empty (see
+          # frontend/.env.example).
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: production
+          VITE_GIT_SHA: ${{ github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -66,6 +88,15 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+
+    # Same approval gate as deploy-frontend — see the comment there for why
+    # the repo-side environment protection rules are the part that actually
+    # blocks. Note this gate is especially load-bearing for the backend:
+    # bin/docker-entrypoint runs db:prepare on boot, so an approved deploy
+    # is also what runs migrations against production.
+    environment:
+      name: production
+      url: ${{ vars.BACKEND_URL }}
 
     defaults:
       run:
