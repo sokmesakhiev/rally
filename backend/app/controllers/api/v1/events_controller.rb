@@ -7,14 +7,44 @@ module Api
 
       # GET /api/v1/events — public, published, upcoming
       #
+      # Supports ?q= (free-text over title/description/location), ?category=,
+      # and ?page=/?per_page= pagination. All optional: a bare request returns
+      # the first page with default page size, so older clients keep working.
+      #
       # Eager-loads event_types' registration_event_types so
       # EventType#spots_remaining (called per type in event_type_json below)
       # reads the preloaded array via #size instead of issuing a fresh COUNT
       # query per event type — this is the highest-traffic endpoint in the
       # app, so that was a real N+1 (1 query for events + 1 per event type).
       def index
-        events = Event.published.upcoming.includes(event_types: :registration_event_types).order(start_at: :asc)
-        render json: { events: events.map { |e| event_json(e, include_types: true) } }
+        validate_params_with_schema(EventIndexRequestSchema) do |validated_params|
+          page     = validated_params[:page] || 1
+          per_page = validated_params[:per_page] || EventIndexRequestSchema::DEFAULT_PER_PAGE
+
+          scope = Event.published.upcoming
+            .search(validated_params[:q])
+            .in_category(validated_params[:category])
+
+          # Count before paginating, and off the eager-loaded relation — a
+          # COUNT with includes() would build a needless join.
+          total = scope.count
+
+          events = scope
+            .includes(event_types: :registration_event_types)
+            .order(start_at: :asc)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+
+          render json: {
+            events: events.map { |e| event_json(e, include_types: true) },
+            meta: {
+              page: page,
+              per_page: per_page,
+              total_count: total,
+              total_pages: total.zero? ? 0 : (total.to_f / per_page).ceil
+            }
+          }
+        end
       end
 
       # GET /api/v1/events/my — current user's created events

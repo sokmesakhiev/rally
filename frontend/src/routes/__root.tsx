@@ -14,7 +14,7 @@ import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { initErrorReporting, reportError } from "../lib/error-reporting";
 import { AuthProvider } from "../lib/use-auth";
 import { applyStoredLanguage } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
@@ -45,7 +45,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   const { t } = useTranslation();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -134,6 +134,11 @@ function RootComponent() {
   // the client's first render identical — both always start in English.
   useEffect(() => {
     applyStoredLanguage();
+  }, []);
+
+  // Client-only: initialize error reporting. No-ops without VITE_SENTRY_DSN.
+  useEffect(() => {
+    initErrorReporting();
   }, []);
 
   return (

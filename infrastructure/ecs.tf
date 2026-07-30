@@ -68,6 +68,12 @@ resource "aws_ecs_task_definition" "app" {
       # (config/puma.rb) rather than a separate worker task/service — the
       # supported single-server pattern, appropriate at this app's job volume.
       { name = "SOLID_QUEUE_IN_PUMA",    value = "true" },
+      # Error tracking. Not a secret — a Sentry DSN is a write-only ingest
+      # endpoint and is embedded in client bundles by design. Empty leaves
+      # Sentry uninitialized and every Sentry call a no-op (see
+      # backend/config/initializers/sentry.rb).
+      { name = "SENTRY_DSN",             value = var.sentry_dsn },
+      { name = "SENTRY_ENVIRONMENT",     value = var.environment },
     ]
 
     # Secrets injected at task startup from Secrets Manager

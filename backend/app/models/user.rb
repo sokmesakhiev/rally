@@ -26,8 +26,37 @@ class User < ApplicationRecord
   after_create :create_profile!
   after_create :generate_email_verification_token!
 
+  scope :admins, -> { where(admin: true) }
+  scope :suspended, -> { where.not(suspended_at: nil) }
+  scope :active, -> { where(suspended_at: nil) }
+
   def email_verified?
     email_verified_at.present?
+  end
+
+  # ── Moderation ──────────────────────────────────────────────────────────────
+
+  def suspended?
+    suspended_at.present?
+  end
+
+  # Suspending unpublishes every event the user created, so a suspension takes
+  # effect for the public immediately rather than only blocking the account's
+  # own sign-in. Their registrations are deliberately left alone: cancelling
+  # someone else's paid registration is a refund decision, not a moderation
+  # one, and shouldn't happen as a side effect here.
+  def suspend!(reason: nil)
+    transaction do
+      update!(suspended_at: Time.current, suspension_reason: reason.presence)
+      events.published.update_all(is_published: false, updated_at: Time.current)
+    end
+  end
+
+  # Does NOT re-publish the events unsuspending took down — republishing is the
+  # organizer's decision (and, for a paid plan, goes back through
+  # EventPlanPaymentsController so plan/capacity stay consistent).
+  def unsuspend!
+    update!(suspended_at: nil, suspension_reason: nil)
   end
 
   def verify_email!
