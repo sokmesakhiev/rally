@@ -66,6 +66,21 @@ Rails.application.routes.draw do
 
       # File uploads
       post "uploads", to: "uploads#create"
+
+      # ── Admin / moderation ──────────────────────────────────────────────
+      # Requires an authenticated, non-suspended user with `admin` set (see
+      # Api::V1::Admin::BaseController). Non-admins get 404, not 403, so this
+      # surface doesn't advertise itself. Admin is granted from the console
+      # only — there is deliberately no promote-to-admin endpoint.
+      namespace :admin do
+        get  "users",              to: "users#index"
+        post "users/:id/suspend",   to: "users#suspend"
+        post "users/:id/unsuspend", to: "users#unsuspend"
+
+        get    "events",              to: "events#index"
+        post   "events/:id/unpublish", to: "events#unpublish"
+        delete "events/:id",           to: "events#destroy"
+      end
     end
   end
 end

@@ -50,6 +50,30 @@ class Event < ApplicationRecord
   scope :published, -> { where(is_published: true) }
   scope :upcoming, -> { where("start_at >= ?", Time.current) }
 
+  # Free-text search across the fields a participant would plausibly type:
+  # event name, blurb, and place. Deliberately ILIKE rather than Postgres
+  # full-text search — at this catalogue size the simpler thing is easier to
+  # reason about, matches partial words (which tsquery wouldn't without extra
+  # work), and avoids a tsvector column plus its maintenance. Worth revisiting
+  # if the events table gets large enough for the sequential scan to hurt.
+  #
+  # sanitize_sql_like escapes % and _ so a query containing them is treated as
+  # literal text rather than as wildcards.
+  scope :search, ->(term) {
+    query = term.to_s.strip
+    next all if query.blank?
+
+    pattern = "%#{sanitize_sql_like(query)}%"
+    where(
+      "events.title ILIKE :pattern OR events.description ILIKE :pattern OR events.location ILIKE :pattern",
+      pattern: pattern
+    )
+  }
+
+  scope :in_category, ->(category) {
+    category.presence ? where(category: category) : all
+  }
+
   def plan_details
     PLANS[plan]
   end

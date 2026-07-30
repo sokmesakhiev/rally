@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { authApi, getToken, clearToken, type ApiUser } from "@/lib/api-client";
+import { setErrorReportingUser } from "@/lib/error-reporting";
 
 interface AuthState {
   /** The logged-in user, or null if not authenticated. */
@@ -39,6 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Tag error reports with the signed-in user's id (id only — no email; see
+  // lib/error-reporting.ts). No-ops when Sentry isn't configured.
+  useEffect(() => {
+    setErrorReportingUser(user?.id ?? null);
+  }, [user?.id]);
 
   const signOut = useCallback(() => {
     authApi.signout();

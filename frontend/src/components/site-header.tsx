@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, LogOut, User, Wallet } from "lucide-react";
+import { ChevronDown, LogOut, ShieldAlert, User, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -121,6 +121,19 @@ export function SiteHeader() {
                       <Wallet className="h-4 w-4" /> {t("header.paymentSettings")}
                     </Link>
                   </DropdownMenuItem>
+                  {/* Staff only. Hiding this is convenience, not security —
+                      every admin endpoint re-checks server-side and returns
+                      404 to non-admins. */}
+                  {user.admin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin" className="cursor-pointer">
+                          <ShieldAlert className="h-4 w-4" /> {t("header.admin")}
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => signOut()}
