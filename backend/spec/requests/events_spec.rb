@@ -23,6 +23,30 @@ RSpec.describe "Events API", type: :request do
       get "/api/v1/events", as: :json
       expect(response).to have_http_status(:ok)
     end
+
+    it "reports the correct spots_remaining per event type without an N+1 query per type" do
+      event = create(:event, is_published: true, start_at: 1.week.from_now)
+      type = event.event_types.create!(name: "5K", capacity: 3, position: 0)
+      create(:registration, event: event).registration_event_types.create!(event_type: type)
+
+      query_count = 0
+      counter = ->(*, payload) { query_count += 1 unless payload[:sql].match?(/\A(BEGIN|COMMIT|SAVEPOINT|RELEASE)/) }
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get "/api/v1/events", as: :json
+      end
+
+      expect(response).to have_http_status(:ok)
+      returned = json["events"].find { |e| e["id"] == event.id }
+      returned_type = returned["event_types"].find { |t| t["id"] == type.id }
+      expect(returned_type["spots_remaining"]).to eq(2)
+
+      # One query for events, one for event_types, one for
+      # registration_event_types (all via .includes) — not one additional
+      # COUNT per event type. Generous upper bound so this doesn't become
+      # flaky against unrelated query count changes elsewhere.
+      expect(query_count).to be <= 5
+    end
   end
 
   # ── GET /api/v1/events/my ────────────────────────────────────────────────────

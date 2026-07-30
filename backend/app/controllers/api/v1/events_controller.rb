@@ -6,14 +6,20 @@ module Api
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
 
       # GET /api/v1/events — public, published, upcoming
+      #
+      # Eager-loads event_types' registration_event_types so
+      # EventType#spots_remaining (called per type in event_type_json below)
+      # reads the preloaded array via #size instead of issuing a fresh COUNT
+      # query per event type — this is the highest-traffic endpoint in the
+      # app, so that was a real N+1 (1 query for events + 1 per event type).
       def index
-        events = Event.published.upcoming.includes(:event_types).order(start_at: :asc)
+        events = Event.published.upcoming.includes(event_types: :registration_event_types).order(start_at: :asc)
         render json: { events: events.map { |e| event_json(e, include_types: true) } }
       end
 
       # GET /api/v1/events/my — current user's created events
       def my_events
-        events = current_user.events.includes(:registrations, :event_types).order(start_at: :asc)
+        events = current_user.events.includes(:registrations, event_types: :registration_event_types).order(start_at: :asc)
         render json: {
           events: events.map { |e|
             event_json(e, include_types: true).merge(registrations_count: e.registrations.size)
@@ -23,7 +29,8 @@ module Api
 
       # GET /api/v1/events/:id
       def show
-        @event = Event.includes(survey: :survey_questions, event_types: []).find(params[:id])
+        @event = Event.includes(:registrations, survey: :survey_questions, event_types: :registration_event_types)
+          .find(params[:id])
         render json: { event: event_json(@event, include_count: true, include_survey: true, include_types: true) }
       end
 

@@ -6,63 +6,25 @@ module Api
       # POST /api/v1/registrations/:registration_id/payments
       # Creates a new ABA KHQR payment attempt for the current user's registration
       # and returns the QR payload for the frontend to render / poll.
+      # Implementation lives in Payments::CreatePayment — this action just
+      # finds the registration, delegates, and maps the result to a response.
       def create
         registration = current_user.registrations.includes(:event, :event_types).find(params[:registration_id])
 
-        if registration.payment_status == "paid"
-          render json: { error: "This registration is already paid." }, status: :unprocessable_entity
-          return
+        result = Payments::CreatePayment.new(
+          registration: registration,
+          current_user: current_user,
+          callback_url: "#{ENV.fetch('BACKEND_URL', request.base_url)}/api/v1/webhooks/aba_payway"
+        ).call
+
+        case result.status
+        when :created
+          render json: { payment: payment_json(result.payment) }, status: :created
+        when :gateway_error
+          render json: { error: result.error }, status: :bad_gateway
+        else # :already_paid, :nothing_owed, :declined
+          render json: { error: result.error }, status: :unprocessable_entity
         end
-
-        amount_cents = registration.owed_amount_cents
-        if amount_cents <= 0
-          render json: { error: "This registration has nothing owed." }, status: :unprocessable_entity
-          return
-        end
-
-        tran_id = "rly#{SecureRandom.alphanumeric(14)}"
-        currency = registration.event.currency.presence || "usd"
-
-        payment = registration.payments.create!(
-          tran_id: tran_id,
-          amount_cents: amount_cents,
-          currency: currency,
-          status: "pending",
-          expires_at: 15.minutes.from_now
-        )
-
-        begin
-          profile = current_user.profile
-          response = AbaPayway::Client.for_event(registration.event).generate_qr(
-            tran_id: tran_id,
-            amount_cents: amount_cents,
-            currency: currency,
-            lifetime_minutes: 15,
-            first_name: profile&.display_name.presence || "Rally",
-            last_name: "Participant",
-            email: current_user.email,
-            callback_url: "#{ENV.fetch('BACKEND_URL', request.base_url)}/api/v1/webhooks/aba_payway"
-          )
-        rescue AbaPayway::Error => e
-          payment.update!(status: "declined", raw_response: { error: e.message })
-          render json: { error: "Could not start payment: #{e.message}" }, status: :bad_gateway
-          return
-        end
-
-        status_code = response.dig(:status, :code)
-        unless status_code.to_s == "0"
-          payment.update!(status: "declined", raw_response: response)
-          render json: { error: response.dig(:status, :message) || "Payment could not be started." }, status: :unprocessable_entity
-          return
-        end
-
-        payment.update!(
-          qr_string: response[:qrString],
-          abapay_deeplink: response[:abapay_deeplink],
-          raw_response: response
-        )
-
-        render json: { payment: payment_json(payment) }, status: :created
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Registration not found" }, status: :not_found
       end
