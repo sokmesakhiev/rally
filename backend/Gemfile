@@ -9,7 +9,7 @@ gem "tzinfo-data", platforms: %i[ windows jruby ]
 # Auth
 gem "bcrypt", "~> 3.1.7"
 gem "jwt", "~> 3.2"
-gem "googleauth", "~> 1.11" # verifies Google ID tokens for "Sign in with Google" (see AuthController#google)
+gem "googleauth", "~> 1.17" # verifies Google ID tokens for "Sign in with Google" (see AuthController#google)
 
 # CORS
 gem "rack-cors"
