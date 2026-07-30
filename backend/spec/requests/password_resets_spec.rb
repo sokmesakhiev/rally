@@ -19,6 +19,13 @@ RSpec.describe "Password Resets API", type: :request do
       expect(response).to have_http_status(:ok)
       expect(json["message"]).to be_present
     end
+
+    it "returns 422 when email is missing entirely (schema)" do
+      post "/api/v1/password_resets", params: {}, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+    end
   end
 
   describe "PATCH /api/v1/password_resets/:token" do

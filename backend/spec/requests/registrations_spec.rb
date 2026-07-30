@@ -167,6 +167,25 @@ RSpec.describe "Registrations API", type: :request do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    it "returns 422 for an unknown payment_status (schema)" do
+      patch "/api/v1/registrations/#{reg.id}",
+            params: { registration: { payment_status: "bogus" } },
+            headers: auth_headers(organizer),
+            as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+      expect(reg.reload.payment_status).not_to eq("bogus")
+    end
+
+    # No "missing registration wrapper key" case here: Rails' ParamsWrapper
+    # (active by default for JSON requests, even with config.api_only = true)
+    # auto-nests any flat top-level params matching a Registration attribute
+    # name (payment_status, amount_paid_cents, ...) under a "registration"
+    # key before the schema ever runs, so that key is guaranteed present on
+    # every real JSON request here — there's no request shape that can
+    # trigger required(:registration) failing in practice.
   end
 
   # ── DELETE /api/v1/registrations/:id ────────────────────────────────────────

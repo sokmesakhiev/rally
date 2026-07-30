@@ -10,21 +10,17 @@ module Api
 
       # PATCH /api/v1/profile
       def update
-        profile = current_user.profile || current_user.create_profile!
-        if profile.update(profile_params)
-          render json: { profile: profile_json(profile) }
-        else
-          render json: { error: profile.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        validate_params_with_schema(ProfileUpdateRequestSchema) do |validated_params|
+          profile = current_user.profile || current_user.create_profile!
+          if profile.update(validated_params[:profile])
+            render json: { profile: profile_json(profile) }
+          else
+            render json: { error: profile.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          end
         end
       end
 
       private
-
-      def profile_params
-        params.require(:profile).permit(
-          :display_name, :avatar_url, :payway_merchant_id, :payway_api_key
-        )
-      end
 
       def profile_json(profile)
         {

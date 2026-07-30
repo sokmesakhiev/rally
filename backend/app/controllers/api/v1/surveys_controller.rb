@@ -18,33 +18,37 @@ module Api
 
       # POST /api/v1/surveys
       def create
-        survey = current_user.surveys.build(survey_params_base)
+        validate_params_with_schema(SurveyRequestSchema) do |validated_params|
+          survey = current_user.surveys.build(survey_params_base(validated_params))
 
-        (params[:questions] || []).each_with_index do |q, i|
-          survey.survey_questions.build(question_params(q).merge(position: i))
-        end
+          (validated_params[:questions] || []).each_with_index do |q, i|
+            survey.survey_questions.build(question_params(q).merge(position: i))
+          end
 
-        if survey.save
-          render json: { survey: survey_json(survey, include_questions: true) }, status: :created
-        else
-          render json: { error: survey.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          if survey.save
+            render json: { survey: survey_json(survey, include_questions: true) }, status: :created
+          else
+            render json: { error: survey.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          end
         end
       end
 
       # PATCH /api/v1/surveys/:id — replace questions entirely
       def update
-        Survey.transaction do
-          @survey.update!(survey_params_base)
+        validate_params_with_schema(SurveyRequestSchema) do |validated_params|
+          Survey.transaction do
+            @survey.update!(survey_params_base(validated_params))
 
-          if params.key?(:questions)
-            @survey.survey_questions.destroy_all
-            (params[:questions] || []).each_with_index do |q, i|
-              @survey.survey_questions.create!(question_params(q).merge(position: i))
+            if validated_params.key?(:questions)
+              @survey.survey_questions.destroy_all
+              (validated_params[:questions] || []).each_with_index do |q, i|
+                @survey.survey_questions.create!(question_params(q).merge(position: i))
+              end
             end
           end
-        end
 
-        render json: { survey: survey_json(@survey.reload, include_questions: true) }
+          render json: { survey: survey_json(@survey.reload, include_questions: true) }
+        end
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -69,8 +73,8 @@ module Api
         end
       end
 
-      def survey_params_base
-        { title: params[:title].presence || "Registration Survey" }
+      def survey_params_base(validated_params)
+        { title: validated_params[:title].presence || "Registration Survey" }
       end
 
       def question_params(q)

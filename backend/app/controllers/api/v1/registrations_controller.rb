@@ -39,44 +39,45 @@ module Api
       #   answers:        [{ survey_question_id, answer_text?, answer_options? }]
       #   event_type_ids: ["uuid", ...]
       def create
-        if current_user.registrations.exists?(event_id: @event.id)
-          render json: { error: "Already registered" }, status: :unprocessable_entity
-          return
-        end
-
-        Registration.transaction do
-          # Calculate amount from selected types (or fall back to event price)
-          amount = compute_amount(@event, params[:event_type_ids])
-
-          registration = current_user.registrations.create!(
-            event: @event,
-            status: "confirmed",
-            payment_status: amount == 0 ? "paid" : "unpaid",
-            amount_paid_cents: 0
-          )
-
-          # Wire up event types
-          if params[:event_type_ids].present?
-            type_ids = Array(params[:event_type_ids])
-            type_ids.each do |type_id|
-              registration.registration_event_types.create!(event_type_id: type_id)
-            end
+        validate_params_with_schema(RegistrationCreateRequestSchema) do |validated_params|
+          if current_user.registrations.exists?(event_id: @event.id)
+            render json: { error: "Already registered" }, status: :unprocessable_entity
+            return
           end
 
-          # Wire up survey answers
-          if @event.survey_id.present? && params[:answers].present?
-            params[:answers].each do |ans|
-              registration.registration_answers.create!(
-                survey_question_id: ans[:survey_question_id],
-                answer_text:        ans[:answer_text].presence,
-                answer_options:     ans[:answer_options] || []
-              )
+          Registration.transaction do
+            # Calculate amount from selected types (or fall back to event price)
+            amount = compute_amount(@event, validated_params[:event_type_ids])
+
+            registration = current_user.registrations.create!(
+              event: @event,
+              status: "confirmed",
+              payment_status: amount == 0 ? "paid" : "unpaid",
+              amount_paid_cents: 0
+            )
+
+            # Wire up event types
+            if validated_params[:event_type_ids].present?
+              Array(validated_params[:event_type_ids]).each do |type_id|
+                registration.registration_event_types.create!(event_type_id: type_id)
+              end
             end
+
+            # Wire up survey answers
+            if @event.survey_id.present? && validated_params[:answers].present?
+              validated_params[:answers].each do |ans|
+                registration.registration_answers.create!(
+                  survey_question_id: ans[:survey_question_id],
+                  answer_text:        ans[:answer_text].presence,
+                  answer_options:     ans[:answer_options] || []
+                )
+              end
+            end
+
+            RegistrationMailer.confirmation(registration).deliver_later
+
+            render json: { registration: registration_json(registration, include_types: true) }, status: :created
           end
-
-          RegistrationMailer.confirmation(registration).deliver_later
-
-          render json: { registration: registration_json(registration, include_types: true) }, status: :created
         end
       rescue ActiveRecord::RecordInvalid => e
         render json: capacity_error_json(e.record), status: :unprocessable_entity
@@ -92,10 +93,12 @@ module Api
           return
         end
 
-        if registration.update(payment_update_params)
-          render json: { registration: registration_json(registration, include_profile: true, include_types: true) }
-        else
-          render json: { error: registration.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        validate_params_with_schema(RegistrationUpdateRequestSchema) do |validated_params|
+          if registration.update(validated_params[:registration])
+            render json: { registration: registration_json(registration, include_profile: true, include_types: true) }
+          else
+            render json: { error: registration.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          end
         end
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Registration not found" }, status: :not_found
@@ -123,10 +126,6 @@ module Api
         @event = Event.includes(:event_types).find(params[:event_id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
-      end
-
-      def payment_update_params
-        params.require(:registration).permit(:payment_status, :amount_paid_cents)
       end
 
       # Builds a clean { error:, code: } payload for a failed registration.

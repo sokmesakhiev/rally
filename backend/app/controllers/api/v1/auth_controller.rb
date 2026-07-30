@@ -5,38 +5,42 @@ module Api
 
       # POST /api/v1/auth/signup
       def signup
-        user = User.new(
-          email: params[:email],
-          password: params[:password],
-          password_confirmation: params[:password]
-        )
+        validate_params_with_schema(AuthSignupRequestSchema) do |validated_params|
+          user = User.new(
+            email: validated_params[:email],
+            password: validated_params[:password],
+            password_confirmation: validated_params[:password]
+          )
 
-        if params[:display_name].present?
-          user.save!
-          user.profile.update!(display_name: params[:display_name].strip)
-        else
-          user.save!
+          if validated_params[:display_name].present?
+            user.save!
+            user.profile.update!(display_name: validated_params[:display_name].strip)
+          else
+            user.save!
+          end
+
+          UserMailer.email_verification(user).deliver_later
+
+          token = JsonWebToken.encode(user_id: user.id)
+          render json: user_payload(user, token), status: :created
         end
-
-        UserMailer.email_verification(user).deliver_later
-
-        token = JsonWebToken.encode(user_id: user.id)
-        render json: user_payload(user, token), status: :created
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
       # POST /api/v1/auth/signin
       def signin
-        user = User.find_by(email: params[:email]&.downcase&.strip)
+        validate_params_with_schema(AuthSigninRequestSchema) do |validated_params|
+          user = User.find_by(email: validated_params[:email]&.downcase&.strip)
 
-        unless user&.authenticate(params[:password])
-          render json: { error: "Invalid email or password" }, status: :unauthorized
-          return
+          unless user&.authenticate(validated_params[:password])
+            render json: { error: "Invalid email or password" }, status: :unauthorized
+            return
+          end
+
+          token = JsonWebToken.encode(user_id: user.id)
+          render json: user_payload(user, token)
         end
-
-        token = JsonWebToken.encode(user_id: user.id)
-        render json: user_payload(user, token)
       end
 
       # POST /api/v1/auth/google
@@ -49,17 +53,19 @@ module Api
       # See config/initializers or GOOGLE_CLIENT_ID in production.rb wiring
       # (infrastructure/ecs.tf) for where the client ID comes from.
       def google
-        payload = Google::Auth::IDTokens.verify_oidc(params[:id_token], aud: ENV.fetch("GOOGLE_CLIENT_ID", nil))
+        validate_params_with_schema(AuthGoogleRequestSchema) do |validated_params|
+          payload = Google::Auth::IDTokens.verify_oidc(validated_params[:id_token], aud: ENV.fetch("GOOGLE_CLIENT_ID", nil))
 
-        user = User.find_or_create_from_google!(
-          google_uid: payload["sub"],
-          email: payload["email"],
-          email_verified: ActiveModel::Type::Boolean.new.cast(payload["email_verified"]),
-          name: payload["name"]
-        )
+          user = User.find_or_create_from_google!(
+            google_uid: payload["sub"],
+            email: payload["email"],
+            email_verified: ActiveModel::Type::Boolean.new.cast(payload["email_verified"]),
+            name: payload["name"]
+          )
 
-        token = JsonWebToken.encode(user_id: user.id)
-        render json: user_payload(user, token)
+          token = JsonWebToken.encode(user_id: user.id)
+          render json: user_payload(user, token)
+        end
       rescue Google::Auth::IDTokens::VerificationError => e
         render json: { error: "Invalid Google credential: #{e.message}" }, status: :unauthorized
       rescue ActiveRecord::RecordInvalid => e

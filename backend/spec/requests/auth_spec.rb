@@ -61,6 +61,20 @@ RSpec.describe "Auth API", type: :request do
 
       expect(json["user"]["email_verified"]).to be(false)
     end
+
+    it "returns 422 when email is missing entirely (schema)" do
+      post "/api/v1/auth/signup", params: { password: password }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+    end
+
+    it "returns 422 when password is missing entirely (schema)" do
+      post "/api/v1/auth/signup", params: { email: "new@example.com" }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+    end
   end
 
   # ── POST /api/v1/auth/signin ─────────────────────────────────────────────────
@@ -100,6 +114,20 @@ RSpec.describe "Auth API", type: :request do
            as: :json
 
       expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "returns 422 when email is missing entirely (schema)" do
+      post "/api/v1/auth/signin", params: { password: password }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+    end
+
+    it "returns 422 when password is missing entirely (schema)" do
+      post "/api/v1/auth/signin", params: { email: user.email }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
     end
   end
 
@@ -162,6 +190,15 @@ RSpec.describe "Auth API", type: :request do
       post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
 
       expect(response).to have_http_status(:unauthorized)
+      expect(json["error"]).to be_present
+    end
+
+    it "returns 422 when id_token is missing entirely (schema), without calling the verifier" do
+      expect(Google::Auth::IDTokens).not_to receive(:verify_oidc)
+
+      post "/api/v1/auth/google", params: {}, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to be_present
     end
   end
