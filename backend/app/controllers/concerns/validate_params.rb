@@ -12,7 +12,7 @@ module ValidateParams
     # have no "referer" to redirect to) renders JSON via the method below.
     def validate_params_with_schema(schema_type, schema_options: {}, &_block)
       validate_params = ActiveSupport::OrderedOptions.new
-      validate_params.params = request.params.except('format', 'controller', 'action')
+      validate_params.params = request.params.except("format", "controller", "action")
       schema = schema_type.new(
         request: validate_params,
         **schema_options
@@ -32,14 +32,14 @@ module ValidateParams
 
     def build_error_response(schema_errors)
       error_body = {
-        'success' => false,
-        'message' => 'Unprocessable Entity',
-        'code' => 422
+        "success" => false,
+        "message" => "Unprocessable Entity",
+        "code" => 422
       }
-      error_body['errors'] = schema_errors.messages.map do |message|
+      error_body["errors"] = schema_errors.messages.map do |message|
         message.meta[:code].presence || ErrorCodes::GENERAL_ERROR
       end
-      error_body['errors'].uniq!
+      error_body["errors"].uniq!
 
       # Every other controller in this app returns { error: "<human text>",
       # code: "<optional machine code>" } (see e.g. RegistrationsController's
@@ -47,7 +47,7 @@ module ValidateParams
       # reads response.json.error / .code — it has no awareness of `errors`
       # (plural). Without this, a schema validation failure would surface to
       # the user as a bare "API error 422" instead of the real message.
-      error_body['error'] = schema_errors.messages.map(&:text).join(", ")
+      error_body["error"] = schema_errors.messages.map(&:text).join(", ")
 
       error_body
     end

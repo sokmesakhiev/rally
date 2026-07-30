@@ -11,7 +11,7 @@ class ApplicationRequestSchema < Dry::Validation::Contract
   register_macro(:validate_email) do
     unless value.match?(URI::MailTo::EMAIL_REGEXP)
       key.failure(
-        text: I18n.t('dry_validation.email.invalid_format'),
+        text: I18n.t("dry_validation.email.invalid_format"),
         code: ErrorCodes::EMAIL_FORMAT_IS_INVALID
       )
     end
