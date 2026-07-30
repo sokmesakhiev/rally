@@ -1,6 +1,6 @@
 module Api
   module V1
-    class SurveyResponsesController < ApplicationController
+    class SurveyResponsesController < BaseController
       before_action :authenticate_user!
 
       # GET /api/v1/events/:event_id/survey_responses

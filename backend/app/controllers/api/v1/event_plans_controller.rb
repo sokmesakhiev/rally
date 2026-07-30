@@ -3,7 +3,7 @@ module Api
     # Public, read-only listing of the pricing tiers organizers can publish
     # under. No auth required — used on the marketing pricing page as well
     # as the authenticated publish flow.
-    class EventPlansController < ApplicationController
+    class EventPlansController < BaseController
       # GET /api/v1/event_plans
       def index
         plans = Event::PLANS.map do |id, details|

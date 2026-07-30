@@ -1,6 +1,6 @@
 module Api
   module V1
-    class AuthController < ApplicationController
+    class AuthController < BaseController
       before_action :authenticate_user!, only: [ :me ]
 
       # POST /api/v1/auth/signup

@@ -1,6 +1,6 @@
 module Api
   module V1
-    class ProfilesController < ApplicationController
+    class ProfilesController < BaseController
       before_action :authenticate_user!
 
       # GET /api/v1/profile

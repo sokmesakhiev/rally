@@ -1,6 +1,6 @@
 module Api
   module V1
-    class EventPlanPaymentsController < ApplicationController
+    class EventPlanPaymentsController < BaseController
       before_action :authenticate_user!
 
       # POST /api/v1/events/:event_id/plan_payments

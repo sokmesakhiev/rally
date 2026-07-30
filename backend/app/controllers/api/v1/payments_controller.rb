@@ -1,6 +1,6 @@
 module Api
   module V1
-    class PaymentsController < ApplicationController
+    class PaymentsController < BaseController
       before_action :authenticate_user!
 
       # POST /api/v1/registrations/:registration_id/payments

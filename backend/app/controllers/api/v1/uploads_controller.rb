@@ -1,6 +1,6 @@
 module Api
   module V1
-    class UploadsController < ApplicationController
+    class UploadsController < BaseController
       before_action :authenticate_user!
 
       ALLOWED_CONTENT_TYPES = %w[image/jpeg image/png image/webp image/gif].freeze

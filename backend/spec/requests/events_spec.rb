@@ -96,6 +96,58 @@ RSpec.describe "Events API", type: :request do
       post "/api/v1/events", params: valid_params, as: :json
       expect(response).to have_http_status(:unauthorized)
     end
+
+    it "creates event types via event_types_attributes" do
+      params = valid_params.deep_merge(
+        event: {
+          event_types_attributes: [
+            { name: "5K", capacity: 100, price_cents: 1000, position: 0 },
+            { name: "10K", position: 1 }
+          ]
+        }
+      )
+
+      post "/api/v1/events", params: params, headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["event"]["event_types"].map { |t| t["name"] }).to contain_exactly("5K", "10K")
+    end
+
+    it "ignores a client-supplied capacity — only the publish flow may set it" do
+      params = valid_params.deep_merge(event: { capacity: 999_999 })
+
+      post "/api/v1/events", params: params, headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["event"]["capacity"]).to be_nil
+    end
+
+    it "ignores a client-supplied is_published — only the paid publish flow may set it" do
+      params = valid_params.deep_merge(event: { is_published: true })
+
+      post "/api/v1/events", params: params, headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["event"]["is_published"]).to be(false)
+    end
+
+    it "creates an event without a survey, location pin, or route link" do
+      post "/api/v1/events", params: valid_params, headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["event"]["latitude"]).to be_nil
+      expect(json["event"]["route_map_url"]).to be_nil
+    end
+
+    it "returns 422 (not 200) with a usable error message for an invalid schema shape" do
+      post "/api/v1/events",
+           params: { event: valid_params[:event].merge(latitude: 11.5) },
+           headers: auth_headers(user),
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
+    end
   end
 
   # ── PATCH /api/v1/events/:id ─────────────────────────────────────────────────
@@ -110,6 +162,66 @@ RSpec.describe "Events API", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(json["event"]["title"]).to eq("New Title")
+    end
+
+    it "only touches the submitted field — a partial update doesn't null out the rest" do
+      event.update!(description: "Original description", location: "Phnom Penh")
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { title: "New Title" } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["description"]).to eq("Original description")
+      expect(json["event"]["location"]).to eq("Phnom Penh")
+    end
+
+    it "ignores a client-supplied capacity/plan/is_published on update too" do
+      # factory default is_published: true — request the opposite value to
+      # prove it's ignored (stays true) rather than assuming a starting value.
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { capacity: 999_999, plan: "extra_large", is_published: false } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload.capacity).to be_nil
+      expect(event.plan).to be_nil
+      expect(event.is_published).to be(true)
+    end
+
+    it "adds, updates, and destroys event types via event_types_attributes" do
+      to_rename = event.event_types.create!(name: "Old type", position: 0)
+      to_remove = event.event_types.create!(name: "Doomed type", position: 1)
+
+      patch "/api/v1/events/#{event.id}",
+            params: {
+              event: {
+                event_types_attributes: [
+                  { id: to_rename.id, name: "Renamed type" },
+                  { id: to_remove.id, _destroy: true },
+                  { name: "Brand new type", position: 2 }
+                ]
+              }
+            },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      names = json["event"]["event_types"].map { |t| t["name"] }
+      expect(names).to contain_exactly("Renamed type", "Brand new type")
+      expect(EventType.exists?(to_remove.id)).to be(false)
+    end
+
+    it "returns 422 with a usable error message for an invalid schema shape" do
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { latitude: 11.5 } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to be_present
     end
 
     it "returns 403 when a different user tries to update" do

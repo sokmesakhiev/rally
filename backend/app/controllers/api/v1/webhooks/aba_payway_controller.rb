@@ -6,7 +6,7 @@ module Api
       # (ABA's KHQR webhook doesn't include a hash), so we treat it only as a
       # trigger — the actual status change always comes from an authenticated
       # server-to-server Check Transaction call, never from the payload alone.
-      class AbaPaywayController < ApplicationController
+      class AbaPaywayController < BaseController
         # POST /api/v1/webhooks/aba_payway
         # Handles both kinds of ABA payment in this app: participant
         # registration payments (Payment, tran_id prefix "rly") and

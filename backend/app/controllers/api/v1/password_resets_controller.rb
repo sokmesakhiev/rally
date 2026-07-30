@@ -1,6 +1,6 @@
 module Api
   module V1
-    class PasswordResetsController < ApplicationController
+    class PasswordResetsController < BaseController
       # POST /api/v1/password_resets — request a reset email
       # Always responds 200 regardless of whether the email exists, to avoid
       # leaking which addresses are registered.

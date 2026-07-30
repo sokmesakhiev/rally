@@ -1,6 +1,6 @@
 module Api
   module V1
-    class EmailVerificationsController < ApplicationController
+    class EmailVerificationsController < BaseController
       before_action :authenticate_user!, only: [ :create ]
 
       # POST /api/v1/email_verifications — resend the verification email

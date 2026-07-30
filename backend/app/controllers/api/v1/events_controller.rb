@@ -1,6 +1,6 @@
 module Api
   module V1
-    class EventsController < ApplicationController
+    class EventsController < BaseController
       before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish ]
       before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
@@ -29,20 +29,27 @@ module Api
 
       # POST /api/v1/events
       def create
-        event = current_user.events.build(event_params)
-        if event.save
+        validate_params_with_schema(EventRequestSchema) do |validated_params|
+          event = current_user.events.create!(validated_params[:event])
+
           render json: { event: event_json(event, include_types: true) }, status: :created
-        else
-          render json: { error: event.errors.full_messages.join(", ") }, status: :unprocessable_entity
         end
+      rescue ActiveRecord::RecordInvalid => e
+        # EventRequestSchema deliberately only mirrors *some* of Event's
+        # validations (see its class comment) — things like title length,
+        # category inclusion, or end_after_start still only exist on the
+        # model, so create! can still legitimately raise here.
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       # PATCH /api/v1/events/:id
       def update
-        if @event.update(event_params)
-          render json: { event: event_json(@event, include_types: true) }
-        else
-          render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
+          if @event.update(validated_params[:event])
+            render json: { event: event_json(@event, include_types: true) }
+          else
+            render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          end
         end
       end
 
@@ -72,21 +79,6 @@ module Api
         unless @event.creator_id == current_user.id
           render json: { error: "Forbidden" }, status: :forbidden
         end
-      end
-
-      # `is_published` and `capacity` are intentionally excluded — they're
-      # only ever set via the paid publish flow (EventPlanPaymentsController)
-      # or #unpublish, never directly. See Event::PLANS.
-      def event_params
-        params.require(:event).permit(
-          :title, :description, :category, :location,
-          :latitude, :longitude, :route_map_url,
-          :start_at, :end_at, :price_cents, :currency,
-          :brand_color, :banner_url, :logo_url, :survey_id,
-          event_types_attributes: [
-            :id, :name, :description, :capacity, :price_cents, :position, :_destroy
-          ]
-        )
       end
 
       def event_json(event, include_count: false, include_survey: false, include_types: false)
