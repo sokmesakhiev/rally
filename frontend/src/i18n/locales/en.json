@@ -271,7 +271,16 @@
     "shareDesc": "Scan the QR code to open this page, or download it to share on posters and social media.",
     "toastUnpaid": "You're registered — complete payment to secure your spot.",
     "toastPaid": "You're registered! Add the event to your calendar.",
-    "toastRegisterError": "Could not register"
+    "toastRegisterError": "Could not register",
+    "joinWaitlist": "Join waitlist",
+    "onWaitlist": "You're on the waitlist",
+    "onWaitlistDesc": "We'll email you and confirm your spot automatically if one opens up.",
+    "leaveWaitlist": "Leave waitlist",
+    "toastJoinedWaitlist": "You're on the waitlist — we'll email you if a spot opens up.",
+    "toastJoinWaitlistError": "Could not join the waitlist",
+    "toastLeftWaitlist": "Left the waitlist",
+    "toastLeaveWaitlistError": "Could not leave the waitlist",
+    "joinWaitlistToastAction": "Join waitlist instead"
   },
   "dashboard": {
     "title": "Your dashboard",
@@ -315,7 +324,13 @@
     "statParticipants": "Participants",
     "statPaid": "Paid",
     "statRevenue": "Revenue",
+    "statWaitlist": "Waitlisted",
     "byType": "Registrations by type",
+    "waitlistSectionTitle": "Waitlist",
+    "waitlistSectionDesc": "First in line is promoted to a confirmed registration automatically when a spot opens up.",
+    "waitlistEmpty": "No one is waitlisted.",
+    "waitlistPositionLabel": "#{{position}}",
+    "waitlistJoinedOn": "Joined {{date}}",
     "tabParticipants": "Participants",
     "tabBranding": "QR & Branding",
     "tabResponses": "Responses",
@@ -466,7 +481,8 @@
     "typesSelected_one": "{{count}} type selected",
     "typesSelected_other": "{{count}} types selected",
     "total": "{{amount}} total",
-    "next": "Next"
+    "next": "Next",
+    "joinWaitlistForType": "Join waitlist"
   },
   "imageUpload": {
     "uploadFailed": "Upload failed",

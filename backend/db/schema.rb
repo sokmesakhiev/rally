@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_01_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -216,6 +216,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
     t.index ["suspended_at"], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
   end
 
+  create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "event_id", null: false
+    t.jsonb "event_type_ids", default: [], null: false
+    t.string "status", default: "waiting", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["event_id", "created_at"], name: "index_waitlist_entries_on_event_and_created_at"
+    t.index ["event_id", "user_id"], name: "index_waitlist_entries_on_event_and_user_when_waiting", unique: true, where: "((status)::text = 'waiting'::text)"
+    t.index ["event_id"], name: "index_waitlist_entries_on_event_id"
+    t.index ["user_id"], name: "index_waitlist_entries_on_user_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "event_plan_payments", "events"
@@ -233,4 +246,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
   add_foreign_key "registrations", "users"
   add_foreign_key "survey_questions", "surveys"
   add_foreign_key "surveys", "users", column: "creator_id"
+  add_foreign_key "waitlist_entries", "events"
+  add_foreign_key "waitlist_entries", "users"
 end

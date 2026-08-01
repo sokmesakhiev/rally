@@ -209,5 +209,19 @@ RSpec.describe "Registrations API", type: :request do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    it "promotes the longest-waiting waitlist entry when removing a participant frees a spot" do
+      full_event = create(:event, :full, creator: organizer)
+      full_reg   = full_event.registrations.first
+      waiter     = create(:waitlist_entry, event: full_event)
+
+      delete "/api/v1/registrations/#{full_reg.id}",
+             headers: auth_headers(organizer),
+             as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(waiter.reload.status).to eq("promoted")
+      expect(Registration.exists?(event_id: full_event.id, user_id: waiter.user_id)).to be(true)
+    end
   end
 end

@@ -10,6 +10,7 @@ class User < ApplicationRecord
   has_many :events, foreign_key: :creator_id, dependent: :destroy
   has_many :registrations, dependent: :destroy
   has_many :surveys, foreign_key: :creator_id, dependent: :destroy
+  has_many :waitlist_entries, dependent: :destroy
 
   # Tokens are single-use, random, and time-boxed — plain-text storage is fine
   # here (unlike passwords) since they're low-value, short-lived, and unique.

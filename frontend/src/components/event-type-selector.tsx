@@ -24,6 +24,9 @@ interface EventTypeSelectorProps {
   isPending: boolean;
   /** Label for the "Next" button — "Register" if no survey follows, "Next" if survey follows */
   nextLabel?: string;
+  /** Shown as a small link next to a full type — joins the waitlist for just that type. Omit to hide. */
+  onJoinWaitlist?: (eventTypeId: string) => void;
+  waitlistPendingTypeId?: string | null;
 }
 
 export function EventTypeSelector({
@@ -37,6 +40,8 @@ export function EventTypeSelector({
   brandColor,
   isPending,
   nextLabel,
+  onJoinWaitlist,
+  waitlistPendingTypeId,
 }: EventTypeSelectorProps) {
   const { t } = useTranslation();
   const total = selectedIds.reduce((sum, id) => {
@@ -88,6 +93,19 @@ export function EventTypeSelector({
                   <span className="font-medium">{et.name}</span>
                   <Badge variant="outline">{formatPrice(priceCents, currency)}</Badge>
                   {isFull && <Badge variant="secondary">{t("eventDetail.full")}</Badge>}
+                  {isFull && onJoinWaitlist && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onJoinWaitlist(et.id);
+                      }}
+                      disabled={waitlistPendingTypeId === et.id}
+                      className="text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      {t("eventTypeSelector.joinWaitlistForType")}
+                    </button>
+                  )}
                   {!isFull && et.spots_remaining !== null && (
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="h-3 w-3" />{" "}

@@ -20,12 +20,14 @@ import {
   MessageSquare,
   Rocket,
   EyeOff,
+  Hourglass,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
   eventsApi,
   registrationsApi,
+  waitlistApi,
   surveyResponsesApi,
   eventPlansApi,
   type ApiSurveyResponse,
@@ -117,6 +119,11 @@ function ManageEvent() {
     queryFn: () => surveyResponsesApi.forEvent(eventId),
   });
 
+  const waitlistQuery = useQuery({
+    queryKey: ["event-waitlist", eventId],
+    queryFn: () => waitlistApi.forEvent(eventId).then((r) => r.waitlist_entries),
+  });
+
   const setPayment = useMutation({
     mutationFn: async ({ id, status, amount }: { id: string; status: string; amount: number }) => {
       await registrationsApi.updatePayment(id, status, status === "paid" ? amount : 0);
@@ -184,6 +191,7 @@ function ManageEvent() {
   });
 
   const participants = participantsQuery.data ?? [];
+  const waitlist = waitlistQuery.data ?? [];
   const paidCount = participants.filter((p) => p.payment_status === "paid").length;
   const revenue = participants.reduce((sum, p) => sum + (p.amount_paid_cents ?? 0), 0);
 
@@ -394,7 +402,7 @@ function ManageEvent() {
             )}
 
             {/* Stats */}
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Stat
                 icon={Users}
                 label={t("manageEvent.statParticipants")}
@@ -410,7 +418,42 @@ function ManageEvent() {
                 label={t("manageEvent.statRevenue")}
                 value={formatPrice(revenue, ev.currency)}
               />
+              <Stat
+                icon={Hourglass}
+                label={t("manageEvent.statWaitlist")}
+                value={`${waitlist.length}`}
+              />
             </div>
+
+            {/* Waitlist */}
+            {waitlist.length > 0 && (
+              <div className="mt-6 rounded-2xl border border-border bg-card p-5">
+                <p className="text-sm font-semibold">{t("manageEvent.waitlistSectionTitle")}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("manageEvent.waitlistSectionDesc")}
+                </p>
+                <div className="mt-4 divide-y divide-border">
+                  {waitlist.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Badge variant="outline" className="shrink-0 font-mono text-xs">
+                          {t("manageEvent.waitlistPositionLabel", { position: entry.position })}
+                        </Badge>
+                        <p className="truncate text-sm font-medium">
+                          {entry.profile?.display_name ?? entry.email}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("manageEvent.waitlistJoinedOn", { date: formatDate(entry.created_at) })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Per-type breakdown */}
             {ev.event_types?.length > 0 && (

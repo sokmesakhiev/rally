@@ -4,6 +4,7 @@ class Event < ApplicationRecord
   has_many :registrations, dependent: :destroy
   has_many :event_types, -> { order(position: :asc) }, dependent: :destroy
   has_many :event_plan_payments, dependent: :destroy
+  has_many :waitlist_entries, -> { order(created_at: :asc) }, dependent: :destroy
 
   accepts_nested_attributes_for :event_types,
     allow_destroy: true,
@@ -84,6 +85,13 @@ class Event < ApplicationRecord
   # limit to add up.
   def combined_event_type_capacity
     event_types.filter_map(&:capacity).sum
+  end
+
+  # Same predicate Registration#event_not_full validates against — kept here
+  # too so WaitlistEntry (and anything else that needs to ask "is this event
+  # full right now?") doesn't have to duplicate the capacity.present? guard.
+  def full?
+    capacity.present? && registrations.count >= capacity
   end
 
   private

@@ -12,10 +12,16 @@ import {
   Loader2,
   Check,
   QrCode,
+  Hourglass,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { eventsApi, registrationsApi, type ApiRegistrationAnswer } from "@/lib/api-client";
+import {
+  eventsApi,
+  registrationsApi,
+  waitlistApi,
+  type ApiRegistrationAnswer,
+} from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
@@ -60,6 +66,36 @@ function EventDetail() {
     queryFn: () => registrationsApi.myRegistrationForEvent(eventId),
   });
 
+  const waitlistQuery = useQuery({
+    queryKey: ["my-waitlist", eventId, user?.id],
+    enabled: !!user,
+    queryFn: () => waitlistApi.myEntryForEvent(eventId),
+  });
+
+  const [waitlistPendingTypeId, setWaitlistPendingTypeId] = useState<string | null>(null);
+
+  const joinWaitlist = useMutation({
+    mutationFn: (opts?: { eventTypeIds?: string[] }) => waitlistApi.join(eventId, opts),
+    onSuccess: () => {
+      setWaitlistPendingTypeId(null);
+      queryClient.invalidateQueries({ queryKey: ["my-waitlist", eventId] });
+      toast.success(t("eventDetail.toastJoinedWaitlist"));
+    },
+    onError: (e: any) => {
+      setWaitlistPendingTypeId(null);
+      toast.error(e.message ?? t("eventDetail.toastJoinWaitlistError"));
+    },
+  });
+
+  const leaveWaitlist = useMutation({
+    mutationFn: (id: string) => waitlistApi.leave(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-waitlist", eventId] });
+      toast.success(t("eventDetail.toastLeftWaitlist"));
+    },
+    onError: (e: any) => toast.error(e.message ?? t("eventDetail.toastLeaveWaitlistError")),
+  });
+
   const register = useMutation({
     mutationFn: (opts?: { answers?: ApiRegistrationAnswer[]; eventTypeIds?: string[] }) =>
       registrationsApi.create(eventId, opts),
@@ -78,12 +114,21 @@ function EventDetail() {
       }
     },
     onError: (e: any) => {
-      toast.error(e.message ?? t("eventDetail.toastRegisterError"));
       if (e.code === "full") {
         // The event (or the type they picked) filled up between page load
-        // and submit — refresh capacity so the UI reflects it instead of
-        // leaving a stale "Register" button they could retry against.
+        // and submit — offer the waitlist right in the toast instead of
+        // just failing, and refresh capacity so the UI (disabled types,
+        // "Event full" state) reflects reality instead of a stale button
+        // they could retry against.
         queryClient.invalidateQueries({ queryKey: ["public-event", eventId] });
+        toast.error(e.message ?? t("eventDetail.toastRegisterError"), {
+          action: {
+            label: t("eventDetail.joinWaitlistToastAction"),
+            onClick: () => joinWaitlist.mutate({ eventTypeIds: selectedTypeIds }),
+          },
+        });
+      } else {
+        toast.error(e.message ?? t("eventDetail.toastRegisterError"));
       }
     },
   });
@@ -124,6 +169,11 @@ function EventDetail() {
     setSelectedTypeIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  }
+
+  function handleJoinWaitlistForType(typeId: string) {
+    setWaitlistPendingTypeId(typeId);
+    joinWaitlist.mutate({ eventTypeIds: [ typeId ] });
   }
 
   return (
@@ -283,6 +333,8 @@ function EventDetail() {
                   brandColor={brandColor}
                   isPending={register.isPending}
                   nextLabel={hasSurvey ? t("eventDetail.nextSurvey") : t("eventDetail.register")}
+                  onJoinWaitlist={handleJoinWaitlistForType}
+                  waitlistPendingTypeId={waitlistPendingTypeId}
                 />
               ) : regStep === "survey" && ev.survey ? (
                 /* Survey step */
@@ -327,6 +379,29 @@ function EventDetail() {
                     <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
                   </Button>
                 </div>
+              ) : waitlistQuery.data ? (
+                /* On the waitlist — not registered yet, waiting for a spot */
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p
+                      className="flex items-center gap-2 font-medium"
+                      style={{ color: brandColor }}
+                    >
+                      <Hourglass className="h-5 w-5" /> {t("eventDetail.onWaitlist")}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("eventDetail.onWaitlistDesc")}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    disabled={leaveWaitlist.isPending}
+                    onClick={() => leaveWaitlist.mutate(waitlistQuery.data!.id)}
+                  >
+                    {leaveWaitlist.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t("eventDetail.leaveWaitlist")}
+                  </Button>
+                </div>
               ) : !user && !loading ? (
                 /* Not logged in */
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -369,13 +444,16 @@ function EventDetail() {
                     )}
                   </div>
                   <Button
-                    disabled={register.isPending || isFull}
-                    onClick={handleRegisterClick}
-                    style={{ backgroundColor: brandColor }}
-                    className="text-white hover:opacity-90 disabled:opacity-50"
+                    disabled={register.isPending || joinWaitlist.isPending}
+                    onClick={isFull ? () => joinWaitlist.mutate(undefined) : handleRegisterClick}
+                    style={isFull ? undefined : { backgroundColor: brandColor }}
+                    variant={isFull ? "outline" : undefined}
+                    className={isFull ? undefined : "text-white hover:opacity-90 disabled:opacity-50"}
                   >
-                    {register.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isFull ? t("eventDetail.eventFull") : t("eventDetail.register")}
+                    {(register.isPending || joinWaitlist.isPending) && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+                    {isFull ? t("eventDetail.joinWaitlist") : t("eventDetail.register")}
                   </Button>
                 </div>
               )}
