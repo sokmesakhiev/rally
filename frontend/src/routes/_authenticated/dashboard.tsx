@@ -15,10 +15,11 @@ import { useTranslation } from "react-i18next";
 import { registrationsApi, eventsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
+import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { formatDateTime, formatPrice, categoryLabel } from "@/lib/event-utils";
+import { formatDateTime, formatPrice, formatFinishTime, categoryLabel } from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -134,6 +135,18 @@ function Dashboard() {
                           <MapPin className="h-4 w-4" /> {ev.location}
                         </p>
                       )}
+                      {reg.checked_in_at && (
+                        <Badge variant="secondary" className="mt-2">
+                          {t("dashboard.checkedIn")}
+                        </Badge>
+                      )}
+                      {reg.finish_time_seconds != null && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {t("dashboard.yourFinishTime", {
+                            time: formatFinishTime(reg.finish_time_seconds),
+                          })}
+                        </p>
+                      )}
                     </div>
                     {reg.payment_status === "unpaid" ? (
                       <Button asChild size="sm">
@@ -150,6 +163,7 @@ function Dashboard() {
                             </a>
                           </Button>
                         )}
+                        <RegistrationTicketQR registrationId={reg.id} eventTitle={ev.title} />
                         <Button variant="outline" size="sm" onClick={() => downloadICS(ev)}>
                           <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
                         </Button>

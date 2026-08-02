@@ -33,6 +33,11 @@ gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 # Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
 gem "rubyzip", "~> 2.3", require: "zip"
 
+# CSV results import (Results::ImportCsv) — "csv" moved from a Ruby default
+# gem to a bundled gem as of Ruby 3.4, so under Bundler it needs an explicit
+# Gemfile entry rather than just `require "csv"` working implicitly.
+gem "csv"
+
 # Transactional email via Amazon SES (production only; see config/environments/production.rb)
 gem "aws-sdk-rails", "~> 5"
 gem "aws-actionmailer-ses", "~> 1"

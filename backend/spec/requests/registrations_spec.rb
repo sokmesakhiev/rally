@@ -251,4 +251,108 @@ RSpec.describe "Registrations API", type: :request do
       expect(Registration.exists?(event_id: full_event.id, user_id: waiter.user_id)).to be(true)
     end
   end
+
+  # ── POST /api/v1/registrations/:id/check_in ─────────────────────────────────
+  describe "POST /api/v1/registrations/:id/check_in" do
+    let!(:event) { create(:event, creator: organizer) }
+    let!(:reg)   { create(:registration, event: event) }
+
+    it "marks the registration checked in" do
+      post "/api/v1/registrations/#{reg.id}/check_in",
+           headers: auth_headers(organizer),
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["already_checked_in"]).to be(false)
+      expect(json["registration"]["checked_in_at"]).to be_present
+      expect(reg.reload.checked_in_at).to be_present
+    end
+
+    it "is idempotent — re-scanning reports already_checked_in without moving the timestamp" do
+      post "/api/v1/registrations/#{reg.id}/check_in", headers: auth_headers(organizer), as: :json
+      first_timestamp = reg.reload.checked_in_at
+
+      post "/api/v1/registrations/#{reg.id}/check_in", headers: auth_headers(organizer), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["already_checked_in"]).to be(true)
+      expect(reg.reload.checked_in_at).to eq(first_timestamp)
+    end
+
+    it "returns 403 when a non-organizer tries to check someone in" do
+      post "/api/v1/registrations/#{reg.id}/check_in",
+           headers: auth_headers(other),
+           as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "returns 401 without a token" do
+      post "/api/v1/registrations/#{reg.id}/check_in", as: :json
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "returns 404 for an unknown registration" do
+      post "/api/v1/registrations/00000000-0000-0000-0000-000000000000/check_in",
+           headers: auth_headers(organizer),
+           as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  # ── DELETE /api/v1/registrations/:id/check_in ───────────────────────────────
+  describe "DELETE /api/v1/registrations/:id/check_in" do
+    let!(:event) { create(:event, creator: organizer) }
+    let!(:reg)   { create(:registration, event: event, checked_in_at: Time.current) }
+
+    it "clears the check-in" do
+      delete "/api/v1/registrations/#{reg.id}/check_in",
+             headers: auth_headers(organizer),
+             as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["registration"]["checked_in_at"]).to be_nil
+      expect(reg.reload.checked_in_at).to be_nil
+    end
+
+    it "returns 403 when a non-organizer tries to undo a check-in" do
+      delete "/api/v1/registrations/#{reg.id}/check_in",
+             headers: auth_headers(other),
+             as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
+
+  # ── finish_time_seconds exposure ─────────────────────────────────────────────
+  describe "finish_time_seconds on registration_json" do
+    let!(:event) { create(:event, creator: organizer) }
+    let!(:reg)   { create(:registration, event: event, user: participant) }
+
+    it "is omitted when no result has been recorded" do
+      get "/api/v1/registrations", headers: auth_headers(participant), as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == reg.id }
+      expect(reg_json).not_to have_key("finish_time_seconds")
+    end
+
+    it "is present once a result has been recorded" do
+      create(:result, registration: reg, finish_time_seconds: 5025)
+
+      get "/api/v1/registrations", headers: auth_headers(participant), as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == reg.id }
+      expect(reg_json["finish_time_seconds"]).to eq(5025)
+    end
+
+    it "is present in the organizer's view too" do
+      create(:result, registration: reg, finish_time_seconds: 5025)
+
+      get "/api/v1/events/#{event.id}/registrations", headers: auth_headers(organizer), as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == reg.id }
+      expect(reg_json["finish_time_seconds"]).to eq(5025)
+    end
+  end
 end

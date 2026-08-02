@@ -59,4 +59,15 @@ RSpec.describe Registration, type: :model do
       expect(reg.amount_paid_cents).to eq(2500)
     end
   end
+
+  # ── Check-in ─────────────────────────────────────────────────────────────────
+  describe "#checked_in?" do
+    it "is false when checked_in_at is blank" do
+      expect(build(:registration, checked_in_at: nil).checked_in?).to be(false)
+    end
+
+    it "is true once checked_in_at is set" do
+      expect(build(:registration, checked_in_at: Time.current).checked_in?).to be(true)
+    end
+  end
 end

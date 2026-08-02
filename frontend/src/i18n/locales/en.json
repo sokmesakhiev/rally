@@ -303,7 +303,44 @@
     "participantsNoCapacity_one": "{{count}} participant",
     "participantsNoCapacity_other": "{{count}} participants",
     "manage": "Manage",
-    "downloadCertificate": "Download certificate"
+    "downloadCertificate": "Download certificate",
+    "checkedIn": "Checked in",
+    "yourFinishTime": "Your finish time: {{time}}"
+  },
+  "registrationTicket": {
+    "showTicket": "Show ticket",
+    "showAtCheckIn": "Show this QR code to the organizer at check-in."
+  },
+  "checkIn": {
+    "scannerTitle": "Scan tickets",
+    "scannerDesc": "Point the camera at an attendee's ticket QR code to check them in instantly.",
+    "startScanning": "Start scanning",
+    "stopScanning": "Stop scanning",
+    "cameraError": "Couldn't access the camera. Use the list below to check people in manually.",
+    "scanError": "Couldn't check in that registration.",
+    "unnamedParticipant": "Participant",
+    "checkedInToast": "{{name}} checked in",
+    "alreadyCheckedInToast": "{{name}} was already checked in",
+    "undoneToast": "Check-in undone",
+    "manualListTitle": "{{checked}} / {{total}} checked in",
+    "searchPlaceholder": "Search by name…",
+    "checkedInAt": "Checked in {{date}}",
+    "checkInButton": "Check in",
+    "undo": "Undo"
+  },
+  "results": {
+    "importTitle": "Import results (CSV)",
+    "importDesc": "Upload a CSV with each participant's finish time. Matches by email.",
+    "chooseCsv": "Choose CSV file",
+    "importSummaryUpdated_one": "{{count}} result updated.",
+    "importSummaryUpdated_other": "{{count}} results updated.",
+    "importSummaryErrorRow": "Row {{row}} ({{email}}): {{reason}}",
+    "importSuccessToast": "{{count}} results imported",
+    "importPartialToast": "{{count}} results imported, {{errors}} rows had errors",
+    "manualTitle": "Manual entry",
+    "timePlaceholder": "H:MM:SS",
+    "invalidTime": "Enter a time like 1:23:45 or 23:45.",
+    "savedToast": "Finish time saved"
   },
   "manageEvent": {
     "backToDashboard": "Back to dashboard",
@@ -334,9 +371,12 @@
     "waitlistPositionLabel": "#{{position}}",
     "waitlistJoinedOn": "Joined {{date}}",
     "tabParticipants": "Participants",
+    "tabCheckIn": "Check-in",
+    "tabResults": "Results",
     "tabBranding": "QR & Branding",
     "tabCertificate": "Certificate",
     "tabResponses": "Responses",
+    "statCheckedIn": "Checked in",
     "noParticipants": "No one has registered yet. Share your event to get sign-ups.",
     "participantFallback": "Participant",
     "registeredOn": "Registered {{date}}",

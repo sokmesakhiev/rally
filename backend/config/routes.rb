@@ -43,6 +43,17 @@ Rails.application.routes.draw do
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
 
+      # Check-in / attendance — organizer scans the attendee's ticket QR
+      # (which just encodes the registration id) or taps them in manually.
+      post   "registrations/:id/check_in", to: "registrations#check_in"
+      delete "registrations/:id/check_in", to: "registrations#undo_check_in"
+
+      # Results (finish times) — optional per event; race-style events use
+      # it, e.g. a social gathering never gets one. Set one at a time or in
+      # bulk via CSV.
+      patch "registrations/:id/result",        to: "results#update"
+      post  "events/:event_id/results/import", to: "results#import"
+
       # Waitlists — join when an event/type is full, promoted automatically
       # (Waitlists::PromoteNext) when a registration is cancelled/removed.
       get    "waitlist_entries",                  to: "waitlist_entries#index"

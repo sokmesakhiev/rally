@@ -6,6 +6,7 @@ class Registration < ApplicationRecord
   has_many :event_types, through: :registration_event_types
   has_many :payments, dependent: :destroy
   has_one :certificate, dependent: :destroy
+  has_one :result, dependent: :destroy
 
   STATUSES = %w[confirmed cancelled].freeze
   PAYMENT_STATUSES = %w[unpaid paid refunded].freeze
@@ -25,6 +26,10 @@ class Registration < ApplicationRecord
 
   def latest_payment
     payments.order(created_at: :desc).first
+  end
+
+  def checked_in?
+    checked_in_at.present?
   end
 
   # Called once an ABA PayWay payment is confirmed APPROVED.

@@ -206,6 +206,8 @@ export interface ApiRegistration {
   payment_status: string;
   amount_paid_cents: number;
   created_at: string;
+  /** Null until an organizer scans/taps this registration in on event day. */
+  checked_in_at: string | null;
   event?: ApiEvent;
   event_types: ApiEventType[];
   profile?: { display_name: string | null; avatar_url: string | null };
@@ -213,6 +215,10 @@ export interface ApiRegistration {
    * registration (event ended + registration confirmed & paid + the event
    * has a template) — absent (not just null) until then. */
   certificate_url?: string;
+  /** Present only once an organizer has recorded a finish time (manually
+   * or via CSV import) — absent (not just null) until then. Optional, most
+   * event types (a social gathering, an untimed ride) never get one. */
+  finish_time_seconds?: number;
 }
 
 export interface ApiProfile {
@@ -415,6 +421,46 @@ export const registrationsApi = {
 
   remove(id: string) {
     return api.delete<{ message: string }>(`/registrations/${id}`);
+  },
+
+  /** Organizer scans the attendee's ticket QR (which just encodes this id)
+   * or taps them in from the manual list. Idempotent — re-checking-in an
+   * already-checked-in registration succeeds and reports
+   * `already_checked_in: true` rather than erroring. */
+  checkIn(id: string) {
+    return api.post<{ registration: ApiRegistration; already_checked_in: boolean }>(
+      `/registrations/${id}/check_in`,
+    );
+  },
+
+  /** Undoes a mis-scan/mis-tap. */
+  undoCheckIn(id: string) {
+    return api.delete<{ registration: ApiRegistration }>(`/registrations/${id}/check_in`);
+  },
+
+  /** Sets (or, with `null`, clears) one participant's finish time. */
+  setResult(id: string, finishTimeSeconds: number | null) {
+    return api.patch<{ result: { id: string; registration_id: string; finish_time_seconds: number | null } }>(
+      `/registrations/${id}/result`,
+      { result: { finish_time_seconds: finishTimeSeconds } },
+    );
+  },
+};
+
+// ─── Results (finish times) ────────────────────────────────────────────────────
+
+export interface ApiResultsImportSummary {
+  updated: number;
+  errors: Array<{ row: number; email: string; reason: string }>;
+}
+
+export const resultsApi = {
+  /** CSV columns: email,finish_time — finish_time accepts "H:MM:SS",
+   * "MM:SS", or a bare number of seconds. */
+  async importCsv(eventId: string, file: File): Promise<ApiResultsImportSummary> {
+    const form = new FormData();
+    form.append("file", file);
+    return api.upload<ApiResultsImportSummary>(`/events/${eventId}/results/import`, form);
   },
 };
 

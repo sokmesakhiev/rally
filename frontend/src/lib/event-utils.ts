@@ -60,3 +60,41 @@ export function categoryLabel(value: string): string {
 export function googleMapsViewUrl(latitude: number, longitude: number): string {
   return `https://www.google.com/maps?q=${latitude},${longitude}`;
 }
+
+/** Renders a finish time as "H:MM:SS" (or "MM:SS" under an hour) — mirrors
+ * what Result.parse_duration_to_seconds on the backend accepts, so a value
+ * round-trips through the input unchanged. */
+export function formatFinishTime(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
+
+/** Parses "H:MM:SS", "MM:SS", or a bare number of seconds into a total
+ * seconds count. Returns null for anything else, so callers can show a
+ * validation error instead of silently sending garbage. */
+export function parseFinishTime(input: string): number | null {
+  const value = input.trim();
+  if (!value) return null;
+
+  if (/^\d+$/.test(value)) return parseInt(value, 10);
+
+  const parts = value.split(":").map((p) => p.trim());
+  if (parts.length === 2 || parts.length === 3) {
+    if (parts.some((p) => !/^\d{1,3}$/.test(p))) return null;
+    const nums = parts.map((p) => parseInt(p, 10));
+    if (nums.length === 3) {
+      const [h, m, s] = nums;
+      if (m > 59 || s > 59) return null;
+      return h * 3600 + m * 60 + s;
+    }
+    const [m, s] = nums;
+    if (s > 59) return null;
+    return m * 60 + s;
+  }
+
+  return null;
+}

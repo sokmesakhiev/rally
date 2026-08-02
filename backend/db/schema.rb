@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_02_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_02_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -170,6 +170,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_010000) do
 
   create_table "registrations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.integer "amount_paid_cents", default: 0, null: false
+    t.datetime "checked_in_at"
     t.datetime "created_at", null: false
     t.uuid "event_id", null: false
     t.string "payment_status", default: "unpaid", null: false
@@ -179,6 +180,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_010000) do
     t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true
     t.index ["event_id"], name: "index_registrations_on_event_id"
     t.index ["user_id"], name: "index_registrations_on_user_id"
+  end
+
+  create_table "results", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "finish_time_seconds"
+    t.string "notes"
+    t.uuid "registration_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["registration_id"], name: "index_results_on_registration_id", unique: true
   end
 
   create_table "survey_questions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -254,6 +264,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_010000) do
   add_foreign_key "registration_event_types", "registrations"
   add_foreign_key "registrations", "events"
   add_foreign_key "registrations", "users"
+  add_foreign_key "results", "registrations"
   add_foreign_key "survey_questions", "surveys"
   add_foreign_key "surveys", "users", column: "creator_id"
   add_foreign_key "waitlist_entries", "events"

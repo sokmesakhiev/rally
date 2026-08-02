@@ -12,7 +12,7 @@ module Api
       # GET /api/v1/registrations — current user's registrations with event data
       def index
         registrations = current_user.registrations
-          .includes(:certificate, event: :registrations, event_types: [])
+          .includes(:certificate, :result, event: :registrations, event_types: [])
           .order(created_at: :desc)
 
         render json: {
@@ -24,7 +24,7 @@ module Api
       def event_registrations
         event = current_user.events.find(params[:event_id])
         regs = event.registrations
-          .includes({ user: :profile }, :event_types, :certificate)
+          .includes({ user: :profile }, :event_types, :certificate, :result)
           .order(created_at: :asc)
 
         render json: {
@@ -125,6 +125,48 @@ module Api
         render json: { error: "Registration not found" }, status: :not_found
       end
 
+      # POST /api/v1/registrations/:id/check_in — organizer scans the
+      # attendee's ticket QR (which just encodes this id) or taps them in
+      # from the manual list. Idempotent: re-scanning an already-checked-in
+      # badge doesn't error or bump the timestamp, it just reports
+      # `already_checked_in: true` so the scanner UI can show "already in"
+      # instead of a fresh success state.
+      def check_in
+        registration = Registration.find(params[:id])
+        event = registration.event
+
+        unless event.creator_id == current_user.id
+          render json: { error: "Forbidden" }, status: :forbidden
+          return
+        end
+
+        already_checked_in = registration.checked_in?
+        registration.update!(checked_in_at: Time.current) unless already_checked_in
+
+        render json: {
+          registration: registration_json(registration, include_profile: true, include_types: true),
+          already_checked_in: already_checked_in
+        }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Registration not found" }, status: :not_found
+      end
+
+      # DELETE /api/v1/registrations/:id/check_in — undo a mis-scan/mis-tap.
+      def undo_check_in
+        registration = Registration.find(params[:id])
+        event = registration.event
+
+        unless event.creator_id == current_user.id
+          render json: { error: "Forbidden" }, status: :forbidden
+          return
+        end
+
+        registration.update!(checked_in_at: nil)
+        render json: { registration: registration_json(registration, include_profile: true, include_types: true) }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Registration not found" }, status: :not_found
+      end
+
       private
 
       def set_event
@@ -163,8 +205,16 @@ module Api
           status: reg.status,
           payment_status: reg.payment_status,
           amount_paid_cents: reg.amount_paid_cents,
-          created_at: reg.created_at
+          created_at: reg.created_at,
+          checked_in_at: reg.checked_in_at
         }
+
+        # nil until an organizer (via Api::V1::ResultsController) records
+        # one — most event types (a social gathering, a no-timing group
+        # ride) simply never get a Result row at all.
+        if reg.result&.finish_time_seconds.present?
+          json[:finish_time_seconds] = reg.result.finish_time_seconds
+        end
 
         if include_event && reg.association(:event).loaded?
           json[:event] = {

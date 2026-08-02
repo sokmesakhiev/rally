@@ -26,12 +26,19 @@ import {
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
+import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
 import { PaymentPanel } from "@/components/payment-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatPrice, categoryLabel, googleMapsViewUrl } from "@/lib/event-utils";
+import {
+  formatDateTime,
+  formatPrice,
+  formatFinishTime,
+  categoryLabel,
+  googleMapsViewUrl,
+} from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 
 export const Route = createFileRoute("/events/$eventId")({
@@ -375,6 +382,28 @@ function EventDetail() {
                         ))}
                       </div>
                     )}
+                    {regQuery.data.checked_in_at && (
+                      <Badge variant="secondary" className="mt-2">
+                        {t("dashboard.checkedIn")}
+                      </Badge>
+                    )}
+                    {regQuery.data.finish_time_seconds != null && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t("dashboard.yourFinishTime", {
+                          time: formatFinishTime(regQuery.data.finish_time_seconds),
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <RegistrationTicketQR
+                      registrationId={regQuery.data.id}
+                      eventTitle={ev.title}
+                      brandColor={brandColor}
+                    />
+                    <Button variant="outline" onClick={() => downloadICS(ev)}>
+                      <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
+                    </Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {regQuery.data.certificate_url && (
