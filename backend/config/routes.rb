@@ -98,6 +98,8 @@ Rails.application.routes.draw do
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"
         delete "events/:id",           to: "events#destroy"
+
+        get "reports", to: "reports#index"
       end
     end
   end

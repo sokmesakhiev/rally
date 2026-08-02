@@ -577,8 +577,28 @@
   "admin": {
     "title": "Moderation",
     "subtitle": "Suspend abusive accounts and take down events that break the rules.",
+    "tabOverview": "Overview",
     "tabUsers": "Users",
     "tabEvents": "Events",
+    "overview": {
+      "kpiEvents": "Events",
+      "kpiEventsPublished": "{{count}} published",
+      "kpiUsers": "Users",
+      "kpiParticipants": "Participants",
+      "kpiPlatformRevenue": "Platform revenue",
+      "kpiPlatformRevenueSub": "Paid to Rally to publish events",
+      "registrationVolumeTitle": "Registration payment volume",
+      "registrationVolumeDesc": "Money attendees have paid organizers for registrations — this goes to organizers, not Rally.",
+      "period": {
+        "week": "Weekly",
+        "month": "Monthly",
+        "year": "Yearly"
+      },
+      "eventsChartTitle": "Events created",
+      "revenueChartTitle": "Platform revenue",
+      "topEventsTitle": "Top events by participants",
+      "noEvents": "No events yet."
+    },
     "notAuthorizedTitle": "Not available",
     "notAuthorizedDesc": "This area is for Rally staff only.",
     "searchUsers": "Search by email or name",
