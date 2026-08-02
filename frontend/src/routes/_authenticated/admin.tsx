@@ -24,6 +24,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  LayoutDashboard,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,7 @@ import { useTranslation } from "react-i18next";
 import { adminApi, type ApiAdminUser, type ApiAdminEvent } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
+import { AdminOverview } from "@/components/admin-overview";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -83,12 +85,18 @@ function AdminConsole() {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{t("admin.subtitle")}</p>
 
-        <Tabs defaultValue="users" className="mt-8">
+        <Tabs defaultValue="overview" className="mt-8">
           <TabsList>
+            <TabsTrigger value="overview">
+              <LayoutDashboard className="h-4 w-4 mr-1.5" /> {t("admin.tabOverview")}
+            </TabsTrigger>
             <TabsTrigger value="users">{t("admin.tabUsers")}</TabsTrigger>
             <TabsTrigger value="events">{t("admin.tabEvents")}</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="overview" className="mt-6">
+            <AdminOverview />
+          </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersPanel />
           </TabsContent>

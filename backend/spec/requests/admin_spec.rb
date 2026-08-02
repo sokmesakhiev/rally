@@ -395,4 +395,97 @@ RSpec.describe "Admin API", type: :request do
       expect(response).to have_http_status(:ok)
     end
   end
+
+  # ── GET /api/v1/admin/reports ────────────────────────────────────────────────
+  describe "GET /api/v1/admin/reports" do
+    it "returns 404 for a non-admin" do
+      get "/api/v1/admin/reports", headers: auth_headers(regular), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "reports totals across events, users, registrations, and revenue" do
+      event = create(:event, creator: regular)
+      create(:registration, :paid, event: event)
+      create(:payment, :approved, registration: create(:registration, event: event), amount_cents: 2500, currency: "usd")
+      create(:event_plan_payment, :paid, event: event, amount_cents: 10_000, currency: "usd")
+
+      get "/api/v1/admin/reports", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      totals = json["totals"]
+      expect(totals["events_count"]).to be >= 1
+      expect(totals["published_events_count"]).to be >= 1
+      expect(totals["users_count"]).to be >= 2 # admin + regular
+      expect(totals["registrations_count"]).to be >= 2
+      expect(totals["platform_revenue_cents"]).to eq(10_000)
+      expect(totals["registration_volume"]).to include({ "currency" => "usd", "amount_cents" => 2500 })
+    end
+
+    it "excludes pending/declined plan payments and unapproved registration payments from revenue" do
+      event = create(:event, creator: regular)
+      create(:event_plan_payment, event: event, status: "pending", amount_cents: 10_000)
+      create(:payment, registration: create(:registration, event: event), status: "pending", amount_cents: 2500)
+
+      get "/api/v1/admin/reports", headers: auth_headers(admin), as: :json
+
+      expect(json["totals"]["platform_revenue_cents"]).to eq(0)
+      expect(json["totals"]["registration_volume"]).to eq([])
+    end
+
+    it "buckets events created by month by default, zero-filling empty months" do
+      create(:event)
+
+      get "/api/v1/admin/reports", headers: auth_headers(admin), as: :json
+
+      buckets = json["events_by_period"]
+      expect(buckets.size).to eq(12)
+      expect(buckets.map { |b| b["period"] }).to all(match(/\A\d{4}-\d{2}\z/))
+
+      current_bucket = buckets.find { |b| b["period"] == Time.current.strftime("%Y-%m") }
+      expect(current_bucket["count"]).to be >= 1
+    end
+
+    it "buckets by week or year when requested" do
+      get "/api/v1/admin/reports", params: { period: "week" }, headers: auth_headers(admin)
+      expect(json["events_by_period"].size).to eq(12)
+      expect(json["events_by_period"].map { |b| b["period"] }).to all(match(/\A\d{4}-\d{2}-\d{2}\z/))
+
+      get "/api/v1/admin/reports", params: { period: "year" }, headers: auth_headers(admin)
+      expect(json["events_by_period"].size).to eq(6)
+      expect(json["events_by_period"].map { |b| b["period"] }).to all(match(/\A\d{4}\z/))
+    end
+
+    it "rejects an unknown period" do
+      get "/api/v1/admin/reports", params: { period: "day" }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "places platform revenue in the bucket matching its EventPlanPayment's created_at" do
+      event = create(:event, creator: regular)
+      create(:event_plan_payment, :paid, event: event, amount_cents: 30_000)
+
+      get "/api/v1/admin/reports", headers: auth_headers(admin), as: :json
+
+      current_bucket = json["platform_revenue_by_period"].find { |b| b["period"] == Time.current.strftime("%Y-%m") }
+      expect(current_bucket["amount_cents"]).to eq(30_000)
+    end
+
+    it "ranks top_events by registration count" do
+      popular   = create(:event, creator: regular, title: "Popular Race")
+      quiet     = create(:event, creator: regular, title: "Quiet Race")
+      3.times { create(:registration, event: popular) }
+      create(:registration, event: quiet)
+
+      get "/api/v1/admin/reports", headers: auth_headers(admin), as: :json
+
+      top = json["top_events"]
+      popular_entry = top.find { |e| e["id"] == popular.id }
+      quiet_entry = top.find { |e| e["id"] == quiet.id }
+      expect(popular_entry["registrations_count"]).to eq(3)
+      expect(quiet_entry["registrations_count"]).to eq(1)
+      expect(top.index(popular_entry)).to be < top.index(quiet_entry)
+    end
+  end
 end

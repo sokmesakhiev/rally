@@ -568,8 +568,28 @@
   "admin": {
     "title": "ការគ្រប់គ្រង",
     "subtitle": "ផ្អាកគណនីដែលបំពាន និងដកកម្មវិធីដែលបំពានច្បាប់។",
+    "tabOverview": "ទិដ្ឋភាពទូទៅ",
     "tabUsers": "អ្នកប្រើប្រាស់",
     "tabEvents": "កម្មវិធី",
+    "overview": {
+      "kpiEvents": "កម្មវិធី",
+      "kpiEventsPublished": "បានផ្សព្វផ្សាយ {{count}}",
+      "kpiUsers": "អ្នកប្រើប្រាស់",
+      "kpiParticipants": "អ្នកចូលរួម",
+      "kpiPlatformRevenue": "ចំណូលវេទិកា",
+      "kpiPlatformRevenueSub": "បានបង់ទៅ Rally ដើម្បីផ្សព្វផ្សាយកម្មវិធី",
+      "registrationVolumeTitle": "ចំនួនទឹកប្រាក់ចុះឈ្មោះចូលរួម",
+      "registrationVolumeDesc": "ប្រាក់ដែលអ្នកចូលរួមបានបង់ទៅអ្នករៀបចំសម្រាប់ការចុះឈ្មោះ — ប្រាក់នេះទៅកាន់អ្នករៀបចំ មិនមែន Rally ទេ។",
+      "period": {
+        "week": "ប្រចាំសប្តាហ៍",
+        "month": "ប្រចាំខែ",
+        "year": "ប្រចាំឆ្នាំ"
+      },
+      "eventsChartTitle": "កម្មវិធីដែលបានបង្កើត",
+      "revenueChartTitle": "ចំណូលវេទិកា",
+      "topEventsTitle": "កម្មវិធីកំពូលតាមចំនួនអ្នកចូលរួម",
+      "noEvents": "មិនទាន់មានកម្មវិធីទេ។"
+    },
     "notAuthorizedTitle": "មិនអាចប្រើបានទេ",
     "notAuthorizedDesc": "តំបន់នេះសម្រាប់តែបុគ្គលិក Rally ប៉ុណ្ណោះ។",
     "searchUsers": "ស្វែងរកតាមអ៊ីមែល ឬឈ្មោះ",

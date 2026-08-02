@@ -672,12 +672,50 @@ export interface ApiAdminEvent {
   created_at: string;
 }
 
+export type ApiReportPeriod = "week" | "month" | "year";
+
+export interface ApiAdminTotals {
+  events_count: number;
+  published_events_count: number;
+  users_count: number;
+  registrations_count: number;
+  /** Always USD — what organizers pay Rally to publish an event (see
+   * EventPlanPayment). This is Rally's own revenue. */
+  platform_revenue_cents: number;
+  /** Attendee registration payments — money that flows to organizers, not
+   * Rally. Broken out by currency since an event's currency is
+   * organizer-settable (defaults to "usd" but isn't locked to it). */
+  registration_volume: Array<{ currency: string; amount_cents: number }>;
+}
+
+export interface ApiAdminTopEvent {
+  id: string;
+  title: string;
+  category: string;
+  start_at: string;
+  registrations_count: number;
+}
+
+export interface ApiAdminReports {
+  totals: ApiAdminTotals;
+  /** One point per bucket for the requested period, oldest first, with
+   * empty buckets zero-filled — safe to feed straight into a chart. */
+  events_by_period: Array<{ period: string; count: number }>;
+  platform_revenue_by_period: Array<{ period: string; amount_cents: number }>;
+  top_events: ApiAdminTopEvent[];
+}
+
 /**
  * Rally staff moderation endpoints. Every call requires an admin account;
  * non-admins get a 404 (not a 403) so the surface isn't discoverable, which
  * surfaces here as an ApiError with "Not found".
  */
 export const adminApi = {
+  reports(period: ApiReportPeriod = "month") {
+    return api.get<ApiAdminReports>(`/admin/reports?period=${period}`);
+  },
+
+
   users(opts?: { q?: string; status?: "all" | "active" | "suspended"; page?: number; perPage?: number }) {
     const params = new URLSearchParams();
     if (opts?.q?.trim()) params.set("q", opts.q.trim());
