@@ -60,6 +60,19 @@ RUN bundle exec bootsnap precompile -j 1 app/ lib/
 # Final stage for app image
 FROM base
 
+# LibreOffice headless — used at runtime by Certificates::RenderPdf
+# (`soffice --headless --convert-to pdf`) to turn an organizer's merged
+# .odt certificate-of-participation template into a PDF. There's no
+# lighter-weight way to get faithful ODT→PDF rendering (fonts, page layout,
+# embedded images), so this is a real, sizeable addition to the image
+# (writer + core easily add a few hundred MB even without the rest of the
+# LibreOffice suite) — worth revisiting ecs_task_cpu/ecs_task_memory
+# (infrastructure/variables.tf) if certificate generation shows up as slow
+# or OOM-killed once real events start using it.
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y libreoffice-writer libreoffice-core fonts-dejavu-core && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
 # Run and own only the runtime files as a non-root user for security
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash

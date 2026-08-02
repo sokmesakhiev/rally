@@ -1,0 +1,28 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "28eaf461e590a2947c853352c83bf6ceb55aee616962744a159315a655181402",
+      "check_name": "Execute",
+      "message": "Possible command injection",
+      "file": "app/services/certificates/render_pdf.rb",
+      "line": 112,
+      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
+      "code": "Open3.capture3(\"soffice\", \"--headless\", \"--norestore\", \"--convert-to\", \"pdf\", \"--outdir\", workdir, \"-env:UserInstallation=file://#{File.join(workdir, \"lo_profile\")}\", odt_path)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Certificates::RenderPdf",
+        "method": "convert_to_pdf"
+      },
+      "user_input": "File.join(workdir, \"lo_profile\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        77
+      ],
+      "note": ""
+    }
+  ],
+  "brakeman_version": "8.0.5"
+}

@@ -176,6 +176,9 @@ export interface ApiEvent {
   brand_color: string;
   banner_url: string | null;
   logo_url: string | null;
+  /** Organizer-uploaded .odt certificate-of-participation template. Null
+   * means the feature is off for this event — no certificates are generated. */
+  certificate_template_url: string | null;
   created_at: string;
   updated_at: string;
   registrations_count?: number;
@@ -206,6 +209,10 @@ export interface ApiRegistration {
   event?: ApiEvent;
   event_types: ApiEventType[];
   profile?: { display_name: string | null; avatar_url: string | null };
+  /** Present only once GenerateCertificatesJob has rendered a PDF for this
+   * registration (event ended + registration confirmed & paid + the event
+   * has a template) — absent (not just null) until then. */
+  certificate_url?: string;
 }
 
 export interface ApiProfile {
@@ -454,7 +461,10 @@ export const profileApi = {
 // ─── Uploads ──────────────────────────────────────────────────────────────────
 
 export const uploadsApi = {
-  async upload(file: File, type: "banner" | "logo" | "avatar"): Promise<string> {
+  async upload(
+    file: File,
+    type: "banner" | "logo" | "avatar" | "certificate_template",
+  ): Promise<string> {
     const form = new FormData();
     form.append("file", file);
     form.append("type", type);

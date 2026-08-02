@@ -43,6 +43,7 @@ class EventUpdateRequestSchema < ApplicationRequestSchema
       optional(:brand_color).maybe(:string)
       optional(:banner_url).maybe(:string)
       optional(:logo_url).maybe(:string)
+      optional(:certificate_template_url).maybe(:string)
       # events.survey_id is a uuid column (see db/schema.rb), not an integer.
       optional(:survey_id).maybe(:string)
       optional(:event_types_attributes).array(:hash) do

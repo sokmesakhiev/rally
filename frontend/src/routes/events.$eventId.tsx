@@ -13,6 +13,7 @@ import {
   Check,
   QrCode,
   Hourglass,
+  Award
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -375,9 +376,18 @@ function EventDetail() {
                       </div>
                     )}
                   </div>
-                  <Button variant="outline" onClick={() => downloadICS(ev)}>
-                    <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {regQuery.data.certificate_url && (
+                      <Button asChild variant="outline">
+                        <a href={regQuery.data.certificate_url} target="_blank" rel="noreferrer">
+                          <Award className="h-4 w-4" /> {t("eventDetail.downloadCertificate")}
+                        </a>
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => downloadICS(ev)}>
+                      <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
+                    </Button>
+                  </div>
                 </div>
               ) : waitlistQuery.data ? (
                 /* On the waitlist — not registered yet, waiting for a spot */

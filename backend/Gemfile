@@ -26,6 +26,13 @@ gem "sentry-rails", "~> 5.17"
 gem "image_processing", "~> 2.0"
 gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 
+# Certificates of participation — an .odt is a zip of XML files; rubyzip lets
+# Certificates::MergeOdt substitute {{tokens}} in content.xml/styles.xml
+# without needing LibreOffice just to read/write the template itself (only
+# the final ODT→PDF conversion shells out to `soffice`, in
+# Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
+gem "rubyzip", "~> 2.3", require: "zip"
+
 # Transactional email via Amazon SES (production only; see config/environments/production.rb)
 gem "aws-sdk-rails", "~> 5"
 gem "aws-actionmailer-ses", "~> 1"
