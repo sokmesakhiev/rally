@@ -21,7 +21,11 @@ import {
   Rocket,
   EyeOff,
   Hourglass,
-  Award
+  Award,
+  ScanLine,
+  Trophy,
+  Search,
+  Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -40,9 +44,12 @@ import { EventDetailsEditor } from "@/components/event-details-editor";
 import { ImageUpload } from "@/components/image-upload";
 import { CertificateTemplateUpload } from "@/components/certificate-template-upload";
 import { PlanPaymentPanel } from "@/components/plan-payment-panel";
+import { CheckInScanner } from "@/components/check-in-scanner";
+import { ResultsManager } from "@/components/results-manager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -152,6 +159,31 @@ function ManageEvent() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const invalidateParticipants = () =>
+    queryClient.invalidateQueries({ queryKey: ["event-participants", eventId] });
+
+  const checkIn = useMutation({
+    mutationFn: (id: string) => registrationsApi.checkIn(id),
+    onSuccess: (data) => {
+      invalidateParticipants();
+      if (!data.already_checked_in) toast.success(t("checkIn.checkedInToast", {
+        name: data.registration.profile?.display_name || t("checkIn.unnamedParticipant"),
+      }));
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const undoCheckIn = useMutation({
+    mutationFn: (id: string) => registrationsApi.undoCheckIn(id),
+    onSuccess: () => {
+      invalidateParticipants();
+      toast.success(t("checkIn.undoneToast"));
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const [checkInSearch, setCheckInSearch] = useState("");
+
   const saveBranding = useMutation({
     mutationFn: () =>
       eventsApi.update(eventId, {
@@ -212,6 +244,10 @@ function ManageEvent() {
   const waitlist = waitlistQuery.data ?? [];
   const paidCount = participants.filter((p) => p.payment_status === "paid").length;
   const revenue = participants.reduce((sum, p) => sum + (p.amount_paid_cents ?? 0), 0);
+  const checkedInCount = participants.filter((p) => p.checked_in_at).length;
+  const filteredForCheckIn = participants.filter((p) =>
+    (p.profile?.display_name ?? "").toLowerCase().includes(checkInSearch.trim().toLowerCase()),
+  );
 
   const activeBrandColor = brandColor ?? ev?.brand_color ?? "#6366f1";
 
@@ -420,7 +456,7 @@ function ManageEvent() {
             )}
 
             {/* Stats */}
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <Stat
                 icon={Users}
                 label={t("manageEvent.statParticipants")}
@@ -440,6 +476,11 @@ function ManageEvent() {
                 icon={Hourglass}
                 label={t("manageEvent.statWaitlist")}
                 value={`${waitlist.length}`}
+              />
+              <Stat
+                icon={ScanLine}
+                label={t("manageEvent.statCheckedIn")}
+                value={`${checkedInCount} / ${participants.length}`}
               />
             </div>
 
@@ -508,10 +549,16 @@ function ManageEvent() {
             {/* Tabs */}
             <Tabs defaultValue="participants" className="mt-10">
               <TabsList
-                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-4" : "max-w-xl grid-cols-3"}`}
+                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-5" : "max-w-xl grid-cols-4"}`}
               >
                 <TabsTrigger value="participants">
                   <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
+                </TabsTrigger>
+                <TabsTrigger value="checkin">
+                  <ScanLine className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCheckIn")}
+                </TabsTrigger>
+                <TabsTrigger value="results">
+                  <Trophy className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResults")}
                 </TabsTrigger>
                 <TabsTrigger value="branding">
                   <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
@@ -606,6 +653,84 @@ function ManageEvent() {
                     </div>
                   ))}
                 </div>
+              </TabsContent>
+
+              {/* ── Check-in ── */}
+              <TabsContent value="checkin" className="mt-6 space-y-6">
+                <CheckInScanner onCheckedIn={invalidateParticipants} />
+
+                <div className="overflow-hidden rounded-2xl border border-border">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-3">
+                    <p className="text-sm font-semibold">
+                      {t("checkIn.manualListTitle", {
+                        checked: checkedInCount,
+                        total: participants.length,
+                      })}
+                    </p>
+                    <div className="relative w-full max-w-[220px]">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={checkInSearch}
+                        onChange={(e) => setCheckInSearch(e.target.value)}
+                        placeholder={t("checkIn.searchPlaceholder")}
+                        className="h-8 pl-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  {filteredForCheckIn.length === 0 ? (
+                    <p className="p-8 text-center text-sm text-muted-foreground">
+                      {t("manageEvent.noParticipants")}
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {filteredForCheckIn.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex flex-wrap items-center justify-between gap-3 p-4"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">
+                              {p.profile?.display_name ?? t("manageEvent.participantFallback")}
+                            </p>
+                            {p.checked_in_at && (
+                              <p className="text-xs text-muted-foreground">
+                                {t("checkIn.checkedInAt", { date: formatDate(p.checked_in_at) })}
+                              </p>
+                            )}
+                          </div>
+                          {p.checked_in_at ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={undoCheckIn.isPending}
+                              onClick={() => undoCheckIn.mutate(p.id)}
+                            >
+                              <Undo2 className="h-4 w-4" /> {t("checkIn.undo")}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={checkIn.isPending}
+                              onClick={() => checkIn.mutate(p.id)}
+                            >
+                              <Check className="h-4 w-4" /> {t("checkIn.checkInButton")}
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              {/* ── Results ── */}
+              <TabsContent value="results" className="mt-6">
+                <ResultsManager
+                  eventId={eventId}
+                  participants={participants}
+                  onChanged={invalidateParticipants}
+                />
               </TabsContent>
 
               {/* ── QR & Branding ── */}
