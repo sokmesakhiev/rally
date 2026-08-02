@@ -268,7 +268,16 @@
     "shareDesc": "ស្កេនកូដ QR ដើម្បីបើកទំព័រនេះ ឬទាញយកវាដើម្បីចែករំលែកលើប័ណ្ណប្រកាស និងបណ្តាញសង្គម។",
     "toastUnpaid": "អ្នកបានចុះឈ្មោះរួចហើយ — សូមបញ្ចប់ការទូទាត់ដើម្បីធានាកន្លែងរបស់អ្នក។",
     "toastPaid": "អ្នកបានចុះឈ្មោះរួចហើយ! បន្ថែមព្រឹត្តិការណ៍ទៅប្រតិទិនរបស់អ្នក។",
-    "toastRegisterError": "មិនអាចចុះឈ្មោះបានទេ"
+    "toastRegisterError": "មិនអាចចុះឈ្មោះបានទេ",
+    "joinWaitlist": "ចូលរួមបញ្ជីរង់ចាំ",
+    "onWaitlist": "អ្នកស្ថិតនៅក្នុងបញ្ជីរង់ចាំ",
+    "onWaitlistDesc": "យើងនឹងផ្ញើអ៊ីមែល និងបញ្ជាក់កន្លែងរបស់អ្នកដោយស្វ័យប្រវត្តិ ប្រសិនបើមានកន្លែងទំនេរ។",
+    "leaveWaitlist": "ចាកចេញពីបញ្ជីរង់ចាំ",
+    "toastJoinedWaitlist": "អ្នកបានចូលរួមក្នុងបញ្ជីរង់ចាំ — យើងនឹងផ្ញើអ៊ីមែលប្រសិនបើមានកន្លែងទំនេរ។",
+    "toastJoinWaitlistError": "មិនអាចចូលរួមបញ្ជីរង់ចាំបានទេ",
+    "toastLeftWaitlist": "បានចាកចេញពីបញ្ជីរង់ចាំ",
+    "toastLeaveWaitlistError": "មិនអាចចាកចេញពីបញ្ជីរង់ចាំបានទេ",
+    "joinWaitlistToastAction": "ចូលរួមបញ្ជីរង់ចាំវិញ"
   },
   "dashboard": {
     "title": "ផ្ទាំងគ្រប់គ្រងរបស់អ្នក",
@@ -310,7 +319,13 @@
     "statParticipants": "អ្នកចូលរួម",
     "statPaid": "បានទូទាត់",
     "statRevenue": "ចំណូល",
+    "statWaitlist": "នៅក្នុងបញ្ជីរង់ចាំ",
     "byType": "ការចុះឈ្មោះតាមប្រភេទ",
+    "waitlistSectionTitle": "បញ្ជីរង់ចាំ",
+    "waitlistSectionDesc": "អ្នកដែលនៅជួរមុខគេនឹងត្រូវបានផ្លាស់ប្តូរទៅជាការចុះឈ្មោះដែលបានបញ្ជាក់ដោយស្វ័យប្រវត្តិ នៅពេលមានកន្លែងទំនេរ។",
+    "waitlistEmpty": "មិនមាននរណាម្នាក់នៅក្នុងបញ្ជីរង់ចាំទេ។",
+    "waitlistPositionLabel": "#{{position}}",
+    "waitlistJoinedOn": "បានចូលរួម {{date}}",
     "tabParticipants": "អ្នកចូលរួម",
     "tabBranding": "កូដ QR និងម៉ាក",
     "tabResponses": "ចម្លើយ",
@@ -458,7 +473,8 @@
     "spotsLeft_other": "នៅសល់ {{count}}កន្លែង",
     "typesSelected_other": "បានជ្រើសរើស {{count}} ប្រភេទ",
     "total": "សរុប {{amount}}",
-    "next": "បន្ទាប់"
+    "next": "បន្ទាប់",
+    "joinWaitlistForType": "ចូលរួមបញ្ជីរង់ចាំ"
   },
   "imageUpload": {
     "uploadFailed": "ការផ្ទុកឡើងបានបរាជ័យ",

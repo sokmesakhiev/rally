@@ -1,0 +1,19 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>Good news — a spot opened up for <strong><%= @event.title %></strong>, and you've been moved off the waitlist into a confirmed registration.</p>
+
+<ul>
+  <li><strong>When:</strong> <%= @event.start_at.strftime("%A, %B %-d, %Y at %-I:%M %p") %></li>
+  <% if @event.location.present? %>
+    <li><strong>Where:</strong> <%= @event.location %></li>
+  <% end %>
+</ul>
+
+<% if @owed_cents.positive? && @registration.payment_status != "paid" %>
+  <p><strong>Payment pending</strong> — your spot is held, but please complete payment to secure it. You can pay by KHQR from the event page:</p>
+  <p><a href="<%= @event_url %>"><%= @event_url %></a></p>
+<% else %>
+  <p>See you there!</p>
+<% end %>
+
+<p>— The Rally team</p>

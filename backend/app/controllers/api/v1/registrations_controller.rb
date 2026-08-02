@@ -115,6 +115,11 @@ module Api
         end
 
         registration.destroy!
+        # Removing a participant may have freed a spot (event- or
+        # type-level) — offer it to whoever's been waiting longest. See
+        # Waitlists::PromoteNext; the not-yet-built refund workflow should
+        # call this too once it exists.
+        Waitlists::PromoteNext.call(event)
         render json: { message: "Participant removed" }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Registration not found" }, status: :not_found

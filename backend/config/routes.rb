@@ -43,6 +43,13 @@ Rails.application.routes.draw do
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
 
+      # Waitlists — join when an event/type is full, promoted automatically
+      # (Waitlists::PromoteNext) when a registration is cancelled/removed.
+      get    "waitlist_entries",                  to: "waitlist_entries#index"
+      post   "events/:event_id/waitlist_entries", to: "waitlist_entries#create"
+      get    "events/:event_id/waitlist_entries", to: "waitlist_entries#event_waitlist"
+      delete "waitlist_entries/:id",               to: "waitlist_entries#destroy"
+
       # Payments (ABA PayWay KHQR)
       post "registrations/:registration_id/payments", to: "payments#create"
       get  "payments/:id",                             to: "payments#show"

@@ -181,6 +181,20 @@ export interface ApiEvent {
   registrations_count?: number;
 }
 
+export interface ApiWaitlistEntry {
+  id: string;
+  event_id: string;
+  user_id: string;
+  event_type_ids: string[];
+  status: "waiting" | "promoted" | "cancelled";
+  created_at: string;
+  event?: { id: string; title: string; start_at: string };
+  /** Only present on the organizer's view (GET /events/:id/waitlist_entries) — 1-based queue position. */
+  position?: number;
+  email?: string;
+  profile?: { display_name: string | null; avatar_url: string | null };
+}
+
 export interface ApiRegistration {
   id: string;
   event_id: string;
@@ -394,6 +408,34 @@ export const registrationsApi = {
 
   remove(id: string) {
     return api.delete<{ message: string }>(`/registrations/${id}`);
+  },
+};
+
+// ─── Waitlists ──────────────────────────────────────────────────────────────
+
+export const waitlistApi = {
+  /** Current user's own active (still-waiting) waitlist spots, across all events. */
+  mine() {
+    return api.get<{ waitlist_entries: ApiWaitlistEntry[] }>("/waitlist_entries");
+  },
+
+  myEntryForEvent(eventId: string) {
+    return waitlistApi.mine().then((r) => r.waitlist_entries.find((e) => e.event_id === eventId) ?? null);
+  },
+
+  join(eventId: string, opts?: { eventTypeIds?: string[] }) {
+    return api.post<{ waitlist_entry: ApiWaitlistEntry }>(`/events/${eventId}/waitlist_entries`, {
+      event_type_ids: opts?.eventTypeIds ?? [],
+    });
+  },
+
+  /** Organizer-only — the full queue for one of *their* events, in join order. */
+  forEvent(eventId: string) {
+    return api.get<{ waitlist_entries: ApiWaitlistEntry[] }>(`/events/${eventId}/waitlist_entries`);
+  },
+
+  leave(id: string) {
+    return api.delete<{ message: string }>(`/waitlist_entries/${id}`);
   },
 };
 
