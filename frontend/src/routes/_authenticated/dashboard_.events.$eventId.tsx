@@ -547,10 +547,13 @@ function ManageEvent() {
             )}
 
             {/* Tabs */}
-            <Tabs defaultValue="participants" className="mt-10">
+            <Tabs defaultValue="branding" className="mt-10">
               <TabsList
-                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-5" : "max-w-xl grid-cols-4"}`}
+                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-6" : "max-w-xl grid-cols-4"}`}
               >
+                <TabsTrigger value="branding">
+                  <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
+                </TabsTrigger>
                 <TabsTrigger value="participants">
                   <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
                 </TabsTrigger>
@@ -560,17 +563,14 @@ function ManageEvent() {
                 <TabsTrigger value="results">
                   <Trophy className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResults")}
                 </TabsTrigger>
-                <TabsTrigger value="branding">
-                  <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
-                </TabsTrigger>
-                <TabsTrigger value="certificate">
-                  <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
-                </TabsTrigger>
                 {ev?.survey_id && (
                   <TabsTrigger value="responses">
                     <ClipboardList className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResponses")}
                   </TabsTrigger>
                 )}
+                <TabsTrigger value="certificate">
+                  <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
+                </TabsTrigger>
               </TabsList>
 
               {/* ── Participants ── */}
