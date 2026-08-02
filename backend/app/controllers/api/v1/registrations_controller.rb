@@ -12,7 +12,7 @@ module Api
       # GET /api/v1/registrations — current user's registrations with event data
       def index
         registrations = current_user.registrations
-          .includes(event: :registrations, event_types: [])
+          .includes(:certificate, event: :registrations, event_types: [])
           .order(created_at: :desc)
 
         render json: {
@@ -24,7 +24,7 @@ module Api
       def event_registrations
         event = current_user.events.find(params[:event_id])
         regs = event.registrations
-          .includes({ user: :profile }, :event_types)
+          .includes({ user: :profile }, :event_types, :certificate)
           .order(created_at: :asc)
 
         render json: {
@@ -197,6 +197,15 @@ module Api
           json[:event_types] = types.map do |t|
             { id: t.id, name: t.name, price_cents: t.price_cents, position: t.position }
           end
+        end
+
+        # nil until GenerateCertificatesJob (via Certificates::RenderPdf) has
+        # actually rendered one — see that job's class comment for what
+        # makes a registration eligible in the first place. file_url is
+        # already a full URL (set by RenderPdf via
+        # ActiveStorage::Blob.create_and_upload!), so no url_for needed here.
+        if reg.certificate&.file_present?
+          json[:certificate_url] = reg.certificate.file_url
         end
 
         json

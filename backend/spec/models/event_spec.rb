@@ -151,6 +151,32 @@ RSpec.describe Event, type: :model do
     end
   end
 
+  # ── Certificates ─────────────────────────────────────────────────────────────
+  describe "#certificate_template?" do
+    it "is false when no template has been uploaded" do
+      expect(build(:event, certificate_template_url: nil).certificate_template?).to be(false)
+    end
+
+    it "is true once a template url is set" do
+      expect(build(:event, certificate_template_url: "https://example.com/t.odt").certificate_template?).to be(true)
+    end
+  end
+
+  describe "#ended?" do
+    it "is true once end_at has passed" do
+      expect(build(:event, :past).ended?).to be(true)
+    end
+
+    it "is false for an upcoming event" do
+      expect(build(:event, start_at: 1.week.from_now, end_at: 2.weeks.from_now).ended?).to be(false)
+    end
+
+    it "falls back to start_at when end_at is blank" do
+      expect(build(:event, start_at: 1.hour.ago, end_at: nil).ended?).to be(true)
+      expect(build(:event, start_at: 1.hour.from_now, end_at: nil).ended?).to be(false)
+    end
+  end
+
   # ── Defaults ─────────────────────────────────────────────────────────────────
   describe "defaults" do
     let(:saved) { create(:event) }

@@ -5,6 +5,7 @@ class Registration < ApplicationRecord
   has_many :registration_event_types, dependent: :destroy
   has_many :event_types, through: :registration_event_types
   has_many :payments, dependent: :destroy
+  has_one :certificate, dependent: :destroy
 
   STATUSES = %w[confirmed cancelled].freeze
   PAYMENT_STATUSES = %w[unpaid paid refunded].freeze

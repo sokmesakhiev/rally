@@ -31,6 +31,22 @@ RSpec.describe "Registrations API", type: :request do
       get "/api/v1/registrations", as: :json
       expect(response).to have_http_status(:unauthorized)
     end
+
+    it "omits certificate_url when no certificate has been generated yet" do
+      get "/api/v1/registrations", headers: auth_headers(participant), as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == my_reg.id }
+      expect(reg_json).not_to have_key("certificate_url")
+    end
+
+    it "includes certificate_url once a certificate has been generated" do
+      create(:certificate, :with_file, registration: my_reg)
+
+      get "/api/v1/registrations", headers: auth_headers(participant), as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == my_reg.id }
+      expect(reg_json["certificate_url"]).to be_present
+    end
   end
 
   # ── POST /api/v1/events/:event_id/registrations ──────────────────────────────
@@ -140,6 +156,17 @@ RSpec.describe "Registrations API", type: :request do
           as: :json
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    it "includes certificate_url in the organizer view once generated" do
+      create(:certificate, :with_file, registration: reg)
+
+      get "/api/v1/events/#{event.id}/registrations",
+          headers: auth_headers(organizer),
+          as: :json
+
+      reg_json = json["registrations"].find { |r| r["id"] == reg.id }
+      expect(reg_json["certificate_url"]).to be_present
     end
   end
 

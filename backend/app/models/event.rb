@@ -94,6 +94,20 @@ class Event < ApplicationRecord
     capacity.present? && registrations.count >= capacity
   end
 
+  # An organizer has uploaded a certificate-of-participation template — see
+  # Api::V1::UploadsController (type: "certificate_template") and
+  # Certificates::RenderPdf, which merges participant/event data into it.
+  def certificate_template?
+    certificate_template_url.present?
+  end
+
+  # "Completed" for certificate purposes — end_at if the organizer set one,
+  # otherwise start_at. Used by GenerateCertificatesJob to decide which
+  # events are done, not just which have already started.
+  def ended?
+    (end_at || start_at) <= Time.current
+  end
+
   private
 
   def default_price_cents

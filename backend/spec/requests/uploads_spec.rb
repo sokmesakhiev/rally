@@ -15,6 +15,24 @@ RSpec.describe "Uploads API", type: :request do
     )
   end
 
+  # A minimal but real .odt (an OpenDocument Text file is just a zip archive
+  # with a content.xml entry) — enough for Api::V1::UploadsController's
+  # content-type check and Active Storage to have something genuine to work
+  # with, mirroring png_upload above.
+  def odt_upload(filename: "template.odt")
+    buffer = Zip::OutputStream.write_buffer do |zip|
+      zip.put_next_entry("content.xml")
+      zip.write("<text>{{participant_name}}</text>")
+    end
+    buffer.rewind
+
+    Rack::Test::UploadedFile.new(
+      buffer,
+      "application/vnd.oasis.opendocument.text",
+      original_filename: filename
+    )
+  end
+
   describe "POST /api/v1/uploads" do
     it "stores the file and returns a URL" do
       expect {
@@ -124,6 +142,67 @@ RSpec.describe "Uploads API", type: :request do
       }.not_to change(ActiveStorage::Blob, :count)
 
       expect(response).to have_http_status(:unauthorized)
+    end
+
+    # ── certificate_template: a separate content-type/size gate (see
+    # Certificates::RenderPdf, which downloads this file to build a
+    # participant's certificate of participation) ────────────────────────
+    it "accepts an ODT file for the certificate_template type" do
+      expect {
+        post "/api/v1/uploads",
+             params: { file: odt_upload, type: "certificate_template" },
+             headers: auth_headers(user)
+      }.to change(ActiveStorage::Blob, :count).by(1)
+
+      expect(response).to have_http_status(:created)
+      expect(json["url"]).to be_present
+    end
+
+    it "rejects a non-ODT file for the certificate_template type" do
+      expect {
+        post "/api/v1/uploads",
+             params: { file: png_upload, type: "certificate_template" },
+             headers: auth_headers(user)
+      }.not_to change(ActiveStorage::Blob, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to match(/OpenDocument/i)
+    end
+
+    it "rejects an ODT file for the banner type (image types only)" do
+      post "/api/v1/uploads", params: { file: odt_upload, type: "banner" }, headers: auth_headers(user)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to match(/JPEG|PNG|WebP|GIF/i)
+    end
+
+    it "allows a certificate_template up to its own, larger size limit" do
+      at_limit = Rack::Test::UploadedFile.new(
+        StringIO.new("x" * Api::V1::UploadsController::CERTIFICATE_TEMPLATE_MAX_FILE_SIZE),
+        "application/vnd.oasis.opendocument.text",
+        original_filename: "big.odt"
+      )
+
+      post "/api/v1/uploads", params: { file: at_limit, type: "certificate_template" }, headers: auth_headers(user)
+
+      expect(response).to have_http_status(:created)
+    end
+
+    it "rejects a certificate_template over its own size limit with 422" do
+      oversized = Rack::Test::UploadedFile.new(
+        StringIO.new("x" * (Api::V1::UploadsController::CERTIFICATE_TEMPLATE_MAX_FILE_SIZE + 1)),
+        "application/vnd.oasis.opendocument.text",
+        original_filename: "huge.odt"
+      )
+
+      expect {
+        post "/api/v1/uploads",
+             params: { file: oversized, type: "certificate_template" },
+             headers: auth_headers(user)
+      }.not_to change(ActiveStorage::Blob, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to match(/too large/i)
     end
   end
 end

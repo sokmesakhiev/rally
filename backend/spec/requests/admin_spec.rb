@@ -151,7 +151,11 @@ RSpec.describe "Admin API", type: :request do
     end
 
     it "paginates" do
-      User.where.not(id: admin.id).delete_all
+      # destroy_all, not delete_all — every user has an auto-created Profile
+      # (User#create_profile!), and delete_all is a raw bulk DELETE that
+      # skips dependent: :destroy, so it 500s on that FK the moment any
+      # leftover user exists.
+      User.where.not(id: admin.id).destroy_all
       3.times { create(:user) }
 
       get "/api/v1/admin/users", params: { per_page: 2 }, headers: auth_headers(admin)

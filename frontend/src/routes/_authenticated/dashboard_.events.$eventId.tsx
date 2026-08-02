@@ -21,6 +21,7 @@ import {
   Rocket,
   EyeOff,
   Hourglass,
+  Award
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -37,6 +38,7 @@ import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
 import { EventDetailsEditor } from "@/components/event-details-editor";
 import { ImageUpload } from "@/components/image-upload";
+import { CertificateTemplateUpload } from "@/components/certificate-template-upload";
 import { PlanPaymentPanel } from "@/components/plan-payment-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +94,9 @@ function ManageEvent() {
   const [brandColor, setBrandColor] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null | undefined>(undefined);
   const [logoUrl, setLogoUrl] = useState<string | null | undefined>(undefined);
+  const [certificateTemplateUrl, setCertificateTemplateUrl] = useState<
+    string | null | undefined
+  >(undefined);
 
   const eventQuery = useQuery({
     queryKey: ["event", eventId],
@@ -107,6 +112,9 @@ function ManageEvent() {
   if (ev && brandColor === null) setBrandColor(ev.brand_color ?? "#6366f1");
   if (ev && bannerUrl === undefined) setBannerUrl(ev.banner_url ?? null);
   if (ev && logoUrl === undefined) setLogoUrl(ev.logo_url ?? null);
+  if (ev && certificateTemplateUrl === undefined) {
+    setCertificateTemplateUrl(ev.certificate_template_url ?? null);
+  }
 
   const participantsQuery = useQuery({
     queryKey: ["event-participants", eventId],
@@ -155,6 +163,16 @@ function ManageEvent() {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["public-event", eventId] });
       toast.success(t("manageEvent.toastBrandingSaved"));
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const saveCertificateTemplate = useMutation({
+    mutationFn: () =>
+      eventsApi.update(eventId, { certificate_template_url: certificateTemplateUrl ?? null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      toast.success(t("manageEvent.toastCertificateSaved"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -490,13 +508,16 @@ function ManageEvent() {
             {/* Tabs */}
             <Tabs defaultValue="participants" className="mt-10">
               <TabsList
-                className={`grid w-full ${ev?.survey_id ? "max-w-lg grid-cols-3" : "max-w-sm grid-cols-2"}`}
+                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-4" : "max-w-xl grid-cols-3"}`}
               >
                 <TabsTrigger value="participants">
                   <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
                 </TabsTrigger>
                 <TabsTrigger value="branding">
                   <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
+                </TabsTrigger>
+                <TabsTrigger value="certificate">
+                  <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
                 </TabsTrigger>
                 {ev?.survey_id && (
                   <TabsTrigger value="responses">
@@ -674,6 +695,35 @@ function ManageEvent() {
                   >
                     {saveBranding.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                     {t("manageEvent.saveBranding")}
+                  </Button>
+                </div>
+              </TabsContent>
+
+              {/* ── Certificate of participation ── */}
+              <TabsContent value="certificate" className="mt-6">
+                <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                  <div className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-muted-foreground" />
+                    <h2 className="font-semibold">{t("manageEvent.certificateTitle")}</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {t("manageEvent.certificateDesc")}
+                  </p>
+
+                  <CertificateTemplateUpload
+                    value={certificateTemplateUrl ?? null}
+                    onChange={setCertificateTemplateUrl}
+                  />
+
+                  <Button
+                    onClick={() => saveCertificateTemplate.mutate()}
+                    disabled={saveCertificateTemplate.isPending}
+                    variant="hero"
+                  >
+                    {saveCertificateTemplate.isPending && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+                    {t("manageEvent.saveCertificate")}
                   </Button>
                 </div>
               </TabsContent>

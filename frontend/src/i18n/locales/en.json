@@ -280,7 +280,8 @@
     "toastJoinWaitlistError": "Could not join the waitlist",
     "toastLeftWaitlist": "Left the waitlist",
     "toastLeaveWaitlistError": "Could not leave the waitlist",
-    "joinWaitlistToastAction": "Join waitlist instead"
+    "joinWaitlistToastAction": "Join waitlist instead",
+    "downloadCertificate": "Download certificate"
   },
   "dashboard": {
     "title": "Your dashboard",
@@ -301,7 +302,8 @@
     "participantsWithCapacity_other": "{{count}} / {{capacity}} participants",
     "participantsNoCapacity_one": "{{count}} participant",
     "participantsNoCapacity_other": "{{count}} participants",
-    "manage": "Manage"
+    "manage": "Manage",
+    "downloadCertificate": "Download certificate"
   },
   "manageEvent": {
     "backToDashboard": "Back to dashboard",
@@ -333,6 +335,7 @@
     "waitlistJoinedOn": "Joined {{date}}",
     "tabParticipants": "Participants",
     "tabBranding": "QR & Branding",
+    "tabCertificate": "Certificate",
     "tabResponses": "Responses",
     "noParticipants": "No one has registered yet. Share your event to get sign-ups.",
     "participantFallback": "Participant",
@@ -368,7 +371,11 @@
     "saveDetails": "Save details",
     "toastDetailsSaved": "Event details saved",
     "mapPinPreserved": "The existing map pin is kept when you edit this text.",
-    "priceChangeHint": "Changing the price does not alter what existing participants already owe or paid."
+    "priceChangeHint": "Changing the price does not alter what existing participants already owe or paid.",
+    "certificateTitle": "Certificate of participation",
+    "certificateDesc": "Optional. Upload a .odt (OpenDocument Text) design and Rally will automatically generate a personalized PDF certificate for every confirmed, paid participant once the event ends — no check-in required, so this covers everyone registered, not just people who actually showed up.",
+    "saveCertificate": "Save certificate template",
+    "toastCertificateSaved": "Certificate template saved"
   },
   "eventForm": {
     "title": "Create an event",
@@ -488,6 +495,14 @@
     "uploadFailed": "Upload failed",
     "previewAlt": "Upload preview",
     "clickOrDrag": "Click or drag to upload"
+  },
+  "certificateTemplate": {
+    "uploadFailed": "Upload failed",
+    "templateUploaded": "Certificate template uploaded",
+    "replace": "Replace",
+    "clickToUpload": "Click to upload a .odt template",
+    "tokensTitle": "Placeholder tokens",
+    "tokensHint": "Type each token as one continuous run of plain text (turn off autocorrect/autoformat while typing it) — if a word processor silently splits a token across formatting, it won't be replaced and will show up literally on the certificate."
   },
   "paymentPanel": {
     "generatingQr": "Generating your KHQR code…",

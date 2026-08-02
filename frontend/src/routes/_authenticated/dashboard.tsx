@@ -9,6 +9,7 @@ import {
   Settings,
   Download,
   Ticket,
+  Award,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { registrationsApi, eventsApi } from "@/lib/api-client";
@@ -141,9 +142,18 @@ function Dashboard() {
                         </Link>
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" onClick={() => downloadICS(ev)}>
-                        <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {reg.certificate_url && (
+                          <Button asChild variant="outline" size="sm">
+                            <a href={reg.certificate_url} target="_blank" rel="noreferrer">
+                              <Award className="h-4 w-4" /> {t("dashboard.downloadCertificate")}
+                            </a>
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => downloadICS(ev)}>
+                          <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

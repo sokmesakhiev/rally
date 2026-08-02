@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_01_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_02_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -41,6 +41,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_01_000000) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "certificates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "file_url"
+    t.uuid "registration_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["registration_id"], name: "index_certificates_on_registration_id", unique: true
   end
 
   create_table "event_plan_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -82,6 +90,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_01_000000) do
     t.string "brand_color", default: "#6366f1", null: false
     t.integer "capacity"
     t.string "category", default: "other", null: false
+    t.string "certificate_template_url"
     t.datetime "created_at", null: false
     t.uuid "creator_id", null: false
     t.string "currency", default: "usd", null: false
@@ -231,6 +240,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_01_000000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "certificates", "registrations"
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"
   add_foreign_key "event_types", "events"

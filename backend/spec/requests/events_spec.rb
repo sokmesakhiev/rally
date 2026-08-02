@@ -147,7 +147,11 @@ RSpec.describe "Events API", type: :request do
       end
 
       it "paginates, reporting an accurate total across pages" do
-        Event.delete_all
+        # destroy_all, not delete_all — delete_all is a raw bulk DELETE that
+        # skips dependent: :destroy, so it 500s with a FK violation the
+        # moment any leftover event (from this file or elsewhere) has a
+        # registration/event_type/etc. attached.
+        Event.destroy_all
         5.times do |i|
           create(:event, is_published: true, start_at: (i + 1).days.from_now)
         end
@@ -166,7 +170,7 @@ RSpec.describe "Events API", type: :request do
       end
 
       it "counts only matching events in total_count, not the whole table" do
-        Event.delete_all
+        Event.destroy_all
         create(:event, title: "Findable", is_published: true, start_at: 1.week.from_now)
         3.times { create(:event, title: "Other", is_published: true, start_at: 1.week.from_now) }
 

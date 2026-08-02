@@ -142,6 +142,7 @@ module Api
           brand_color: event.brand_color,
           banner_url: event.banner_url,
           logo_url: event.logo_url,
+          certificate_template_url: event.certificate_template_url,
           created_at: event.created_at,
           updated_at: event.updated_at
         }
