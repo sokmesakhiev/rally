@@ -24,7 +24,7 @@ shared:
 
 development:
   base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout-sandbox.payway.com.kh") %>
-
+  
 test:
   base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout-sandbox.payway.com.kh") %>
 
