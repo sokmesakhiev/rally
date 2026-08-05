@@ -43,17 +43,23 @@ subproject's jobs when files under that subproject changed.
 ```bash
 cd backend
 bin/setup                          # installs gems, prepares the db
+cp .env.example .env               # optional — see below
 bin/rails db:create db:migrate db:seed
 bin/rails server -p 3000           # API on http://localhost:3000
 ```
 
 The backend has sensible defaults for local dev (Postgres on `localhost`,
-sandbox PayWay base URL) but reads secrets from `ENV`, not a `.env` file —
-export them in your shell or via direnv. `JWT_SECRET` is the only one you
-strictly need for a stable dev session; see
-[ABA_PAYWAY_SETUP.md](./ABA_PAYWAY_SETUP.md) for `ABA_PAYWAY_MERCHANT_ID` /
-`ABA_PAYWAY_API_KEY` (needed to exercise the payment flow locally) and
-`MAILER_FROM_EMAIL` if you want outgoing mail (SES) configured.
+sandbox PayWay base URL) — nothing in `.env.example` is required to boot.
+`.env` (gitignored) is loaded automatically in development/test via the
+`dotenv-rails` gem; production never loads it and gets its config exclusively
+from real ENV vars injected by ECS. `JWT_SECRET` is the only one worth
+setting for a stable dev session (see the comment in `.env.example` for why);
+see [ABA_PAYWAY_SETUP.md](./ABA_PAYWAY_SETUP.md) for `ABA_PAYWAY_MERCHANT_ID`
+/ `ABA_PAYWAY_API_KEY` (needed to exercise the payment flow locally) and
+`MAILER_FROM_EMAIL` if you want outgoing mail (SES) configured. If you'd
+rather not add a gem dependency, exporting the same vars via your shell or
+[direnv](https://direnv.net) works identically — `dotenv-rails` is just the
+lower-friction default.
 
 ### Frontend
 

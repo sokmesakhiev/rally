@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, LogOut, ShieldAlert, User, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ const navLinkClass =
 export function SiteHeader() {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // location.hash is stored without the leading "#" (e.g. "features").
   const hash = useRouterState({ select: (s) => s.location.hash });
@@ -136,7 +137,19 @@ export function SiteHeader() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => signOut()}
+                    onClick={() => {
+                      signOut();
+                      // /_authenticated's beforeLoad guard only runs when
+                      // *navigating into* a protected route — it doesn't
+                      // re-run just because useAuth()'s `user` context value
+                      // changes while already mounted there. Without an
+                      // explicit navigation, signing out from a dashboard
+                      // page cleared the token but left the page rendered
+                      // until some other navigation happened to trigger the
+                      // guard. Navigating to "/" here leaves the protected
+                      // route tree (and its already-loaded data) entirely.
+                      navigate({ to: "/" });
+                    }}
                     className="cursor-pointer text-destructive focus:text-destructive"
                   >
                     <LogOut className="h-4 w-4" /> {t("common.signOut")}

@@ -11,5 +11,10 @@ class AuthSignupRequestSchema < ApplicationRequestSchema
     required(:email).filled(:string)
     required(:password).filled(:string)
     optional(:display_name).maybe(:string)
+    # Token from grecaptcha.execute() on the frontend (src/lib/recaptcha.ts).
+    # Optional at the schema level — RecaptchaVerifier itself decides whether
+    # a missing token is acceptable (it is, when RECAPTCHA_SECRET_KEY isn't
+    # configured) or a rejection (it isn't, once the feature is turned on).
+    optional(:recaptcha_token).maybe(:string)
   end
 end

@@ -151,6 +151,13 @@ variable "google_client_id" {
   default     = ""
 }
 
+variable "recaptcha_secret_key" {
+  description = "Google reCAPTCHA v3 secret key, used server-side to verify tokens minted by the sign-up form (RecaptchaVerifier). Unlike google_client_id this IS a secret — pair with VITE_RECAPTCHA_SITE_KEY (the public site key) when building the frontend. Leave empty to keep captcha verification disabled (signup works with no check)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ── Observability ─────────────────────────────────────────────────────────────
 
 variable "sentry_dsn" {

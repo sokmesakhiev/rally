@@ -41,6 +41,7 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
         aws_secretsmanager_secret.rails_master_key.arn,
         aws_secretsmanager_secret.aba_payway_merchant_id.arn,
         aws_secretsmanager_secret.aba_payway_api_key.arn,
+        aws_secretsmanager_secret.recaptcha_secret_key.arn,
       ]
     }]
   })

@@ -85,6 +85,7 @@ resource "aws_ecs_task_definition" "app" {
       { name = "RAILS_MASTER_KEY",         valueFrom = aws_secretsmanager_secret.rails_master_key.arn },
       { name = "ABA_PAYWAY_MERCHANT_ID",   valueFrom = aws_secretsmanager_secret.aba_payway_merchant_id.arn },
       { name = "ABA_PAYWAY_API_KEY",       valueFrom = aws_secretsmanager_secret.aba_payway_api_key.arn },
+      { name = "RECAPTCHA_SECRET_KEY",     valueFrom = aws_secretsmanager_secret.recaptcha_secret_key.arn },
     ]
 
     # Health check — Rails 8 ships the /up endpoint out of the box

@@ -172,7 +172,8 @@
       "password": "Password",
       "displayName": "Display name",
       "displayNamePlaceholder": "Alex Runner",
-      "passwordPlaceholder": "At least 8 characters"
+      "passwordPlaceholder": "At least 8 characters",
+      "confirmPassword": "Confirm password"
     },
     "forgotPassword": "Forgot password?",
     "welcomeBack": "Welcome back!",
@@ -181,7 +182,8 @@
       "invalidEmail": "Enter a valid email",
       "passwordTooShort": "Password must be at least 8 characters",
       "signInFailed": "Sign in failed",
-      "signUpFailed": "Sign up failed"
+      "signUpFailed": "Sign up failed",
+      "passwordMismatch": "Passwords do not match"
     }
   },
   "forgotPassword": {
