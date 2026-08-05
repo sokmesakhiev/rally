@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { authApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
+import { getRecaptchaToken } from "@/lib/recaptcha";
 
 const GOOGLE_SIGN_IN_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
@@ -33,9 +34,10 @@ const passwordSchema = z.string().min(8).max(72);
 function AuthPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -60,11 +62,27 @@ function AuthPage() {
     return true;
   };
 
+  // Sign-up only — sign-in has no confirm-password field to check.
+  const validateSignUp = () => {
+    if (!validate()) return false;
+    if (password !== confirmPassword) {
+      toast.error(t("auth.errors.passwordMismatch"));
+      return false;
+    }
+    return true;
+  };
+
   const handleSignIn = async () => {
     if (!validate()) return;
     setLoading(true);
     try {
       await authApi.signin(email, password);
+      // AuthProvider only fetches the current user once, on its own mount —
+      // storing the token alone doesn't update its `user` state. Without
+      // this, the header keeps showing "Sign in" and any dashboard query
+      // gated on `user` never fires, until a full page reload remounts
+      // AuthProvider and it re-fetches on its own.
+      await refresh();
       toast.success(t("auth.welcomeBack"));
       navigate({ to: "/dashboard", replace: true });
     } catch (e: any) {
@@ -75,10 +93,15 @@ function AuthPage() {
   };
 
   const handleSignUp = async () => {
-    if (!validate()) return;
+    if (!validateSignUp()) return;
     setLoading(true);
     try {
-      await authApi.signup(email, password, displayName.trim() || undefined);
+      // Resolves to undefined when VITE_RECAPTCHA_SITE_KEY isn't configured
+      // — the backend only enforces verification once RECAPTCHA_SECRET_KEY
+      // is also set, so signup still works either way.
+      const recaptchaToken = await getRecaptchaToken("signup");
+      await authApi.signup(email, password, displayName.trim() || undefined, recaptchaToken);
+      await refresh();
       toast.success(t("auth.accountCreated"));
       navigate({ to: "/dashboard", replace: true });
     } catch (e: any) {
@@ -92,6 +115,7 @@ function AuthPage() {
     setGoogleLoading(true);
     try {
       await authApi.google(idToken);
+      await refresh();
       toast.success(t("auth.welcomeBack"));
       navigate({ to: "/dashboard", replace: true });
     } catch (e: any) {
@@ -157,78 +181,105 @@ function AuthPage() {
             )}
 
             <TabsContent value="signin" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-in">{t("auth.fields.email")}</Label>
-                <Input
-                  id="email-in"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="pw-in">{t("auth.fields.password")}</Label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {t("auth.forgotPassword")}
-                  </Link>
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSignIn();
+                }}
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="email-in">{t("auth.fields.email")}</Label>
+                  <Input
+                    id="email-in"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
                 </div>
-                <Input
-                  id="pw-in"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
-              </div>
-              <Button variant="hero" className="w-full" onClick={handleSignIn} disabled={loading}>
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t("common.signIn")}
-              </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pw-in">{t("auth.fields.password")}</Label>
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {t("auth.forgotPassword")}
+                    </Link>
+                  </div>
+                  <Input
+                    id="pw-in"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+                <Button type="submit" variant="hero" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t("common.signIn")}
+                </Button>
+              </form>
             </TabsContent>
 
             <TabsContent value="signup" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name-up">{t("auth.fields.displayName")}</Label>
-                <Input
-                  id="name-up"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder={t("auth.fields.displayNamePlaceholder")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email-up">{t("auth.fields.email")}</Label>
-                <Input
-                  id="email-up"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pw-up">{t("auth.fields.password")}</Label>
-                <Input
-                  id="pw-up"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t("auth.fields.passwordPlaceholder")}
-                />
-              </div>
-              <Button variant="hero" className="w-full" onClick={handleSignUp} disabled={loading}>
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t("auth.tabs.signUp")}
-              </Button>
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSignUp();
+                }}
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="name-up">{t("auth.fields.displayName")}</Label>
+                  <Input
+                    id="name-up"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder={t("auth.fields.displayNamePlaceholder")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email-up">{t("auth.fields.email")}</Label>
+                  <Input
+                    id="email-up"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pw-up">{t("auth.fields.password")}</Label>
+                  <Input
+                    id="pw-up"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={t("auth.fields.passwordPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pw-confirm-up">{t("auth.fields.confirmPassword")}</Label>
+                  <Input
+                    id="pw-confirm-up"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t("auth.fields.passwordPlaceholder")}
+                  />
+                </div>
+                <Button type="submit" variant="hero" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t("auth.tabs.signUp")}
+                </Button>
+              </form>
             </TabsContent>
           </Tabs>
 

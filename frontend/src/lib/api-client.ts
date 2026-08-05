@@ -247,11 +247,12 @@ export interface ProfileUpdatePayload {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  async signup(email: string, password: string, displayName?: string) {
+  async signup(email: string, password: string, displayName?: string, recaptchaToken?: string) {
     const res = await api.post<{ token: string; user: ApiUser }>("/auth/signup", {
       email,
       password,
       display_name: displayName,
+      recaptcha_token: recaptchaToken,
     });
     setToken(res.token);
     return res;

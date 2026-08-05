@@ -81,3 +81,20 @@ resource "aws_secretsmanager_secret_version" "aba_payway_api_key" {
   secret_id     = aws_secretsmanager_secret.aba_payway_api_key.id
   secret_string = var.aba_payway_api_key
 }
+
+# ── RECAPTCHA_SECRET_KEY ────────────────────────────────────────────────────
+# From a Google account at https://www.google.com/recaptcha/admin — set
+# recaptcha_secret_key in terraform.tfvars. Leave empty (the default) to keep
+# captcha verification disabled; RecaptchaVerifier treats an unset secret as
+# "feature off" rather than failing closed.
+
+resource "aws_secretsmanager_secret" "recaptcha_secret_key" {
+  name                    = "${local.prefix}/recaptcha-secret-key"
+  description             = "Google reCAPTCHA v3 secret key (server-side token verification)"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "recaptcha_secret_key" {
+  secret_id     = aws_secretsmanager_secret.recaptcha_secret_key.id
+  secret_string = var.recaptcha_secret_key
+}

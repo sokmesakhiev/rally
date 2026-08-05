@@ -24,6 +24,13 @@ rails_master_key = "YOUR_MASTER_KEY_HERE"
 # Leave unset to keep the Google sign-in button hidden on the frontend.
 # google_client_id = "YOUR_CLIENT_ID.apps.googleusercontent.com"
 
+# ── Auth: reCAPTCHA v3 on signup (optional) ─────────────────────────────────
+# Register a "reCAPTCHA v3" site at https://www.google.com/recaptcha/admin
+# with the frontend's domain. Pair with VITE_RECAPTCHA_SITE_KEY (the public
+# site key, set when building the frontend) — both sides must be set for
+# verification to actually run. Leave unset to keep signup captcha-free.
+# recaptcha_secret_key = "YOUR_SECRET_KEY"
+
 # ── Payments (ABA PayWay KHQR) ─────────────────────────────────────────────────
 # Sign up for sandbox credentials at https://sandbox.payway.com.kh, or contact
 # paywaysales@ababank.com for production access. See ABA_PAYWAY_SETUP.md.

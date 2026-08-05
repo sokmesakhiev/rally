@@ -54,6 +54,12 @@ gem "solid_cache"
 gem "dry-validation"
 
 group :development, :test do
+  # Loads backend/.env (gitignored, see .env.example) into ENV on boot — the
+  # local-dev equivalent of the ENV vars Terraform/ECS injects in production
+  # (JWT_SECRET, ABA_PAYWAY_MERCHANT_ID/API_KEY, RECAPTCHA_SECRET_KEY, etc.).
+  # Never loaded outside development/test, so production always gets its
+  # config exclusively from real ENV vars set by ECS.
+  gem "dotenv-rails"
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", require: false
   gem "brakeman", require: false
