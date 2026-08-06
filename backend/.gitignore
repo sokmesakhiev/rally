@@ -7,8 +7,12 @@
 # Ignore bundler config.
 /.bundle
 
-# Ignore all environment files.
+# Ignore all environment files, except .env.test — that one is committed on
+# purpose (see its own header comment) to keep the test suite hermetic
+# regardless of what real secrets a developer has filled into their own,
+# still-gitignored .env.
 /.env*
+!/.env.test
 
 # Ignore all logfiles and tempfiles.
 /log/*

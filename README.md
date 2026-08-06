@@ -110,6 +110,43 @@ For a manual/local deploy (or to deploy both at once), see
 `backend/config/deploy.yml` (Kamal) is unused Rails-generated scaffolding —
 ECS is the real deploy target, not Kamal.
 
+### Using a domain hosted outside Route 53
+
+`api_domain`/`frontend_domain` don't have to live in Route 53 — leave
+`route53_zone_id` empty in `terraform.tfvars` and Terraform still creates the
+ACM certificates, it just can't create the DNS records itself. You add those
+by hand at whatever host you use (Cloudflare, Namecheap, etc.):
+
+1. `terraform apply`. **This first apply will likely error out on the
+   CloudFront distribution and/or the ALB HTTPS listener specifically** —
+   both need an already-*Issued* ACM certificate, and a brand-new one is
+   always `PENDING_VALIDATION` until you complete step 2 below. That's
+   expected, not a sign anything is broken: the certificate resources
+   themselves still get created successfully (Terraform records them in
+   state) even though the apply as a whole exits non-zero.
+2. Read the `api_cert_validation_record` and `frontend_cert_validation_records`
+   outputs (`terraform output api_cert_validation_record` /
+   `terraform output frontend_cert_validation_records`) and add each as a
+   CNAME at your DNS host. In Cloudflare, add them as **DNS only** (grey
+   cloud, not proxied) — a proxied CNAME breaks ACM's validation crawler.
+3. Wait for both certificates to show "Issued" in the ACM console (usually a
+   few minutes) — the frontend/CloudFront cert lives in **us-east-1**
+   regardless of your app's region; the API/ALB cert lives in your app's
+   own region (`aws_region` in `terraform.tfvars`).
+4. Run `terraform apply` again. This time CloudFront and the ALB listener
+   pick up the now-Issued certificates and finish deploying — no code
+   changes needed, just re-running against the same config.
+5. Point `api_domain` at the `alb_dns_name` output via CNAME, and
+   `frontend_domain` + `www.<frontend_domain>` at the `cloudfront_domain`
+   output via CNAME.
+6. If you proxy these final records through Cloudflare (orange cloud), set
+   Cloudflare's SSL/TLS mode to **Full** or **Full (strict)** — Cloudflare
+   terminates TLS to visitors either way, but "Flexible" mode would then
+   speak plain HTTP to the ALB, which redirects to HTTPS and can loop.
+
+The `next_steps` Terraform output walks through this same sequence after
+every `apply`.
+
 ## More docs
 
 - [`CLAUDE.md`](./CLAUDE.md) — architecture notes: auth, domain model,

@@ -193,7 +193,14 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate_validation.api[0].certificate_arn
+  # With Route 53 as the DNS host, wait for aws_acm_certificate_validation so
+  # the listener only ever references a fully-validated cert. With an
+  # external DNS host (Cloudflare, etc.) there's no Terraform-managed record
+  # to wait on — attach the raw certificate directly. It's valid immediately
+  # once you add the CNAME the api_cert_validation_record output prints and
+  # ACM's crawler picks it up (usually a few minutes, occasionally longer);
+  # until then AWS still attaches it, it's just not yet trusted by clients.
+  certificate_arn = local.use_route53_for_api ? aws_acm_certificate_validation.api[0].certificate_arn : aws_acm_certificate.api[0].arn
 
   default_action {
     type             = "forward"
@@ -202,6 +209,9 @@ resource "aws_lb_listener" "https" {
 }
 
 # ── ACM Certificate for the API domain ───────────────────────────────────────
+# Created whenever api_domain is set, regardless of DNS host — see
+# use_route53_for_api in locals.tf. With an external DNS host, the
+# api_cert_validation_record output tells you what CNAME to add by hand.
 
 resource "aws_acm_certificate" "api" {
   count = local.custom_api_domain ? 1 : 0
@@ -215,7 +225,7 @@ resource "aws_acm_certificate" "api" {
 }
 
 resource "aws_route53_record" "api_cert_validation" {
-  for_each = local.custom_api_domain ? {
+  for_each = local.use_route53_for_api ? {
     for dvo in aws_acm_certificate.api[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
@@ -232,15 +242,17 @@ resource "aws_route53_record" "api_cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "api" {
-  count = local.custom_api_domain ? 1 : 0
+  count = local.use_route53_for_api ? 1 : 0
 
   certificate_arn         = aws_acm_certificate.api[0].arn
   validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
 }
 
-# Route 53 A record pointing to the ALB
+# Route 53 A record pointing to the ALB. Only created when Route 53 owns the
+# zone — with an external DNS host, add a CNAME for api_domain pointing at
+# the alb_dns_name output instead (see README).
 resource "aws_route53_record" "api" {
-  count = local.custom_api_domain ? 1 : 0
+  count = local.use_route53_for_api ? 1 : 0
 
   zone_id = var.route53_zone_id
   name    = var.api_domain
