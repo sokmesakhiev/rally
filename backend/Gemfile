@@ -53,6 +53,8 @@ gem "solid_cache"
 
 gem "dry-validation"
 
+gem "ruby-vips", ">= 2.3"
+
 group :development, :test do
   # Loads backend/.env (gitignored, see .env.example) into ENV on boot — the
   # local-dev equivalent of the ENV vars Terraform/ECS injects in production
