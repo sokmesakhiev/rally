@@ -110,8 +110,14 @@ jobs:
           bundler-cache: true
           working-directory: backend
 
+      # bin/importmap boots the full Rails app (require_relative
+      # "../config/application"), which hits Bundler.require and therefore
+      # needs libvips present at runtime — same reasoning as the Rspec job's
+      # "Set up database" step.
       - name: Scan for security vulnerabilities in JavaScript dependencies
-        run: bin/importmap audit
+        run: |
+          sudo apt-get install -y libvips
+          bin/importmap audit
 
   rubocop:
     needs: detect-changes
@@ -178,7 +184,12 @@ jobs:
 
       - name: Set up database
         run: |
-          sudo apt-get install -y libpq-dev
+          # libvips: Active Storage's default variant_processor since Rails'
+          # 7.1 framework defaults (config.load_defaults 8.1 here) is :vips,
+          # and ruby-vips (Gemfile) is Ruby bindings only — the actual native
+          # library isn't bundled with the gem and has to come from apt, same
+          # as backend/Dockerfile's production image already does.
+          sudo apt-get install -y libpq-dev libvips
           bundle exec rails db:create db:schema:load db:seed
 
       - name: Run RSpec tests
