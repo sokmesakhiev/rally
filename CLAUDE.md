@@ -38,7 +38,7 @@ RSpec is the real test suite (factories in `spec/factories`, request specs in `s
 ```
 bun install   (or npm install)
 bun run dev          # vite dev server, default port 5173
-bun run build         # production build (outputs to dist/, deployed to S3)
+bun run build         # production build (outputs to dist/client/, deployed to S3 — see vite.config.ts)
 bun run lint          # eslint
 bun run format        # prettier --write .
 ```
@@ -109,6 +109,7 @@ Gateway credentials are two-tiered:
 
 ### Frontend: TanStack Start file-based routing
 
+- **Production build is a static SPA, not an SSR app**, despite this being TanStack Start. `vite.config.ts` sets `nitro: false` (the `@lovable.dev/vite-tanstack-config` wrapper otherwise defaults `nitro()` to the `cloudflare-module` preset — a per-request SSR Worker, output to `.output/`) and `tanstackStart.spa.enabled` instead, which prerenders one HTML shell at build time (crawling from `/`) to `dist/client/index.html`; every route then hydrates and renders client-side from that same shell, same as a classic Vite SPA. This matches the actual deploy target (`infrastructure/frontend.tf` — S3 + CloudFront, which can only serve static files, not run a server) — `src/server.ts`'s Workers `fetch` handler is dead code as a result, unused unless nitro is re-enabled. Only `dist/client/` gets synced to S3 (`dist/server/` is just the build-time prerender driver); see `.github/workflows/deploy.yml` and `scripts/deploy.sh`.
 - Routing follows `src/routes/README.md` conventions: every file in `src/routes/` is a route, `$id` for dynamic segments, `_layout.tsx` for layout routes, `__root.tsx` is the app shell. `routeTree.gen.ts` is generated — never hand-edit it.
 - `src/routes/_authenticated/` is a layout route gating dashboard pages behind auth (`route.tsx` checks auth state before rendering children).
 - All backend communication goes through `src/lib/api-client.ts`, a hand-written fetch wrapper (not React Query directly, though `@tanstack/react-query`'s `QueryClient` is wired into the router context). It reads `VITE_API_URL` (defaults to `http://localhost:3001` — note this differs from the Rails default port 3000, so set `VITE_API_URL=http://localhost:3000` or run Rails on 3001 locally) and stores the JWT in `localStorage` under `rally_token`. `src/lib/use-auth.tsx` wraps this in an `AuthProvider`/`useAuth()` context.
@@ -120,7 +121,7 @@ Gateway credentials are two-tiered:
 
 The frontend is fully wired for translation via `i18next`/`react-i18next` — every user-facing string in `src/routes/` and `src/components/*.tsx` (excluding `src/components/ui/` shadcn primitives) goes through `t("namespace.key")`, not hardcoded literals.
 
-- `src/lib/i18n.ts` initializes the i18next singleton and exports `SUPPORTED_LANGUAGES` (`en`, `km`), `setLanguage()`, and `applyStoredLanguage()`. **It always boots to English on both server and the client's first render** — TanStack Start does SSR, so applying a stored language preference synchronously would cause a hydration mismatch. The stored preference (`localStorage["rally_lang"]`) is only applied client-side, in a `useEffect` in `__root.tsx`, after mount.
+- `src/lib/i18n.ts` initializes the i18next singleton and exports `SUPPORTED_LANGUAGES` (`en`, `km`), `setLanguage()`, and `applyStoredLanguage()`. **It always boots to English on both server and the client's first render** — the production build is one HTML shell prerendered once at build time (see "Frontend: TanStack Start file-based routing" above) and reused for every visitor, so it has no way to know any individual visitor's stored language, and applying one synchronously would cause a hydration mismatch against that shell anyway. The stored preference (`localStorage["rally_lang"]`) is only applied client-side, in a `useEffect` in `__root.tsx`, after mount.
 - Locale files are `src/i18n/locales/en.json` (source of truth) and `src/i18n/locales/km.json` (Khmer), namespaced roughly one-per-route/component (`header`, `home`, `auth`, `eventDetail`, `dashboard`, `manageEvent`, `eventForm`, `profile`, `surveyBuilder`, etc.). Keep both files in lockstep — every key added to `en.json` needs a `km.json` counterpart, or the UI silently falls back to the English string when `km` is active.
 - `LanguageSwitcher` (`src/components/language-switcher.tsx`) is the globe-icon control in `SiteHeader`; it calls `setLanguage()`, which updates `localStorage`, `i18n.changeLanguage()`, and `document.documentElement.lang`.
 - Non-component code that needs translated strings (e.g. `src/lib/event-utils.ts`'s `formatPrice`/`formatDate`/`categoryLabel`) imports the `i18n` default export directly and calls `i18n.t(...)` / reads `i18n.language`, rather than needing the `useTranslation()` hook — this only works because these functions are called synchronously inside a component's render body, so they naturally re-run on re-render after a language change.

@@ -48,7 +48,9 @@ ECS_CLUSTER=$(tf_output ecs_cluster_name)
 ECS_SERVICE=$(tf_output ecs_service_name)
 FRONTEND_BUCKET=$(tf_output frontend_bucket_name)
 CLOUDFRONT_ID=$(tf_output cloudfront_distribution_id)
-API_URL=$(tf_output api_url)
+API_URL="rally-api.rails-dev.com"
+LOG_GROUP=$(tf_output cloudwatch_log_group)
+ALB_DNS=$(tf_output alb_dns_name)
 AWS_REGION=$(terraform output -raw alb_dns_name 2>/dev/null | grep -o 'us-[a-z]*-[0-9]' || echo "${AWS_DEFAULT_REGION:-ap-southeast-1}")
 
 # Also read region from provider config
@@ -98,12 +100,60 @@ if $DEPLOY_BACKEND; then
     --output json > /dev/null
 
   info "Waiting for ECS service to stabilise (this can take 2–5 minutes)..."
+  # aws ecs wait services-stable only confirms ECS's own view: desired count
+  # reached and the ALB target group's health check passed. It says nothing
+  # about reachability from outside the VPC — DNS, security groups, a
+  # missing HTTPS listener/cert if api_domain is set. If the deployment
+  # circuit breaker trips (repeated task failures) this waiter fails and
+  # `set -e` stops the script here, before the smoke test below ever runs.
+  # Note ECS's automatic rollback on trip re-runs the *same* task definition
+  # revision this script just deployed — since rails_image_tag stays
+  # "latest" (a mutable tag) across deploys, "rollback" re-pulls whatever
+  # :latest now points to, which is the image that just failed. There's no
+  # distinct "previous good image" left to fall back to once :latest has
+  # been overwritten, so a bad push effectively has no automatic safety net.
   aws ecs wait services-stable \
     --cluster "$ECS_CLUSTER" \
     --services "$ECS_SERVICE" \
     --region "$AWS_REGION"
 
-  success "Backend deployed ✔"
+  info "Smoke-testing $API_URL/up..."
+  SMOKE_OK=false
+  for attempt in 1 2 3 4 5; do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$API_URL/up" 2>/dev/null || echo "000")
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      SMOKE_OK=true
+      break
+    fi
+    warn "Attempt $attempt/5: $API_URL/up returned $HTTP_CODE, retrying in 5s..."
+    sleep 5
+  done
+
+  if $SMOKE_OK; then
+    success "Backend deployed ✔ ($API_URL/up → 200)"
+  else
+    # $API_URL differs from the ALB's own DNS name whenever api_domain is
+    # set — and with an external DNS host (Cloudflare, Namecheap; see
+    # README's "Using a domain hosted outside Route 53"), that domain needs
+    # a manually-added CNAME plus ACM cert validation before it resolves at
+    # all. A failure above could mean the app is actually broken, or just
+    # that the custom domain isn't wired up yet — check the ALB directly
+    # (plain HTTP, no domain/cert involved) to tell those two apart before
+    # failing the whole deploy over a DNS step that's still pending.
+    ALB_OK=false
+    if [[ "$API_URL" != "http://$ALB_DNS" ]]; then
+      warn "$API_URL isn't responding — checking the ALB directly to rule out a DNS/cert issue instead of an app issue..."
+      ALB_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$ALB_DNS/up" 2>/dev/null || echo "000")
+      [[ "$ALB_HTTP_CODE" == "200" ]] && ALB_OK=true
+    fi
+
+    if $ALB_OK; then
+      warn "http://$ALB_DNS/up → 200 — the app itself is healthy. $API_URL isn't reachable yet, most likely because its DNS record and/or ACM certificate validation (external DNS host) hasn't finished propagating. See README's external-DNS section; nothing more to do here on the ECS side."
+      success "Backend deployed ✔ (ALB healthy; $API_URL not yet reachable — DNS/cert pending)"
+    else
+      die "ECS reports the service stable, but neither $API_URL/up nor http://$ALB_DNS/up returned 200 after retrying. This looks like a real app problem, not a DNS issue. Check logs: aws logs tail $LOG_GROUP --follow --since 10m --region $AWS_REGION"
+    fi
+  fi
 fi
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
@@ -117,13 +167,15 @@ if $DEPLOY_FRONTEND; then
   VITE_API_URL="$API_URL" npm run build
 
   info "Syncing frontend assets to S3..."
-  # Long-lived cache for hashed assets; no-cache for index.html
-  aws s3 sync dist/ "s3://$FRONTEND_BUCKET" \
+  # Only dist/client/ is deployable (see vite.config.ts) — dist/server/ is
+  # just the build-time prerender driver, nothing here runs a server in
+  # production. Long-lived cache for hashed assets; no-cache for index.html.
+  aws s3 sync dist/client/ "s3://$FRONTEND_BUCKET" \
     --delete \
     --cache-control "public,max-age=31536000,immutable" \
     --exclude "index.html"
 
-  aws s3 cp dist/index.html "s3://$FRONTEND_BUCKET/index.html" \
+  aws s3 cp dist/client/index.html "s3://$FRONTEND_BUCKET/index.html" \
     --cache-control "no-cache,no-store,must-revalidate" \
     --content-type "text/html"
 
