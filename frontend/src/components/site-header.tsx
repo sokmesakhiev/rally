@@ -14,6 +14,11 @@ import {
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useAuth } from "@/lib/use-auth";
 import { VerifyEmailBanner } from "@/components/verify-email-banner";
+// Imported as a module (not a literal "/src/assets/..." string) so Vite
+// processes and hashes it into dist/client/assets/ at build time — a literal
+// path only works with the dev server, which serves src/ directly; the
+// production build never ships src/ at all.
+import logoUrl from "@/assets/logo.png";
 
 // Shared by every top-level nav item (both TanStack Router `Link`s and plain
 // `<a>` section anchors) so hover/focus/active treatment stays consistent.
@@ -57,7 +62,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
         <Link to="/" className="flex items-center gap-2">
           <img
-            src="/src/assets/logo.png"
+            src={logoUrl}
             alt={t("common.rallyLogoAlt")}
             className="relative h-16 cursor-pointer"
           />
