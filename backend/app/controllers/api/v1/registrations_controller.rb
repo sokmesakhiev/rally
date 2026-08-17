@@ -34,6 +34,24 @@ module Api
         render json: { error: "Event not found" }, status: :not_found
       end
 
+      # GET /api/v1/events/:event_id/registrations/export — CSV download for
+      # offline use (check-in sheets, mail merges). Same authorization and
+      # ordering as #event_registrations (organizer only; non-organizers get
+      # a 404, not a 403, same privacy-through-obscurity as everywhere else
+      # in this controller) — see Registrations::ExportCsv for column
+      # details.
+      def export
+        event = current_user.events.find(params[:event_id])
+        csv = Registrations::ExportCsv.call(event: event)
+
+        send_data csv,
+          filename: export_filename(event),
+          type: "text/csv",
+          disposition: "attachment"
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
       # POST /api/v1/events/:event_id/registrations
       # Accepts:
       #   answers:        [{ survey_question_id, answer_text?, answer_options? }]
@@ -174,6 +192,11 @@ module Api
         @event = Event.kept.includes(:event_types).find(params[:event_id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
+      end
+
+      def export_filename(event)
+        slug = event.title.parameterize.presence || "event"
+        "#{slug}-registrations-#{Date.current.iso8601}.csv"
       end
 
       # Builds a clean { error:, code: } payload for a failed registration.

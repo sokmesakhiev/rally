@@ -40,6 +40,7 @@ Rails.application.routes.draw do
       get    "registrations",                  to: "registrations#index"
       post   "events/:event_id/registrations", to: "registrations#create"
       get    "events/:event_id/registrations", to: "registrations#event_registrations"
+      get    "events/:event_id/registrations/export", to: "registrations#export"
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
 
