@@ -1,0 +1,19 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>
+  We've issued a refund of
+  <strong><%= @refund.formatted_amount %> <%= @refund.payment.currency.to_s.upcase %></strong>
+  for <strong><%= @event.title %></strong>.
+</p>
+
+<% if @full %>
+  <p>Your registration for this event has been cancelled as part of this refund.</p>
+<% else %>
+  <p>This was a partial refund — your registration is still confirmed and you're all set for the event.</p>
+<% end %>
+
+<% if @refund.reason.present? %>
+  <p><strong>Note:</strong> <%= @refund.reason %></p>
+<% end %>
+
+<p>— The Rally team</p>

@@ -32,6 +32,10 @@ module Api
           payway_merchant_id: profile&.payway_merchant_id,
           payway_api_key_masked: profile&.payway_api_key_masked,
           payway_configured: profile&.payway_configured? || false,
+          # Not a secret (it's a public key — see Profile#payway_refund_configured?)
+          # so no masking needed, but the frontend only needs to know refund
+          # capability is on, not see the raw PEM block.
+          payway_refund_configured: profile&.payway_refund_configured? || false,
           created_at: profile&.created_at,
           updated_at: profile&.updated_at
         }

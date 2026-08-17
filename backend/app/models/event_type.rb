@@ -15,22 +15,45 @@ class EventType < ApplicationRecord
 
   # How many spots are left (nil = unlimited)
   #
-  # Uses .size, not .count: .count always issues a fresh SELECT COUNT(*),
-  # even when registration_event_types has already been eager-loaded
-  # (.includes(event_types: :registration_event_types)) — which defeats the
-  # whole point of eager-loading and turns any listing of events with types
-  # (e.g. EventsController#index, the public events page) into an N+1.
-  # .size uses the preloaded array when present, and falls back to a COUNT
-  # query only when the association hasn't been loaded (e.g. here from a
-  # single record, like the capacity check on registration create).
+  # Uses .size (via #active_registration_event_types), not .count: .count
+  # always issues a fresh SELECT COUNT(*), even when registration_event_types
+  # has already been eager-loaded (.includes(event_types: {
+  # registration_event_types: :registration })) — which defeats the whole
+  # point of eager-loading and turns any listing of events with types (e.g.
+  # EventsController#index, the public events page) into an N+1. .size uses
+  # the preloaded array when present, and falls back to a COUNT query only
+  # when the association hasn't been loaded (e.g. here from a single record,
+  # like the capacity check on registration create).
   def spots_remaining
     return nil if capacity.nil?
-    taken = registration_event_types.size
+    taken = active_registration_event_types.size
     [ capacity - taken, 0 ].max
   end
 
   def full?
     return false if capacity.nil?
-    registration_event_types.size >= capacity
+    active_registration_event_types.size >= capacity
+  end
+
+  private
+
+  # A cancelled registration (full refund — see Refunds::IssueRefund) no
+  # longer holds this type's slot either, but its RegistrationEventType row
+  # is deliberately kept (not destroyed) so "what type were they registered
+  # for" survives as history. That means the raw join-table count is no
+  # longer the right number — this filters it out.
+  #
+  # When registration_event_types is preloaded, .reject stays in memory (no
+  # query) as long as :registration was *also* preloaded alongside it —
+  # otherwise touching ret.registration below would itself be an N+1. See
+  # the callers' .includes chains (event_types: { registration_event_types:
+  # :registration }}). When unloaded, this issues one filtered COUNT query,
+  # same cost as the plain .size fallback it replaces.
+  def active_registration_event_types
+    if registration_event_types.loaded?
+      registration_event_types.reject { |ret| ret.registration.status == "cancelled" }
+    else
+      registration_event_types.joins(:registration).where.not(registrations: { status: "cancelled" })
+    end
   end
 end

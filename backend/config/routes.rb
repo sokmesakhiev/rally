@@ -65,6 +65,10 @@ Rails.application.routes.draw do
       post "registrations/:registration_id/payments", to: "payments#create"
       get  "payments/:id",                             to: "payments#show"
 
+      # Refunds (organizer or admin — see Refunds::IssueRefund)
+      get  "payments/:payment_id/refunds", to: "refunds#index"
+      post "payments/:payment_id/refunds", to: "refunds#create"
+
       # Payment provider webhooks (no user auth — verified server-to-server)
       post "webhooks/aba_payway", to: "webhooks/aba_payway#create"
 

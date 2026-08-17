@@ -90,8 +90,10 @@ class Event < ApplicationRecord
   # Same predicate Registration#event_not_full validates against — kept here
   # too so WaitlistEntry (and anything else that needs to ask "is this event
   # full right now?") doesn't have to duplicate the capacity.present? guard.
+  # .active excludes cancelled registrations (see Registration::active) so a
+  # fully-refunded registration's spot actually counts as free.
   def full?
-    capacity.present? && registrations.count >= capacity
+    capacity.present? && registrations.active.count >= capacity
   end
 
   # An organizer has uploaded a certificate-of-participation template — see
