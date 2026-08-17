@@ -90,18 +90,29 @@ production:
   # DATABASE_URL is injected by ECS at task startup from Secrets Manager.
   # It takes precedence over all values below when set.
   # Format: postgresql://user:pass@host:5432/dbname
+  #
+  # cache/queue/cable each build their OWN url (same host/user/pass, swapped
+  # database name) rather than inheriting `url:` from primary and adding a
+  # sibling `database:` key. That more obvious-looking approach silently
+  # doesn't work: when a config hash has both `url:` and `database:`, this
+  # Rails/pg version resolves the connection using the URL's embedded
+  # database name and ignores the `database:` override — so all four roles
+  # end up pointing at the exact same physical database (confirmed via
+  # `ActiveRecord::Base.configurations.configs_for(...).database` returning
+  # the same name for "primary" and "queue" in production). Rebuilding the
+  # URL per role sidesteps the ambiguous merge entirely.
   primary: &primary_production
     <<: *default
     url: <%= ENV["DATABASE_URL"] %>
   cache:
-    <<: *primary_production
-    database: backend_production_cache
+    <<: *default
+    url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_cache\\1") %>
     migrations_paths: db/cache_migrate
   queue:
-    <<: *primary_production
-    database: backend_production_queue
+    <<: *default
+    url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_queue\\1") %>
     migrations_paths: db/queue_migrate
   cable:
-    <<: *primary_production
-    database: backend_production_cable
+    <<: *default
+    url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_cable\\1") %>
     migrations_paths: db/cable_migrate

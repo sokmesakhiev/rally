@@ -48,8 +48,22 @@ gem "thruster", require: false
 
 gem "importmap-rails"
 
-gem "solid_queue"
-gem "solid_cache"
+# Production-only: config/environments/production.rb is the only place that
+# sets config.active_job.queue_adapter = :solid_queue / config.cache_store =
+# :solid_cache_store — development/test deliberately use :async and
+# :memory_store instead (development.rb's cache_store override; there's no
+# equivalent queue_adapter override because Rails' own default in dev/test is
+# already :async). Without this group, these gems load unconditionally in
+# every environment, and any SolidQueue::*/SolidCache::* model resolves via
+# ActiveRecord's default (primary) connection instead of the "queue"/"cache"
+# database roles — which only exist in database.yml's production: section —
+# producing a misleading "relation does not exist" for solid_queue_jobs etc.
+# even in a plain development console, since dev's database.yml has no queue
+# database to talk to at all.
+group :production do
+  gem "solid_queue"
+  gem "solid_cache"
+end
 
 gem "dry-validation"
 
