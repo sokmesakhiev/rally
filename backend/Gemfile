@@ -19,8 +19,8 @@ gem "rack-attack", "~> 6.7"
 
 # Error tracking / performance monitoring — see config/initializers/sentry.rb.
 # Inert unless SENTRY_DSN is set, so local/CI runs send nothing.
-gem "sentry-ruby", "~> 5.17"
-gem "sentry-rails", "~> 5.17"
+gem "sentry-ruby", "~> 6.7"
+gem "sentry-rails", "~> 6.7"
 
 # File uploads
 gem "image_processing", "~> 2.0"
@@ -31,7 +31,7 @@ gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 # without needing LibreOffice just to read/write the template itself (only
 # the final ODT→PDF conversion shells out to `soffice`, in
 # Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
-gem "rubyzip", "~> 2.3", require: "zip"
+gem "rubyzip", "~> 3.4", require: "zip"
 
 # CSV results import (Results::ImportCsv) — "csv" moved from a Ruby default
 # gem to a bundled gem as of Ruby 3.4, so under Bundler it needs an explicit
@@ -48,12 +48,34 @@ gem "thruster", require: false
 
 gem "importmap-rails"
 
-gem "solid_queue"
-gem "solid_cache"
+# Production-only: config/environments/production.rb is the only place that
+# sets config.active_job.queue_adapter = :solid_queue / config.cache_store =
+# :solid_cache_store — development/test deliberately use :async and
+# :memory_store instead (development.rb's cache_store override; there's no
+# equivalent queue_adapter override because Rails' own default in dev/test is
+# already :async). Without this group, these gems load unconditionally in
+# every environment, and any SolidQueue::*/SolidCache::* model resolves via
+# ActiveRecord's default (primary) connection instead of the "queue"/"cache"
+# database roles — which only exist in database.yml's production: section —
+# producing a misleading "relation does not exist" for solid_queue_jobs etc.
+# even in a plain development console, since dev's database.yml has no queue
+# database to talk to at all.
+group :production do
+  gem "solid_queue"
+  gem "solid_cache"
+end
 
 gem "dry-validation"
 
+gem "ruby-vips", ">= 2.3"
+
 group :development, :test do
+  # Loads backend/.env (gitignored, see .env.example) into ENV on boot — the
+  # local-dev equivalent of the ENV vars Terraform/ECS injects in production
+  # (JWT_SECRET, ABA_PAYWAY_MERCHANT_ID/API_KEY, RECAPTCHA_SECRET_KEY, etc.).
+  # Never loaded outside development/test, so production always gets its
+  # config exclusively from real ENV vars set by ECS.
+  gem "dotenv-rails"
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", require: false
   gem "brakeman", require: false

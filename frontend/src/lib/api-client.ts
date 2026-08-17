@@ -3,10 +3,24 @@
  * Base URL reads from VITE_API_URL (defaults to http://localhost:3001).
  */
 
-const BASE_URL =
-  (typeof import.meta !== "undefined"
+const RAW_API_URL =
+  typeof import.meta !== "undefined"
     ? (import.meta.env?.VITE_API_URL ?? "http://localhost:3001")
-    : (process.env.API_URL ?? "http://localhost:3001")) + "/api/v1";
+    : (process.env.API_URL ?? "http://localhost:3001");
+
+// VITE_API_URL is concatenated straight into fetch() calls below with no
+// URL normalization — a value missing "http://"/"https://" (e.g. someone
+// building with VITE_API_URL="rally-api.rails-dev.com" instead of
+// "https://rally-api.rails-dev.com") doesn't fail, it silently produces a
+// *relative* URL that the browser resolves against the current page's own
+// origin instead of the API host. Fail loudly at build/boot time instead.
+if (!/^https?:\/\//.test(RAW_API_URL)) {
+  throw new Error(
+    `VITE_API_URL must include a scheme (http:// or https://), got: "${RAW_API_URL}"`,
+  );
+}
+
+const BASE_URL = RAW_API_URL + "/api/v1";
 
 const TOKEN_KEY = "rally_token";
 
@@ -247,11 +261,12 @@ export interface ProfileUpdatePayload {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  async signup(email: string, password: string, displayName?: string) {
+  async signup(email: string, password: string, displayName?: string, recaptchaToken?: string) {
     const res = await api.post<{ token: string; user: ApiUser }>("/auth/signup", {
       email,
       password,
       display_name: displayName,
+      recaptcha_token: recaptchaToken,
     });
     setToken(res.token);
     return res;

@@ -19,6 +19,18 @@ locals {
   custom_api_domain      = var.api_domain != ""
   custom_frontend_domain = var.frontend_domain != ""
 
+  # A custom domain can be hosted anywhere (Cloudflare, Namecheap, etc.) —
+  # route53_zone_id is specifically "is Route 53 the DNS host, so Terraform
+  # can create validation/alias records itself." When a domain is set but
+  # route53_zone_id isn't, we still create the ACM certificate (so a domain
+  # host elsewhere has something to validate), just skip the Route53 record
+  # resources and the aws_acm_certificate_validation wait — the relevant
+  # outputs (api_cert_validation_record, frontend_cert_validation_records)
+  # print what to paste into the external DNS host instead. See README's
+  # "Using a domain hosted outside Route 53" section.
+  use_route53_for_api      = local.custom_api_domain && var.route53_zone_id != ""
+  use_route53_for_frontend = local.custom_frontend_domain && var.route53_zone_id != ""
+
   # Effective JWT secret (variable takes precedence over generated)
   effective_jwt_secret = var.jwt_secret != "" ? var.jwt_secret : random_password.jwt_secret.result
 

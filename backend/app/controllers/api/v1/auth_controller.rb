@@ -6,6 +6,17 @@ module Api
       # POST /api/v1/auth/signup
       def signup
         validate_params_with_schema(AuthSignupRequestSchema) do |validated_params|
+          recaptcha = RecaptchaVerifier.verify(
+            validated_params[:recaptcha_token],
+            action: "signup",
+            remote_ip: request.remote_ip
+          )
+          unless recaptcha.success?
+            render json: { error: "Captcha verification failed. Please try again.", code: "recaptcha_failed" },
+                   status: :unprocessable_entity
+            return
+          end
+
           user = User.new(
             email: validated_params[:email],
             password: validated_params[:password],

@@ -1,5 +1,5 @@
 module JsonWebToken
-  SECRET_KEY = ENV.fetch("JWT_SECRET") { Rails.application.secret_key_base }
+  SECRET_KEY = ENV.fetch("JWT_SECRET").presence || Rails.application.secret_key_base
   ALGORITHM  = "HS256"
   EXPIRY     = 30.days
 

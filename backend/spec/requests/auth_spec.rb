@@ -75,6 +75,45 @@ RSpec.describe "Auth API", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to be_present
     end
+
+    # RecaptchaVerifier itself is stubbed here (not the network call it makes)
+    # — these specs are about AuthController#signup's own handling of the
+    # result, not RecaptchaVerifier's decision logic (see
+    # spec/services/recaptcha_verifier_spec.rb for that). With
+    # RECAPTCHA_SECRET_KEY unset in test (the default), every other example
+    # in this file already exercises the "unconfigured, always passes" path
+    # without needing to stub anything.
+    describe "captcha protection" do
+      it "rejects signup with 422 when the captcha check fails" do
+        allow(RecaptchaVerifier).to receive(:verify)
+          .and_return(RecaptchaVerifier::Result.new(success?: false, score: 0.1, reason: "low_score"))
+
+        expect {
+          post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
+        }.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("recaptcha_failed")
+      end
+
+      it "creates the account when the captcha check passes" do
+        allow(RecaptchaVerifier).to receive(:verify)
+          .and_return(RecaptchaVerifier::Result.new(success?: true, score: 0.9, reason: nil))
+
+        post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["token"]).to be_present
+      end
+
+      it "passes the token and signup action through to the verifier" do
+        expect(RecaptchaVerifier).to receive(:verify)
+          .with("tok", action: "signup", remote_ip: anything)
+          .and_return(RecaptchaVerifier::Result.new(success?: true, score: 0.9, reason: nil))
+
+        post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
+      end
+    end
   end
 
   # ── POST /api/v1/auth/signin ─────────────────────────────────────────────────

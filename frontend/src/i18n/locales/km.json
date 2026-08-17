@@ -172,7 +172,8 @@
       "password": "ពាក្យសម្ងាត់",
       "displayName": "ឈ្មោះបង្ហាញ",
       "displayNamePlaceholder": "Alex Runner",
-      "passwordPlaceholder": "យ៉ាងតិច ៨ តួអក្សរ"
+      "passwordPlaceholder": "យ៉ាងតិច ៨ តួអក្សរ",
+      "confirmPassword": "បញ្ជាក់ពាក្យសម្ងាត់"
     },
     "forgotPassword": "ភ្លេចពាក្យសម្ងាត់?",
     "welcomeBack": "សូមស្វាគមន៍ការត្រឡប់មកវិញ!",
@@ -181,7 +182,8 @@
       "invalidEmail": "សូមបញ្ចូលអ៊ីមែលត្រឹមត្រូវ",
       "passwordTooShort": "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៨ តួអក្សរ",
       "signInFailed": "ការចូលបានបរាជ័យ",
-      "signUpFailed": "ការបង្កើតគណនីបានបរាជ័យ"
+      "signUpFailed": "ការបង្កើតគណនីបានបរាជ័យ",
+      "passwordMismatch": "ពាក្យសម្ងាត់មិនត្រូវគ្នា"
     }
   },
   "forgotPassword": {

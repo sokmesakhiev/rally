@@ -61,6 +61,10 @@ resource "aws_s3_bucket_policy" "frontend" {
 }
 
 # ── ACM Certificate for CloudFront (MUST be in us-east-1) ─────────────────────
+# Created whenever frontend_domain is set, regardless of DNS host — see
+# use_route53_for_frontend in locals.tf. With an external DNS host, the
+# frontend_cert_validation_records output tells you what CNAMEs to add by
+# hand (one per SAN: the apex and "www.").
 
 resource "aws_acm_certificate" "frontend" {
   count    = local.custom_frontend_domain ? 1 : 0
@@ -76,7 +80,7 @@ resource "aws_acm_certificate" "frontend" {
 }
 
 resource "aws_route53_record" "frontend_cert_validation" {
-  for_each = local.custom_frontend_domain ? {
+  for_each = local.use_route53_for_frontend ? {
     for dvo in aws_acm_certificate.frontend[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
@@ -93,7 +97,7 @@ resource "aws_route53_record" "frontend_cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "frontend" {
-  count    = local.custom_frontend_domain ? 1 : 0
+  count    = local.use_route53_for_frontend ? 1 : 0
   provider = aws.us_east_1
 
   certificate_arn         = aws_acm_certificate.frontend[0].arn
@@ -163,15 +167,23 @@ resource "aws_cloudfront_distribution" "frontend" {
   # provider's exactly-one-of validation on the other branch.
   viewer_certificate {
     cloudfront_default_certificate = local.custom_frontend_domain ? null : true
-    acm_certificate_arn            = local.custom_frontend_domain ? aws_acm_certificate_validation.frontend[0].certificate_arn : null
-    ssl_support_method             = local.custom_frontend_domain ? "sni-only" : null
-    minimum_protocol_version       = local.custom_frontend_domain ? "TLSv1.2_2021" : null
+    # Same fallback as the ALB listener in ecs.tf: without Route 53, attach
+    # the raw (possibly still-validating) cert directly rather than waiting
+    # on aws_acm_certificate_validation, which has nothing to wait on.
+    acm_certificate_arn = local.custom_frontend_domain ? (
+      local.use_route53_for_frontend ? aws_acm_certificate_validation.frontend[0].certificate_arn : aws_acm_certificate.frontend[0].arn
+    ) : null
+    ssl_support_method       = local.custom_frontend_domain ? "sni-only" : null
+    minimum_protocol_version = local.custom_frontend_domain ? "TLSv1.2_2021" : null
   }
 }
 
-# Route 53 records for the custom domain
+# Route 53 records for the custom domain. Only created when Route 53 owns the
+# zone — with an external DNS host, add CNAMEs for frontend_domain and
+# "www.<frontend_domain>" pointing at the cloudfront_domain output instead
+# (see README).
 resource "aws_route53_record" "frontend" {
-  count = local.custom_frontend_domain ? 1 : 0
+  count = local.use_route53_for_frontend ? 1 : 0
 
   zone_id = var.route53_zone_id
   name    = var.frontend_domain
@@ -185,7 +197,7 @@ resource "aws_route53_record" "frontend" {
 }
 
 resource "aws_route53_record" "frontend_www" {
-  count = local.custom_frontend_domain ? 1 : 0
+  count = local.use_route53_for_frontend ? 1 : 0
 
   zone_id = var.route53_zone_id
   name    = "www.${var.frontend_domain}"
