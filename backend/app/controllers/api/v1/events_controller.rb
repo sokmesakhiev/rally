@@ -23,7 +23,7 @@ module Api
           page     = validated_params[:page] || 1
           per_page = validated_params[:per_page] || EventIndexRequestSchema::DEFAULT_PER_PAGE
 
-          scope = Event.published.upcoming
+          scope = Event.published.upcoming.kept
             .search(validated_params[:q])
             .in_category(validated_params[:category])
 
@@ -51,7 +51,7 @@ module Api
 
       # GET /api/v1/events/my — current user's created events
       def my_events
-        events = current_user.events.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
+        events = current_user.events.kept.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
         render json: {
           events: events.map { |e|
             # Ruby-side filter, not e.registrations.active.size — .active is a
@@ -97,9 +97,11 @@ module Api
         end
       end
 
-      # DELETE /api/v1/events/:id
+      # DELETE /api/v1/events/:id — soft-delete (see Event#discard!); the
+      # event, its registrations, and its waitlist entries are hidden, not
+      # destroyed.
       def destroy
-        @event.destroy!
+        @event.discard!
         render json: { message: "Event deleted" }
       end
 
@@ -114,7 +116,7 @@ module Api
       private
 
       def set_event
-        @event = Event.find(params[:id])
+        @event = Event.kept.find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
       end

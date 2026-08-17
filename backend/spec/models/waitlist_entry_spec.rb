@@ -86,4 +86,19 @@ RSpec.describe WaitlistEntry, type: :model do
       expect(WaitlistEntry.waiting).not_to include(promoted, cancelled)
     end
   end
+
+  # ── Soft-delete ──────────────────────────────────────────────────────────────
+  describe "#discard!" do
+    it "sets deleted_at and status to cancelled, without destroying the row" do
+      event = create(:event, :full)
+      entry = create(:waitlist_entry, event: event)
+
+      expect { entry.discard! }.not_to change(WaitlistEntry, :count)
+      expect(entry.discarded?).to be(true)
+      expect(entry.status).to eq("cancelled")
+      expect(WaitlistEntry.kept).not_to include(entry)
+      # already excluded via the existing :waiting scope, since discard! sets status too
+      expect(WaitlistEntry.waiting).not_to include(entry)
+    end
+  end
 end

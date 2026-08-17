@@ -23,7 +23,7 @@ module Api
       # GET /api/v1/events/:event_id/registrations — organizer view of participants
       def event_registrations
         event = current_user.events.find(params[:event_id])
-        regs = event.registrations
+        regs = event.registrations.kept
           .includes({ user: :profile }, :event_types, :certificate, :result)
           .order(created_at: :asc)
 
@@ -104,7 +104,9 @@ module Api
         render json: { error: "Registration not found" }, status: :not_found
       end
 
-      # DELETE /api/v1/registrations/:id — organizer removes participant
+      # DELETE /api/v1/registrations/:id — organizer removes participant.
+      # Soft-delete (see Registration#discard!) — the Payment/Refund history
+      # (if any) stays intact rather than being wiped out.
       def destroy
         registration = Registration.find(params[:id])
         event = registration.event
@@ -114,11 +116,10 @@ module Api
           return
         end
 
-        registration.destroy!
+        registration.discard!
         # Removing a participant may have freed a spot (event- or
         # type-level) — offer it to whoever's been waiting longest. See
-        # Waitlists::PromoteNext; the not-yet-built refund workflow should
-        # call this too once it exists.
+        # Waitlists::PromoteNext; Refunds::IssueRefund calls this too.
         Waitlists::PromoteNext.call(event)
         render json: { message: "Participant removed" }
       rescue ActiveRecord::RecordNotFound
@@ -170,7 +171,7 @@ module Api
       private
 
       def set_event
-        @event = Event.includes(:event_types).find(params[:event_id])
+        @event = Event.kept.includes(:event_types).find(params[:event_id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
       end

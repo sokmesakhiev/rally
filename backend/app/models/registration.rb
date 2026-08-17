@@ -19,6 +19,17 @@ class Registration < ApplicationRecord
   # to agree on this same definition of "still holding a spot".
   scope :active, -> { where.not(status: "cancelled") }
 
+  # Soft-delete — see RegistrationsController#destroy ("organizer removes
+  # participant"), the main caller. Deliberately does NOT cascade-destroy
+  # payment_answers/registration_event_types/payments/certificate/result the
+  # way the old hard-delete's `dependent: :destroy` chain above did — that
+  # was silently wiping a participant's own financial audit trail (Payments,
+  # and now Refunds) the moment an organizer removed them, the same class of
+  # problem the refund feature was built to avoid. #discard! leaves all of
+  # that attached to the (now-hidden) registration instead.
+  scope :kept, -> { where(deleted_at: nil) }
+  scope :discarded, -> { where.not(deleted_at: nil) }
+
   validates :status, inclusion: { in: STATUSES }
   validates :payment_status, inclusion: { in: PAYMENT_STATUSES }
   validates :user_id, uniqueness: { scope: :event_id, message: "already registered for this event" }
@@ -61,6 +72,23 @@ class Registration < ApplicationRecord
       payment_status: full ? "refunded" : "partially_refunded",
       status: full ? "cancelled" : status
     )
+  end
+
+  # Soft-delete: sets status to "cancelled" too (same value a full refund
+  # sets — see #apply_refund!) so the existing :active scope, and everything
+  # built on it (Event#full?, #event_not_full below, EventType#full?), keeps
+  # working unchanged — "does this hold a capacity slot" and "was this row
+  # discarded" both collapse to the same status check. deleted_at is what
+  # distinguishes *why* (moderation removal vs. refund) for anything that
+  # needs to know, e.g. RegistrationsController#event_registrations hiding
+  # discarded rows from the organizer's participant list while still
+  # showing refund-cancelled ones.
+  def discard!
+    update!(deleted_at: Time.current, status: "cancelled")
+  end
+
+  def discarded?
+    deleted_at.present?
   end
 
   private

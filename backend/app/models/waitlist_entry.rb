@@ -18,6 +18,22 @@ class WaitlistEntry < ApplicationRecord
 
   scope :waiting, -> { where(status: "waiting") }
 
+  # Soft-delete — see Event#discard!, the only current caller (cascading
+  # when an organizer/admin discards the whole event). Setting status to
+  # "cancelled" alongside deleted_at means the existing :waiting scope
+  # already excludes discarded entries with no extra filtering needed at
+  # call sites — same pattern as Registration#discard!.
+  scope :kept, -> { where(deleted_at: nil) }
+  scope :discarded, -> { where.not(deleted_at: nil) }
+
+  def discard!
+    update!(deleted_at: Time.current, status: "cancelled")
+  end
+
+  def discarded?
+    deleted_at.present?
+  end
+
   private
 
   def not_already_registered

@@ -104,6 +104,9 @@ Rails.application.routes.draw do
         delete "events/:id",           to: "events#destroy"
 
         get "reports", to: "reports#index"
+
+        # Queryable audit trail — see AdminAction, BaseController#log_admin_action.
+        get "admin_actions", to: "admin_actions#index"
       end
     end
   end

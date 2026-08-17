@@ -47,6 +47,27 @@ RSpec.describe Survey do
       expect(event.reload.survey_id).to be_nil
     end
   end
+
+  # ── Soft-delete ──────────────────────────────────────────────────────────────
+  describe "#discard!" do
+    it "sets deleted_at without destroying the row or its questions" do
+      survey = creator.surveys.create!(title: "Doomed")
+      survey.survey_questions.create!(question_text: "Q?", question_type: "text", position: 0)
+
+      expect { survey.discard! }.not_to change(Survey, :count)
+      expect(survey.discarded?).to be(true)
+      expect(Survey.kept).not_to include(survey)
+      expect(SurveyQuestion.exists?(survey.survey_questions.first.id)).to be(true)
+    end
+
+    it "nullifies the attached event's survey_id, same as a real destroy would" do
+      survey = creator.surveys.create!(title: "Attached")
+      event = create(:event, creator: creator, survey: survey)
+
+      expect { survey.discard! }.not_to change(Event, :count)
+      expect(event.reload.survey_id).to be_nil
+    end
+  end
 end
 
 RSpec.describe SurveyQuestion do
