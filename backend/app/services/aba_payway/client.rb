@@ -21,13 +21,27 @@ module AbaPayway
   class Client
     GENERATE_QR_PATH = "/api/payment-gateway/v1/payments/generate-qr"
     CHECK_TRANSACTION_PATH = "/api/payment-gateway/v1/payments/check-transaction-2"
+    # Note: this is a different base path than the other two (/payment-gateway/
+    # vs /merchant-portal/merchant-access/) — that's ABA's own API layout, not
+    # a typo. See https://developer.payway.com.kh/refund-api-14530821e0.
+    REFUND_PATH = "/api/merchant-portal/merchant-access/online-transaction/refund"
+
+    # RSA public key chunk size for #refund's merchant_auth encryption — see
+    # that method. 117 bytes is what ABA's own PHP sample uses (PKCS#1 v1.5
+    # padding overhead is 11 bytes, so this matches a 1024-bit/128-byte RSA
+    # key: 128 - 11 = 117). If ABA ever issues a larger key this would need
+    # to change, but there's no way to detect that up front — it's baked
+    # into their sample code, not derived from the key itself.
+    REFUND_ENCRYPTION_CHUNK_SIZE = 117
 
     def initialize(merchant_id: self.class.config.merchant_id,
                    api_key: self.class.config.api_key,
-                   base_url: self.class.config.base_url)
+                   base_url: self.class.config.base_url,
+                   rsa_public_key: self.class.config.rsa_public_key)
       @merchant_id = merchant_id
       @api_key = api_key
       @base_url = base_url.to_s.chomp("/")
+      @rsa_public_key = rsa_public_key
     end
 
     class << self
@@ -53,7 +67,15 @@ module AbaPayway
       def for_event(event)
         profile = event.creator&.profile
         if profile&.payway_configured?
-          new(merchant_id: profile.payway_merchant_id, api_key: profile.payway_api_key)
+          # payway_rsa_public_key may still be nil here (it's optional even
+          # once payway_configured? is true — see Profile#payway_refund_configured?);
+          # #refund raises a clear ConfigurationError if it's actually needed
+          # and missing, rather than silently falling back to Rally's own key
+          # (which would send the organizer's tran_id to the platform's RSA
+          # key — meaningless, since ABA ties merchant_auth's encryption to
+          # whichever merchant_id/api_key pair is presented).
+          new(merchant_id: profile.payway_merchant_id, api_key: profile.payway_api_key,
+              rsa_public_key: profile.payway_rsa_public_key)
         else
           new
         end
@@ -127,6 +149,32 @@ module AbaPayway
       })
     end
 
+    # Issues a full or partial refund against a COMPLETED (our "approved")
+    # transaction, within 30 days of its creation — both constraints are
+    # enforced by ABA, not here; a violation comes back as a normal
+    # non-"00" status response (e.g. PTL37/PTL57/PTL58), not an exception,
+    # same as generate_qr's decline path — see
+    # https://developer.payway.com.kh/refund-api-14530821e0.
+    #
+    # Unlike generate_qr/check_transaction, this needs an RSA public key
+    # (provided by ABA Bank, separate from merchant_id/api_key) to encrypt
+    # merchant_auth — see #ensure_refund_configured!.
+    def refund(tran_id:, amount_cents:, currency:)
+      ensure_refund_configured!
+
+      req_time = format_time(Time.now.utc)
+      amount = format_amount(amount_cents, currency)
+      merchant_auth = build_merchant_auth(tran_id: tran_id, amount: amount)
+      hash = sign(req_time, @merchant_id, merchant_auth)
+
+      post_json(REFUND_PATH, {
+        request_time: req_time,
+        merchant_id: @merchant_id,
+        merchant_auth: merchant_auth,
+        hash: hash
+      })
+    end
+
     private
 
     def ensure_configured!
@@ -134,6 +182,53 @@ module AbaPayway
       raise ConfigurationError,
         "ABA PayWay merchant_id / api_key are not configured — set ABA_PAYWAY_MERCHANT_ID / " \
         "ABA_PAYWAY_API_KEY (read by config/payway.yml)"
+    end
+
+    def ensure_refund_configured!
+      ensure_configured!
+      return if @rsa_public_key.present?
+      raise ConfigurationError,
+        "ABA PayWay rsa_public_key is not configured — set ABA_PAYWAY_RSA_PUBLIC_KEY (read by " \
+        "config/payway.yml), or the organizer's own Profile#payway_rsa_public_key. Refunds can " \
+        "still be recorded manually (Refunds::IssueRefund method: \"manual\") without this."
+    end
+
+    # merchant_auth = base64(RSA-public-key-encrypt({mc_id, tran_id,
+    # refund_amount}) in <=117-byte chunks, concatenated). RSA can only
+    # encrypt a block smaller than the key size in one shot (PKCS#1 v1.5
+    # padding leaves 11 bytes of overhead), so a payload longer than that has
+    # to be split, encrypted chunk-by-chunk, and the ciphertext chunks
+    # concatenated — mirroring ABA's own PHP sample byte-for-byte, since
+    # there's no cross-language standard for "how RSA-encrypt a >117-byte
+    # JSON blob" beyond matching what the receiving end (ABA) expects to
+    # decrypt.
+    #
+    # PKCS1_PADDING (not OAEP) is passed *explicitly* below rather than left
+    # as the implicit default — brakeman (WeakRSAKey) flags PKCS1 as
+    # insecure and normally OAEP would be the right fix, but this isn't a
+    # local design choice: ABA's own reference implementation
+    # (https://developer.payway.com.kh/refund-api-14530821e0, "RSA
+    # Encryption (PHP)") calls openssl_public_encrypt() with PHP's default
+    # padding, which is PKCS1. ABA's server-side decryption is built against
+    # that, so switching to OAEP here wouldn't be "more secure", it would
+    # just make every refund fail to decrypt. See config/brakeman.ignore for
+    # the corresponding suppression — add it via `bin/brakeman -I`, don't
+    # hand-edit the fingerprint.
+    def build_merchant_auth(tran_id:, amount:)
+      payload = { mc_id: @merchant_id, tran_id: tran_id, refund_amount: amount }.to_json
+      rsa = OpenSSL::PKey::RSA.new(@rsa_public_key)
+
+      encrypted = +""
+      remaining = payload.dup
+      until remaining.empty?
+        chunk = remaining.byteslice(0, REFUND_ENCRYPTION_CHUNK_SIZE)
+        remaining = remaining.byteslice(REFUND_ENCRYPTION_CHUNK_SIZE..) || ""
+        encrypted << rsa.public_encrypt(chunk, OpenSSL::PKey::RSA::PKCS1_PADDING)
+      end
+
+      Base64.strict_encode64(encrypted)
+    rescue OpenSSL::PKey::RSAError => e
+      raise ConfigurationError, "ABA PayWay rsa_public_key is invalid or malformed: #{e.message}"
     end
 
     def format_time(time)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_02_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -126,6 +126,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_020000) do
     t.string "provider", default: "aba_payway", null: false
     t.text "qr_string"
     t.jsonb "raw_response", default: {}, null: false
+    t.integer "refunded_amount_cents", default: 0, null: false
     t.uuid "registration_id", null: false
     t.string "status", default: "pending", null: false
     t.string "tran_id", null: false
@@ -141,9 +142,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_020000) do
     t.string "display_name"
     t.text "payway_api_key"
     t.string "payway_merchant_id"
+    t.text "payway_rsa_public_key"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_profiles_on_user_id", unique: true
+  end
+
+  create_table "refunds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.uuid "initiated_by_id", null: false
+    t.uuid "payment_id", null: false
+    t.jsonb "raw_response", default: {}, null: false
+    t.text "reason"
+    t.string "refund_method", default: "gateway", null: false
+    t.datetime "refunded_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["initiated_by_id"], name: "index_refunds_on_initiated_by_id"
+    t.index ["payment_id"], name: "index_refunds_on_payment_id"
   end
 
   create_table "registration_answers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -258,6 +275,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_02_020000) do
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "payments", "registrations"
   add_foreign_key "profiles", "users"
+  add_foreign_key "refunds", "payments"
+  add_foreign_key "refunds", "users", column: "initiated_by_id"
   add_foreign_key "registration_answers", "registrations"
   add_foreign_key "registration_answers", "survey_questions"
   add_foreign_key "registration_event_types", "event_types"

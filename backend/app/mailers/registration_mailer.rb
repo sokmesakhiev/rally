@@ -18,6 +18,21 @@ class RegistrationMailer < ApplicationMailer
     mail(to: @user.email, subject: "Payment received for #{@event.title}")
   end
 
+  # Sent by Refunds::IssueRefund after a refund succeeds (either method —
+  # gateway or manual). @full mirrors what actually happened to the
+  # registration (Registration#apply_refund!'s `full:` argument): a full
+  # refund cancels the registration, so the email should say so plainly
+  # rather than implying they're still registered.
+  def refund_issued(registration, refund)
+    @registration = registration
+    @event = registration.event
+    @user = registration.user
+    @refund = refund
+    @full = registration.payment_status == "refunded"
+
+    mail(to: @user.email, subject: "Refund issued for #{@event.title}")
+  end
+
   # Sent by Waitlists::PromoteNext when a waitlisted participant is
   # auto-promoted into a real registration after a spot opened up.
   # Deliberately its own template rather than reusing #confirmation — the
