@@ -71,7 +71,7 @@ jobs:
           # be embedded in the bundle" status as VITE_GOOGLE_CLIENT_ID, so
           # `vars.` not `secrets.`. Pair with the backend's recaptcha_secret_key
           # (terraform.tfvars) — see RecaptchaVerifier.
-          VITE_RECAPTCHA_SITE_KEY: ${{ vars.VITE_RECAPTCHA_SITE_KEY }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: production
           VITE_GIT_SHA: ${{ github.sha }}
@@ -116,7 +116,7 @@ jobs:
     # is also what runs migrations against production.
     environment:
       name: production
-      url: ${{ vars.BACKEND_URL }}
+      url: ${{ vars.VITE_API_URL }}
 
     defaults:
       run:
