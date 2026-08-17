@@ -48,7 +48,13 @@ ECS_CLUSTER=$(tf_output ecs_cluster_name)
 ECS_SERVICE=$(tf_output ecs_service_name)
 FRONTEND_BUCKET=$(tf_output frontend_bucket_name)
 CLOUDFRONT_ID=$(tf_output cloudfront_distribution_id)
-API_URL="rally-api.rails-dev.com"
+# Sourced from Terraform's own "api_url" output (which always includes the
+# scheme — "https://${var.api_domain}" or the plain ALB URL as a fallback)
+# rather than hardcoded here. A hardcoded, scheme-less value previously fed
+# straight into VITE_API_URL below, which api-client.ts concatenates into
+# fetch() calls with no normalization — producing a relative URL resolved
+# against the frontend's own origin instead of the API host.
+API_URL=$(tf_output api_url)
 LOG_GROUP=$(tf_output cloudwatch_log_group)
 ALB_DNS=$(tf_output alb_dns_name)
 AWS_REGION=$(terraform output -raw alb_dns_name 2>/dev/null | grep -o 'us-[a-z]*-[0-9]' || echo "${AWS_DEFAULT_REGION:-ap-southeast-1}")
