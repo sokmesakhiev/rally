@@ -150,6 +150,20 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["registrations"].map { |r| r["id"] }).to include(reg.id)
     end
 
+    it "excludes registrations the organizer has already removed" do
+      removed = create(:registration, event: event)
+      removed.discard!
+
+      get "/api/v1/events/#{event.id}/registrations",
+          headers: auth_headers(organizer),
+          as: :json
+
+      expect(response).to have_http_status(:ok)
+      ids = json["registrations"].map { |r| r["id"] }
+      expect(ids).to include(reg.id)
+      expect(ids).not_to include(removed.id)
+    end
+
     it "returns 404 when a non-organizer tries to access the list" do
       get "/api/v1/events/#{event.id}/registrations",
           headers: auth_headers(other),
@@ -220,13 +234,19 @@ RSpec.describe "Registrations API", type: :request do
     let!(:event) { create(:event, creator: organizer) }
     let!(:reg)   { create(:registration, event: event) }
 
-    it "allows the organizer to remove a participant" do
+    it "soft-deletes the registration rather than destroying the row" do
+      # See Registration#discard! — the row (and any Payment/Refund history)
+      # survives, just hidden and marked cancelled so it frees its capacity
+      # slot.
       delete "/api/v1/registrations/#{reg.id}",
              headers: auth_headers(organizer),
              as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(Registration.find_by(id: reg.id)).to be_nil
+      expect(Registration.kept.find_by(id: reg.id)).to be_nil
+      reg.reload
+      expect(reg.discarded?).to be(true)
+      expect(reg.status).to eq("cancelled")
     end
 
     it "returns 403 when a non-organizer tries to remove" do

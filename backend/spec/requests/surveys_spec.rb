@@ -137,11 +137,12 @@ RSpec.describe "Surveys API", type: :request do
   describe "DELETE /api/v1/surveys/:id" do
     let!(:survey) { create(:user).surveys.create!(title: "Doomed") }
 
-    it "deletes the survey" do
+    it "soft-deletes the survey rather than destroying the row" do
       delete "/api/v1/surveys/#{survey.id}", headers: auth_headers(survey.creator), as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(Survey.find_by(id: survey.id)).to be_nil
+      expect(Survey.kept.find_by(id: survey.id)).to be_nil
+      expect(survey.reload.discarded?).to be(true)
     end
   end
 end

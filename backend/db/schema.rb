@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -41,6 +41,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "admin_actions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "action", null: false
+    t.uuid "admin_id", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.uuid "target_id", null: false
+    t.string "target_type", null: false
+    t.index ["action"], name: "index_admin_actions_on_action"
+    t.index ["admin_id"], name: "index_admin_actions_on_admin_id"
+    t.index ["target_type", "target_id"], name: "index_admin_actions_on_target_type_and_target_id"
   end
 
   create_table "certificates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -94,6 +106,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
     t.datetime "created_at", null: false
     t.uuid "creator_id", null: false
     t.string "currency", default: "usd", null: false
+    t.datetime "deleted_at"
     t.text "description"
     t.datetime "end_at"
     t.boolean "is_published", default: false, null: false
@@ -110,6 +123,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
     t.datetime "updated_at", null: false
     t.index ["category"], name: "index_events_on_category"
     t.index ["creator_id"], name: "index_events_on_creator_id"
+    t.index ["deleted_at"], name: "index_events_on_deleted_at"
     t.index ["is_published", "start_at"], name: "index_events_on_is_published_and_start_at"
     t.index ["is_published"], name: "index_events_on_is_published"
     t.index ["start_at"], name: "index_events_on_start_at"
@@ -189,11 +203,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
     t.integer "amount_paid_cents", default: 0, null: false
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
+    t.datetime "deleted_at"
     t.uuid "event_id", null: false
     t.string "payment_status", default: "unpaid", null: false
     t.string "status", default: "confirmed", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
     t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true
     t.index ["event_id"], name: "index_registrations_on_event_id"
     t.index ["user_id"], name: "index_registrations_on_user_id"
@@ -224,9 +240,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
   create_table "surveys", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "creator_id", null: false
+    t.datetime "deleted_at"
     t.string "title", default: "Registration Survey", null: false
     t.datetime "updated_at", null: false
     t.index ["creator_id"], name: "index_surveys_on_creator_id"
+    t.index ["deleted_at"], name: "index_surveys_on_deleted_at"
   end
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -254,11 +272,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.datetime "deleted_at"
     t.uuid "event_id", null: false
     t.jsonb "event_type_ids", default: [], null: false
     t.string "status", default: "waiting", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.index ["deleted_at"], name: "index_waitlist_entries_on_deleted_at"
     t.index ["event_id", "created_at"], name: "index_waitlist_entries_on_event_and_created_at"
     t.index ["event_id", "user_id"], name: "index_waitlist_entries_on_event_and_user_when_waiting", unique: true, where: "((status)::text = 'waiting'::text)"
     t.index ["event_id"], name: "index_waitlist_entries_on_event_id"
@@ -267,6 +287,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000002) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "admin_actions", "users", column: "admin_id"
   add_foreign_key "certificates", "registrations"
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"

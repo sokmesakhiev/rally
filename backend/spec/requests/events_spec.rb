@@ -445,11 +445,15 @@ RSpec.describe "Events API", type: :request do
   describe "DELETE /api/v1/events/:id" do
     let!(:event) { create(:event, creator: user) }
 
-    it "deletes the event" do
+    it "soft-deletes the event rather than destroying the row" do
+      # See Event#discard! — the row (and its registrations/payments)
+      # survives, just hidden from normal reads.
       delete "/api/v1/events/#{event.id}", headers: auth_headers(user), as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(Event.find_by(id: event.id)).to be_nil
+      expect(Event.kept.find_by(id: event.id)).to be_nil
+      expect(event.reload.discarded?).to be(true)
+      expect(event.is_published).to be(false)
     end
 
     it "returns 403 when a different user tries to delete" do

@@ -53,11 +53,12 @@ module Api
         end
 
         # DELETE /api/v1/admin/events/:id
-        # Destructive and irreversible: cascades to registrations, payments,
-        # and survey answers (see the dependent: :destroy chain on Event).
-        # Requires an explicit confirm flag so it can't be reached by a stray
-        # DELETE, and refuses outright once money has changed hands — a paid
-        # event needs a refund decision first, not a silent data deletion.
+        # Soft-delete (see Event#discard!) — hides the event, its
+        # registrations, and its waitlist entries rather than destroying
+        # them. Still requires an explicit confirm flag so it can't be
+        # reached by a stray DELETE, and still refuses outright once money
+        # has changed hands — a paid event needs a refund decision first,
+        # not a silent removal from listings.
         def destroy
           event = Event.find(params[:id])
 
@@ -80,7 +81,7 @@ module Api
           end
 
           log_admin_action("destroy_event", event)
-          event.destroy!
+          event.discard!
 
           render json: { message: "Event deleted" }
         rescue ActiveRecord::RecordNotFound
@@ -102,6 +103,7 @@ module Api
             price_cents: event.price_cents,
             currency: event.currency,
             registrations_count: event.registrations.size,
+            deleted: event.discarded?,
             creator: {
               id: event.creator_id,
               email: event.creator.email,

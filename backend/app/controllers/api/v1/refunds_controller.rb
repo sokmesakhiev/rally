@@ -34,7 +34,9 @@ module Api
             reason: refund_params[:reason]
           ).call
 
-          log_admin_action(payment) if current_user.admin? && !organizer?(payment)
+          if current_user.admin? && !organizer?(payment)
+            AdminAction.log!(admin: current_user, action: "issue_refund", target: payment)
+          end
 
           case result.status
           when :succeeded
@@ -67,16 +69,6 @@ module Api
 
       def organizer?(payment)
         payment.registration.event.creator_id == current_user.id
-      end
-
-      # Miniature version of Api::V1::Admin::BaseController#log_admin_action
-      # — duplicated rather than reached into from here, since this
-      # controller is reachable by organizers too, not just admins, and
-      # doesn't otherwise inherit from the Admin:: namespace.
-      def log_admin_action(payment)
-        Rails.logger.info(
-          "[admin] actor=#{current_user.id} action=issue_refund target=Payment##{payment.id}"
-        )
       end
 
       def refund_json(refund)
