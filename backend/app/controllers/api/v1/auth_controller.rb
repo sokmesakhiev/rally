@@ -2,7 +2,7 @@ module Api
   module V1
     class AuthController < BaseController
       include UserPayload
-      
+
       before_action :authenticate_user!, only: [ :me, :change_password, :change_email, :delete_account ]
 
       # POST /api/v1/auth/signup

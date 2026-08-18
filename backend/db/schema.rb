@@ -21,8 +21,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "name", null: false
     t.bigint "record_id", null: false
     t.string "record_type", null: false
-    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
-    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+    t.index [ "blob_id" ], name: "index_active_storage_attachments_on_blob_id"
+    t.index [ "record_type", "record_id", "name", "blob_id" ], name: "index_active_storage_attachments_uniqueness", unique: true
   end
 
   create_table "active_storage_blobs", force: :cascade do |t|
@@ -34,13 +34,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "key", null: false
     t.text "metadata"
     t.string "service_name", null: false
-    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+    t.index [ "key" ], name: "index_active_storage_blobs_on_key", unique: true
   end
 
   create_table "active_storage_variant_records", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
-    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+    t.index [ "blob_id", "variation_digest" ], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
   create_table "admin_actions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -50,9 +50,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.jsonb "metadata", default: {}, null: false
     t.uuid "target_id", null: false
     t.string "target_type", null: false
-    t.index ["action"], name: "index_admin_actions_on_action"
-    t.index ["admin_id"], name: "index_admin_actions_on_admin_id"
-    t.index ["target_type", "target_id"], name: "index_admin_actions_on_target_type_and_target_id"
+    t.index [ "action" ], name: "index_admin_actions_on_action"
+    t.index [ "admin_id" ], name: "index_admin_actions_on_admin_id"
+    t.index [ "target_type", "target_id" ], name: "index_admin_actions_on_target_type_and_target_id"
   end
 
   create_table "certificates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -60,7 +60,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "file_url"
     t.uuid "registration_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["registration_id"], name: "index_certificates_on_registration_id", unique: true
+    t.index [ "registration_id" ], name: "index_certificates_on_registration_id", unique: true
   end
 
   create_table "event_plan_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -79,9 +79,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "tran_id", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["event_id", "status"], name: "index_event_plan_payments_on_event_id_and_status"
-    t.index ["event_id"], name: "index_event_plan_payments_on_event_id"
-    t.index ["tran_id"], name: "index_event_plan_payments_on_tran_id", unique: true
+    t.index [ "event_id", "status" ], name: "index_event_plan_payments_on_event_id_and_status"
+    t.index [ "event_id" ], name: "index_event_plan_payments_on_event_id"
+    t.index [ "tran_id" ], name: "index_event_plan_payments_on_tran_id", unique: true
   end
 
   create_table "event_types", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -93,8 +93,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.integer "position", default: 0, null: false
     t.integer "price_cents"
     t.datetime "updated_at", null: false
-    t.index ["event_id", "position"], name: "index_event_types_on_event_id_and_position"
-    t.index ["event_id"], name: "index_event_types_on_event_id"
+    t.index [ "event_id", "position" ], name: "index_event_types_on_event_id_and_position"
+    t.index [ "event_id" ], name: "index_event_types_on_event_id"
   end
 
   create_table "events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -121,13 +121,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.uuid "survey_id"
     t.string "title", null: false
     t.datetime "updated_at", null: false
-    t.index ["category"], name: "index_events_on_category"
-    t.index ["creator_id"], name: "index_events_on_creator_id"
-    t.index ["deleted_at"], name: "index_events_on_deleted_at"
-    t.index ["is_published", "start_at"], name: "index_events_on_is_published_and_start_at"
-    t.index ["is_published"], name: "index_events_on_is_published"
-    t.index ["start_at"], name: "index_events_on_start_at"
-    t.index ["survey_id"], name: "index_events_on_survey_id"
+    t.index [ "category" ], name: "index_events_on_category"
+    t.index [ "creator_id" ], name: "index_events_on_creator_id"
+    t.index [ "deleted_at" ], name: "index_events_on_deleted_at"
+    t.index [ "is_published", "start_at" ], name: "index_events_on_is_published_and_start_at"
+    t.index [ "is_published" ], name: "index_events_on_is_published"
+    t.index [ "start_at" ], name: "index_events_on_start_at"
+    t.index [ "survey_id" ], name: "index_events_on_survey_id"
   end
 
   create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -145,9 +145,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "status", default: "pending", null: false
     t.string "tran_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["registration_id", "status"], name: "index_payments_on_registration_id_and_status"
-    t.index ["registration_id"], name: "index_payments_on_registration_id"
-    t.index ["tran_id"], name: "index_payments_on_tran_id", unique: true
+    t.index [ "registration_id", "status" ], name: "index_payments_on_registration_id_and_status"
+    t.index [ "registration_id" ], name: "index_payments_on_registration_id"
+    t.index [ "tran_id" ], name: "index_payments_on_tran_id", unique: true
   end
 
   create_table "profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -162,7 +162,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.text "payway_rsa_public_key"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["user_id"], name: "index_profiles_on_user_id", unique: true
+    t.index [ "user_id" ], name: "index_profiles_on_user_id", unique: true
   end
 
   create_table "refunds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -176,8 +176,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.datetime "refunded_at"
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
-    t.index ["initiated_by_id"], name: "index_refunds_on_initiated_by_id"
-    t.index ["payment_id"], name: "index_refunds_on_payment_id"
+    t.index [ "initiated_by_id" ], name: "index_refunds_on_initiated_by_id"
+    t.index [ "payment_id" ], name: "index_refunds_on_payment_id"
   end
 
   create_table "registration_answers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -187,9 +187,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.uuid "registration_id", null: false
     t.uuid "survey_question_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["registration_id", "survey_question_id"], name: "index_reg_answers_on_reg_and_question", unique: true
-    t.index ["registration_id"], name: "index_registration_answers_on_registration_id"
-    t.index ["survey_question_id"], name: "index_registration_answers_on_survey_question_id"
+    t.index [ "registration_id", "survey_question_id" ], name: "index_reg_answers_on_reg_and_question", unique: true
+    t.index [ "registration_id" ], name: "index_registration_answers_on_registration_id"
+    t.index [ "survey_question_id" ], name: "index_registration_answers_on_survey_question_id"
   end
 
   create_table "registration_event_types", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -197,9 +197,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.uuid "event_type_id", null: false
     t.uuid "registration_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["event_type_id"], name: "index_registration_event_types_on_event_type_id"
-    t.index ["registration_id", "event_type_id"], name: "index_reg_event_types_on_reg_and_type", unique: true
-    t.index ["registration_id"], name: "index_registration_event_types_on_registration_id"
+    t.index [ "event_type_id" ], name: "index_registration_event_types_on_event_type_id"
+    t.index [ "registration_id", "event_type_id" ], name: "index_reg_event_types_on_reg_and_type", unique: true
+    t.index [ "registration_id" ], name: "index_registration_event_types_on_registration_id"
   end
 
   create_table "registrations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -212,10 +212,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "status", default: "confirmed", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
-    t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true
-    t.index ["event_id"], name: "index_registrations_on_event_id"
-    t.index ["user_id"], name: "index_registrations_on_user_id"
+    t.index [ "deleted_at" ], name: "index_registrations_on_deleted_at"
+    t.index [ "event_id", "user_id" ], name: "index_registrations_on_event_id_and_user_id", unique: true
+    t.index [ "event_id" ], name: "index_registrations_on_event_id"
+    t.index [ "user_id" ], name: "index_registrations_on_user_id"
   end
 
   create_table "results", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -224,7 +224,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "notes"
     t.uuid "registration_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["registration_id"], name: "index_results_on_registration_id", unique: true
+    t.index [ "registration_id" ], name: "index_results_on_registration_id", unique: true
   end
 
   create_table "survey_questions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -236,8 +236,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.boolean "required", default: false, null: false
     t.uuid "survey_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["survey_id", "position"], name: "index_survey_questions_on_survey_id_and_position"
-    t.index ["survey_id"], name: "index_survey_questions_on_survey_id"
+    t.index [ "survey_id", "position" ], name: "index_survey_questions_on_survey_id_and_position"
+    t.index [ "survey_id" ], name: "index_survey_questions_on_survey_id"
   end
 
   create_table "surveys", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -246,8 +246,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.datetime "deleted_at"
     t.string "title", default: "Registration Survey", null: false
     t.datetime "updated_at", null: false
-    t.index ["creator_id"], name: "index_surveys_on_creator_id"
-    t.index ["deleted_at"], name: "index_surveys_on_deleted_at"
+    t.index [ "creator_id" ], name: "index_surveys_on_creator_id"
+    t.index [ "deleted_at" ], name: "index_surveys_on_deleted_at"
   end
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -266,13 +266,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.datetime "suspended_at"
     t.string "suspension_reason"
     t.datetime "updated_at", null: false
-    t.index ["admin"], name: "index_users_on_admin", where: "(admin = true)"
-    t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NOT NULL)"
-    t.index ["email"], name: "index_users_on_email", unique: true
-    t.index ["email_verification_token"], name: "index_users_on_email_verification_token", unique: true
-    t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
-    t.index ["password_reset_token"], name: "index_users_on_password_reset_token", unique: true
-    t.index ["suspended_at"], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+    t.index [ "admin" ], name: "index_users_on_admin", where: "(admin = true)"
+    t.index [ "deleted_at" ], name: "index_users_on_deleted_at", where: "(deleted_at IS NOT NULL)"
+    t.index [ "email" ], name: "index_users_on_email", unique: true
+    t.index [ "email_verification_token" ], name: "index_users_on_email_verification_token", unique: true
+    t.index [ "google_uid" ], name: "index_users_on_google_uid", unique: true
+    t.index [ "password_reset_token" ], name: "index_users_on_password_reset_token", unique: true
+    t.index [ "suspended_at" ], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
   end
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -283,11 +283,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
     t.string "status", default: "waiting", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["deleted_at"], name: "index_waitlist_entries_on_deleted_at"
-    t.index ["event_id", "created_at"], name: "index_waitlist_entries_on_event_and_created_at"
-    t.index ["event_id", "user_id"], name: "index_waitlist_entries_on_event_and_user_when_waiting", unique: true, where: "((status)::text = 'waiting'::text)"
-    t.index ["event_id"], name: "index_waitlist_entries_on_event_id"
-    t.index ["user_id"], name: "index_waitlist_entries_on_user_id"
+    t.index [ "deleted_at" ], name: "index_waitlist_entries_on_deleted_at"
+    t.index [ "event_id", "created_at" ], name: "index_waitlist_entries_on_event_and_created_at"
+    t.index [ "event_id", "user_id" ], name: "index_waitlist_entries_on_event_and_user_when_waiting", unique: true, where: "((status)::text = 'waiting'::text)"
+    t.index [ "event_id" ], name: "index_waitlist_entries_on_event_id"
+    t.index [ "user_id" ], name: "index_waitlist_entries_on_user_id"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
