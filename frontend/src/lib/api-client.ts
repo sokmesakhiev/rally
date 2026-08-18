@@ -520,11 +520,32 @@ export const registrationsApi = {
     );
   },
 
-  create(eventId: string, opts?: { answers?: ApiRegistrationAnswer[]; eventTypeIds?: string[] }) {
-    return api.post<{ registration: ApiRegistration }>(`/events/${eventId}/registrations`, {
+  /** `guest` is only needed when the visitor isn't signed in (see
+   * useAuth()'s `user`) — the backend requires one or the other. On a
+   * successful guest registration the response includes `auth: { token,
+   * user }`, the same shape authApi.signup/signin/google return; this
+   * stores the token immediately so the very next authenticated call
+   * (payment creation, "My registrations") works without the caller having
+   * to do anything extra. Call useAuth()'s `refresh()` afterward to pick up
+   * the new `user` in context. */
+  async create(
+    eventId: string,
+    opts?: {
+      answers?: ApiRegistrationAnswer[];
+      eventTypeIds?: string[];
+      guest?: { name: string; email: string };
+    },
+  ) {
+    const res = await api.post<{
+      registration: ApiRegistration;
+      auth?: { token: string; user: ApiUser };
+    }>(`/events/${eventId}/registrations`, {
       answers: opts?.answers ?? [],
       event_type_ids: opts?.eventTypeIds ?? [],
+      guest: opts?.guest,
     });
+    if (res.auth) setToken(res.auth.token);
+    return res;
   },
 
   myRegistrationForEvent(eventId: string) {

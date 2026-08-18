@@ -19,7 +19,8 @@
     "bannerAlt": "បដា {{title}}",
     "eventLogoAlt": "និមិត្តសញ្ញាព្រឹត្តិការណ៍",
     "next": "បន្ទាប់",
-    "previous": "មុន"
+    "previous": "មុន",
+    "continue": "បន្ត"
   },
   "eventCategories": {
     "running": "រត់",
@@ -280,7 +281,15 @@
     "toastLeftWaitlist": "បានចាកចេញពីបញ្ជីរង់ចាំ",
     "toastLeaveWaitlistError": "មិនអាចចាកចេញពីបញ្ជីរង់ចាំបានទេ",
     "joinWaitlistToastAction": "ចូលរួមបញ្ជីរង់ចាំវិញ",
-    "downloadCertificate": "ទាញយកវិញ្ញាបនបត្រ"
+    "downloadCertificate": "ទាញយកវិញ្ញាបនបត្រ",
+    "guestFormTitle": "ជិតរួចហើយ",
+    "guestFormDesc": "មិនចាំបាច់មានគណនីទេ — គ្រាន់តែឈ្មោះ និងអ៊ីមែលរបស់អ្នកដើម្បីចុះឈ្មោះ។",
+    "guestName": "ឈ្មោះ",
+    "guestNamePlaceholder": "ឈ្មោះរបស់អ្នក",
+    "guestEmail": "អ៊ីមែល",
+    "guestEmailPlaceholder": "you@example.com",
+    "signInInstead": "ចូលគណនីវិញ",
+    "guestEmailTaken": "មានគណនីរួចហើយជាមួយអ៊ីមែលនេះ។ សូមចូលគណនីដើម្បីចុះឈ្មោះ។"
   },
   "dashboard": {
     "title": "ផ្ទាំងគ្រប់គ្រងរបស់អ្នក",

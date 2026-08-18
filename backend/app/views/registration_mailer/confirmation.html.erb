@@ -16,4 +16,8 @@
   <p>See you there!</p>
 <% end %>
 
+<% if @new_guest_account %>
+  <p>We saved this registration under a Rally account using this email address, so you can find your ticket and manage this registration anytime. <a href="<%= @forgot_password_url %>">Set a password</a> whenever you'd like — totally optional.</p>
+<% end %>
+
 <p>— The Rally team</p>
