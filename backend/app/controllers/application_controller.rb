@@ -47,6 +47,42 @@ class ApplicationController < ActionController::API
     end
   end
 
+  # Same token/suspension/deletion checks as authenticate_user! above, but
+  # never renders an error just because a token is missing or unparseable —
+  # for endpoints (Api::V1::RegistrationsController#create's guest checkout)
+  # that serve both signed-in users and anonymous guests. @current_user
+  # simply stays nil for an anonymous request, same as if this method were
+  # never called. A *valid* token for a suspended/deleted account still gets
+  # the real error, though — that's a deliberate account-status block, not
+  # "you're simply not signed in", and the caller shouldn't silently treat
+  # it as guest checkout.
+  def authenticate_user_optional!
+    token = extract_token
+    return unless token
+
+    begin
+      payload = JsonWebToken.decode(token)
+      user = User.find(payload[:user_id])
+
+      if user.suspended?
+        render json: { error: "This account has been suspended.", code: "account_suspended" },
+               status: :forbidden
+        return
+      end
+
+      if user.discarded?
+        render json: { error: "This account no longer exists.", code: "account_deleted" },
+               status: :unauthorized
+        return
+      end
+
+      @current_user = user
+      set_sentry_user
+    rescue JWT::DecodeError, ActiveRecord::RecordNotFound
+      nil # garbage/stale token on an endpoint that doesn't require one — proceed anonymously
+    end
+  end
+
   # For Api::V1::Admin controllers — see Api::V1::Admin::BaseController.
   def require_admin!
     return if current_user&.admin?

@@ -130,9 +130,83 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["code"]).to be_nil
     end
 
-    it "returns 401 without a token" do
+    # No token is no longer a hard 401 here — see the "guest checkout"
+    # describe block below. Without a token *and* without guest info, it's
+    # a 422 asking for one or the other.
+    it "requires either a token or guest info when there's no session" do
       post "/api/v1/events/#{event.id}/registrations", as: :json
-      expect(response).to have_http_status(:unauthorized)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["code"]).to eq("guest_info_required")
+    end
+  end
+
+  # ── POST /api/v1/events/:event_id/registrations (guest checkout) ─────────────
+  describe "POST /api/v1/events/:event_id/registrations — guest checkout" do
+    let!(:event) { create(:event, creator: organizer) }
+
+    it "creates a real account for a never-seen email and registers under it" do
+      expect {
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Dara Kim", email: "dara@example.com" } },
+          as: :json
+      }.to change(User, :count).by(1)
+
+      expect(response).to have_http_status(:created)
+      user = User.find_by(email: "dara@example.com")
+      expect(user).to be_present
+      expect(user.profile.display_name).to eq("Dara Kim")
+      expect(json["registration"]["user_id"]).to eq(user.id)
+    end
+
+    it "returns a token so the frontend can treat the guest as signed in" do
+      post "/api/v1/events/#{event.id}/registrations",
+        params: { guest: { name: "Dara Kim", email: "dara@example.com" } },
+        as: :json
+
+      expect(json["auth"]["token"]).to be_present
+      expect(json["auth"]["user"]["email"]).to eq("dara@example.com")
+
+      # The returned token actually works for follow-up authenticated calls.
+      get "/api/v1/auth/me", headers: { "Authorization" => "Bearer #{json['auth']['token']}" }, as: :json
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "does not return an auth token for a signed-in request" do
+      post "/api/v1/events/#{event.id}/registrations", headers: auth_headers(participant), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json).not_to have_key("auth")
+    end
+
+    it "rejects with email_registered rather than silently attaching to an existing account" do
+      post "/api/v1/events/#{event.id}/registrations",
+        params: { guest: { name: "Someone Else", email: participant.email } },
+        as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["code"]).to eq("email_registered")
+      expect(Registration.exists?(event_id: event.id, user_id: participant.id)).to be(false)
+    end
+
+    it "requires both name and email" do
+      post "/api/v1/events/#{event.id}/registrations",
+        params: { guest: { email: "dara@example.com" } },
+        as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "sends the confirmation email with a claim-your-account nudge" do
+      perform_enqueued_jobs do
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Dara Kim", email: "dara@example.com" } },
+          as: :json
+      end
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ "dara@example.com" ])
+      expect(mail.body.encoded).to include("Set a password")
     end
   end
 

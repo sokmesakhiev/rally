@@ -34,6 +34,8 @@ import { PaymentPanel } from "@/components/payment-panel";
 import { ResultsLeaderboard } from "@/components/results-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   formatDateTime,
   formatPrice,
@@ -49,18 +51,29 @@ export const Route = createFileRoute("/events/$eventId")({
 });
 
 // Registration steps:
-//   idle → (types if event has types) → (survey if event has survey) → done
-type RegStep = "idle" | "types" | "survey";
+//   idle → (guest, if not signed in) → (types if event has types) → (survey if event has survey) → done
+type RegStep = "idle" | "guest" | "types" | "survey";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function EventDetail() {
   const { eventId } = Route.useParams();
   const { t } = useTranslation();
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [regStep, setRegStep] = useState<RegStep>("idle");
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const guestValid = guestName.trim().length > 0 && EMAIL_RE.test(guestEmail.trim());
+
+  // Only actually sent to the backend when there's no signed-in user — see
+  // registrationsApi.create.
+  function guestPayload() {
+    return user ? undefined : { name: guestName.trim(), email: guestEmail.trim() };
+  }
 
   const eventQuery = useQuery({
     queryKey: ["public-event", eventId],
@@ -115,11 +128,19 @@ function EventDetail() {
   });
 
   const register = useMutation({
-    mutationFn: (opts?: { answers?: ApiRegistrationAnswer[]; eventTypeIds?: string[] }) =>
-      registrationsApi.create(eventId, opts),
-    onSuccess: (res) => {
+    mutationFn: (opts?: {
+      answers?: ApiRegistrationAnswer[];
+      eventTypeIds?: string[];
+      guest?: { name: string; email: string };
+    }) => registrationsApi.create(eventId, opts),
+    onSuccess: async (res) => {
       setRegStep("idle");
       setSelectedTypeIds([]);
+      // A guest registration silently signs the visitor in (see
+      // registrationsApi.create) — pick up the new user in auth context so
+      // the rest of this page (payment, "you're registered") renders as
+      // signed-in immediately instead of after a manual refresh.
+      if (res.auth) await refresh();
       queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
       queryClient.invalidateQueries({ queryKey: ["public-event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["my-registrations"] });
@@ -145,6 +166,17 @@ function EventDetail() {
             onClick: () => joinWaitlist.mutate({ eventTypeIds: selectedTypeIds }),
           },
         });
+      } else if (e.code === "email_registered") {
+        // The email they typed on the guest form already has an account —
+        // bounce back to that step so they can see the note and switch to
+        // signing in instead of just seeing a generic failure toast.
+        setRegStep("guest");
+        toast.error(e.message ?? t("eventDetail.guestEmailTaken"), {
+          action: {
+            label: t("eventDetail.signInInstead"),
+            onClick: () => navigate({ to: "/auth" }),
+          },
+        });
       } else {
         toast.error(e.message ?? t("eventDetail.toastRegisterError"));
       }
@@ -158,14 +190,30 @@ function EventDetail() {
   const isFull = !!ev?.capacity && registeredCount >= ev.capacity;
   const brandColor = ev?.brand_color ?? "#6366f1";
 
-  // Called when the user clicks the main "Register" button
+  // Called when the user clicks the main "Register" button. Not signed in?
+  // Collect a name + email first (no account, no navigating away) — see the
+  // "guest" step below — then continue exactly the same way a signed-in
+  // user would.
   function handleRegisterClick() {
+    if (!user) {
+      setRegStep("guest");
+      return;
+    }
+    advancePastGuestStep();
+  }
+
+  // Called from the guest form's "Continue" button once name + email look valid.
+  function handleGuestContinue() {
+    advancePastGuestStep();
+  }
+
+  function advancePastGuestStep() {
     if (hasTypes) {
       setRegStep("types");
     } else if (hasSurvey) {
       setRegStep("survey");
     } else {
-      register.mutate(undefined);
+      register.mutate({ guest: guestPayload() });
     }
   }
 
@@ -174,13 +222,13 @@ function EventDetail() {
     if (hasSurvey) {
       setRegStep("survey");
     } else {
-      register.mutate({ eventTypeIds: selectedTypeIds });
+      register.mutate({ eventTypeIds: selectedTypeIds, guest: guestPayload() });
     }
   }
 
   // Called from survey "Complete registration"
   function handleSurveyDone(answers: ApiRegistrationAnswer[]) {
-    register.mutate({ answers, eventTypeIds: selectedTypeIds });
+    register.mutate({ answers, eventTypeIds: selectedTypeIds, guest: guestPayload() });
   }
 
   function toggleType(id: string) {
@@ -338,8 +386,57 @@ function EventDetail() {
               className="mt-8 rounded-2xl border p-6"
               style={{ borderColor: `${brandColor}44`, backgroundColor: `${brandColor}0a` }}
             >
-              {/* Types step */}
-              {regStep === "types" && hasTypes ? (
+              {/* Guest details step — shown before types/survey when not signed in */}
+              {regStep === "guest" ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="font-medium">{t("eventDetail.guestFormTitle")}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t("eventDetail.guestFormDesc")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guest-name">{t("eventDetail.guestName")}</Label>
+                    <Input
+                      id="guest-name"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder={t("eventDetail.guestNamePlaceholder")}
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guest-email">{t("eventDetail.guestEmail")}</Label>
+                    <Input
+                      id="guest-email"
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      placeholder={t("eventDetail.guestEmailPlaceholder")}
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Button variant="ghost" onClick={() => setRegStep("idle")}>
+                      {t("common.back")}
+                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="outline" onClick={() => navigate({ to: "/auth" })}>
+                        {t("eventDetail.signInInstead")}
+                      </Button>
+                      <Button
+                        disabled={!guestValid || register.isPending}
+                        onClick={handleGuestContinue}
+                        style={{ backgroundColor: brandColor }}
+                        className="text-white hover:opacity-90"
+                      >
+                        {register.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {t("common.continue")}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : regStep === "types" && hasTypes ? (
                 <EventTypeSelector
                   eventTypes={ev.event_types}
                   eventPriceCents={ev.price_cents}
@@ -451,8 +548,11 @@ function EventDetail() {
                     {t("eventDetail.leaveWaitlist")}
                   </Button>
                 </div>
-              ) : !user && !loading ? (
-                /* Not logged in */
+              ) : isFull && !user && !loading ? (
+                /* Event full — joining the waitlist still requires an
+                   account (unlike registering, which now supports guest
+                   checkout above), so this is the one case that still
+                   sends a signed-out visitor to sign in first. */
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <p className="text-muted-foreground">{t("eventDetail.signInPrompt")}</p>
                   <Button

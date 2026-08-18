@@ -14,4 +14,9 @@ Payment pending — please complete your payment to secure your spot. You can pa
 See you there!
 <% end -%>
 
+<% if @new_guest_account -%>
+We saved this registration under a Rally account using this email address, so you can find your ticket and manage this registration anytime. Set a password whenever you'd like (totally optional):
+<%= @forgot_password_url %>
+<% end -%>
+
 — The Rally team

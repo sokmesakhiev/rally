@@ -19,7 +19,8 @@
     "bannerAlt": "{{title}} banner",
     "eventLogoAlt": "Event logo",
     "next": "Next",
-    "previous": "Previous"
+    "previous": "Previous",
+    "continue": "Continue"
   },
   "eventCategories": {
     "running": "Running",
@@ -283,7 +284,15 @@
     "toastLeftWaitlist": "Left the waitlist",
     "toastLeaveWaitlistError": "Could not leave the waitlist",
     "joinWaitlistToastAction": "Join waitlist instead",
-    "downloadCertificate": "Download certificate"
+    "downloadCertificate": "Download certificate",
+    "guestFormTitle": "Almost there",
+    "guestFormDesc": "No account needed — just your name and email to register.",
+    "guestName": "Name",
+    "guestNamePlaceholder": "Your name",
+    "guestEmail": "Email",
+    "guestEmailPlaceholder": "you@example.com",
+    "signInInstead": "Sign in instead",
+    "guestEmailTaken": "An account already exists with this email. Please sign in to register."
   },
   "dashboard": {
     "title": "Your dashboard",
