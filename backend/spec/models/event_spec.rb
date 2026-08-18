@@ -177,6 +177,44 @@ RSpec.describe Event, type: :model do
     end
   end
 
+  # ── Soft-delete ──────────────────────────────────────────────────────────────
+  describe "#discard!" do
+    it "sets deleted_at and unpublishes, without destroying the row" do
+      event = create(:event, is_published: true)
+
+      expect { event.discard! }.not_to change(Event, :count)
+      expect(event.discarded?).to be(true)
+      expect(event.is_published).to be(false)
+      expect(Event.kept).not_to include(event)
+      expect(Event.discarded).to include(event)
+    end
+
+    it "cascades to kept registrations and waitlist entries without destroying them" do
+      event = create(:event, :full)
+      registration = event.registrations.first
+      waiting_event = create(:event, :full)
+      entry = create(:waitlist_entry, event: waiting_event)
+
+      event.discard!
+
+      expect(registration.reload.discarded?).to be(true)
+      expect(registration.status).to eq("cancelled")
+      expect(Registration.exists?(registration.id)).to be(true)
+
+      # sanity check that #discard! doesn't touch an unrelated event's entries
+      expect(entry.reload.discarded?).to be(false)
+    end
+
+    it "leaves event_types and payments attached, untouched" do
+      event = create(:event, capacity: 10)
+      type = event.event_types.create!(name: "5K", position: 0)
+
+      event.discard!
+
+      expect(EventType.exists?(type.id)).to be(true)
+    end
+  end
+
   # ── Defaults ─────────────────────────────────────────────────────────────────
   describe "defaults" do
     let(:saved) { create(:event) }

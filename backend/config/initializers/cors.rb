@@ -14,6 +14,12 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     resource "*",
       headers: :any,
       methods: [ :get, :post, :patch, :put, :delete, :options, :head ],
-      expose: [ "Authorization" ]
+      # Content-Disposition: browsers only expose a small default allowlist
+      # of response headers to cross-origin JS (Content-Type, Content-Length,
+      # etc.) — Content-Disposition isn't in it. Without this, fetch()-based
+      # downloads (see api-client.ts's downloadFile, used by
+      # registrationsApi.exportCsv) can never read the filename Rails'
+      # send_data sets and always fall back to a generic one.
+      expose: [ "Authorization", "Content-Disposition" ]
   end
 end

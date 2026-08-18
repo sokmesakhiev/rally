@@ -60,6 +60,30 @@ RSpec.describe Registration, type: :model do
     end
   end
 
+  # ── Soft-delete ──────────────────────────────────────────────────────────────
+  describe "#discard!" do
+    it "sets deleted_at and cancels, without destroying the row or its payments" do
+      registration = create(:registration, :paid)
+      payment = create(:payment, :approved, registration: registration)
+
+      expect { registration.discard! }.not_to change(Registration, :count)
+      expect(registration.discarded?).to be(true)
+      expect(registration.status).to eq("cancelled")
+      expect(Registration.kept).not_to include(registration)
+      expect(Payment.exists?(payment.id)).to be(true)
+    end
+
+    it "frees the capacity slot, same as .active already excludes it" do
+      event = create(:event, capacity: 1)
+      registration = create(:registration, event: event)
+      expect(event.reload).to be_full
+
+      registration.discard!
+
+      expect(event.reload).not_to be_full
+    end
+  end
+
   # ── Check-in ─────────────────────────────────────────────────────────────────
   describe "#checked_in?" do
     it "is false when checked_in_at is blank" do

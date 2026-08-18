@@ -61,7 +61,7 @@ module Api
       private
 
       def set_event
-        @event = Event.includes(:event_types).find(params[:event_id])
+        @event = Event.kept.includes(:event_types).find(params[:event_id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
       end

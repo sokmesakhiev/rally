@@ -21,6 +21,13 @@
 shared:
   merchant_id: <%= ENV["ABA_PAYWAY_MERCHANT_ID"] %>
   api_key: <%= ENV["ABA_PAYWAY_API_KEY"] %>
+  # Only needed for AbaPayway::Client#refund — generate_qr/check_transaction
+  # don't use it. RSA *public* key (provided by ABA Bank alongside
+  # merchant_id/api_key), not a secret in the usual sense — it encrypts data
+  # only ABA can decrypt, so plaintext ENV is fine, same as merchant_id.
+  # Unset in an environment, refunds fail with a clear ConfigurationError
+  # instead of silently no-op'ing; everything else keeps working.
+  rsa_public_key: <%= ENV["ABA_PAYWAY_RSA_PUBLIC_KEY"] %>
 
 development:
   base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout-sandbox.payway.com.kh") %>

@@ -22,14 +22,13 @@ module Api
 
         private
 
-        # Every state-changing admin action goes through here, so there's an
-        # audit trail of who did what even before a dedicated audit table
-        # exists. Deliberately logs actor and target ids, not emails.
+        # Every state-changing admin action goes through here, so there's a
+        # queryable audit trail of who did what — see AdminAction.log!, which
+        # this and Api::V1::RefundsController#create (the one admin-reachable
+        # action outside this namespace) both call. Deliberately logs actor
+        # and target ids, not emails.
         def log_admin_action(action, target)
-          Rails.logger.info(
-            "[admin] actor=#{current_user.id} action=#{action} " \
-            "target=#{target.class.name}##{target.id}"
-          )
+          AdminAction.log!(admin: current_user, action: action, target: target)
         end
       end
     end

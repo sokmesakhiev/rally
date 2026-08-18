@@ -75,6 +75,43 @@ class Event < ApplicationRecord
     category.presence ? where(category: category) : all
   }
 
+  # Soft-delete — see db/migrate/20260817000003_add_deleted_at_to_soft_deletable_tables.rb
+  # for why this is an explicit scope rather than a Rails `default_scope`
+  # (the short version: `belongs_to :event` elsewhere would silently inherit
+  # a default_scope too, breaking e.g. `registration.event` the moment its
+  # event was discarded). Callers opt in at read call sites that need it —
+  # see EventsController#index/#my_events and #set_event.
+  scope :kept, -> { where(deleted_at: nil) }
+  scope :discarded, -> { where.not(deleted_at: nil) }
+
+  # Soft-delete: hides the event (and, since it's no longer reachable
+  # through normal reads, effectively everyone downstream of it) without
+  # touching payments, event_types, or event_plan_payments — those remain as
+  # historical/financial records attached to a now-hidden event rather than
+  # being destroyed. Cascades to registrations/waitlist_entries specifically
+  # because those need to stop counting toward capacity and stop appearing
+  # in "my registrations"/"my waitlist spots" lists, which is what their own
+  # #discard! achieves (not because they need to be hidden for their own
+  # sake). Also unpublishes, belt-and-suspenders alongside #kept filtering —
+  # mirrors User#suspend!.
+  #
+  # Deliberately named #discard! (not overriding #destroy!) — the app's
+  # `dependent: :destroy` declarations above are real hard-delete behavior
+  # that should still fire if something ever legitimately calls #destroy!
+  # directly (e.g. a future admin console cleanup script); silently
+  # redefining what #destroy! means would be its own footgun.
+  def discard!
+    transaction do
+      registrations.kept.find_each(&:discard!)
+      waitlist_entries.kept.find_each(&:discard!)
+      update!(deleted_at: Time.current, is_published: false)
+    end
+  end
+
+  def discarded?
+    deleted_at.present?
+  end
+
   def plan_details
     PLANS[plan]
   end
@@ -90,8 +127,10 @@ class Event < ApplicationRecord
   # Same predicate Registration#event_not_full validates against — kept here
   # too so WaitlistEntry (and anything else that needs to ask "is this event
   # full right now?") doesn't have to duplicate the capacity.present? guard.
+  # .active excludes cancelled registrations (see Registration::active) so a
+  # fully-refunded registration's spot actually counts as free.
   def full?
-    capacity.present? && registrations.count >= capacity
+    capacity.present? && registrations.active.count >= capacity
   end
 
   # An organizer has uploaded a certificate-of-participation template — see

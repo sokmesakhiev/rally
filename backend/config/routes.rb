@@ -40,6 +40,7 @@ Rails.application.routes.draw do
       get    "registrations",                  to: "registrations#index"
       post   "events/:event_id/registrations", to: "registrations#create"
       get    "events/:event_id/registrations", to: "registrations#event_registrations"
+      get    "events/:event_id/registrations/export", to: "registrations#export"
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
 
@@ -64,6 +65,10 @@ Rails.application.routes.draw do
       # Payments (ABA PayWay KHQR)
       post "registrations/:registration_id/payments", to: "payments#create"
       get  "payments/:id",                             to: "payments#show"
+
+      # Refunds (organizer or admin — see Refunds::IssueRefund)
+      get  "payments/:payment_id/refunds", to: "refunds#index"
+      post "payments/:payment_id/refunds", to: "refunds#create"
 
       # Payment provider webhooks (no user auth — verified server-to-server)
       post "webhooks/aba_payway", to: "webhooks/aba_payway#create"
@@ -100,6 +105,9 @@ Rails.application.routes.draw do
         delete "events/:id",           to: "events#destroy"
 
         get "reports", to: "reports#index"
+
+        # Queryable audit trail — see AdminAction, BaseController#log_admin_action.
+        get "admin_actions", to: "admin_actions#index"
       end
     end
   end

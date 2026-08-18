@@ -184,6 +184,18 @@ function ManageEvent() {
 
   const [checkInSearch, setCheckInSearch] = useState("");
 
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      await registrationsApi.exportCsv(eventId);
+    } catch (e: any) {
+      toast.error(e.message || t("manageEvent.exportCsvError"));
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
   const saveBranding = useMutation({
     mutationFn: () =>
       eventsApi.update(eventId, {
@@ -575,6 +587,21 @@ function ManageEvent() {
 
               {/* ── Participants ── */}
               <TabsContent value="participants" className="mt-6">
+                <div className="mb-3 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCsv}
+                    disabled={exportingCsv || participants.length === 0}
+                  >
+                    {exportingCsv ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    {t("manageEvent.exportCsv")}
+                  </Button>
+                </div>
                 <div className="overflow-hidden rounded-2xl border border-border">
                   {participantsQuery.isLoading && (
                     <p className="p-5 text-sm text-muted-foreground">{t("common.loading")}</p>

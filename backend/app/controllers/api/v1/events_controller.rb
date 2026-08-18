@@ -11,7 +11,9 @@ module Api
       # and ?page=/?per_page= pagination. All optional: a bare request returns
       # the first page with default page size, so older clients keep working.
       #
-      # Eager-loads event_types' registration_event_types so
+      # Eager-loads event_types' registration_event_types (plus each one's
+      # registration, so EventType#full?/#spots_remaining can check
+      # registration.status without an extra query — see those methods) so
       # EventType#spots_remaining (called per type in event_type_json below)
       # reads the preloaded array via #size instead of issuing a fresh COUNT
       # query per event type — this is the highest-traffic endpoint in the
@@ -21,7 +23,7 @@ module Api
           page     = validated_params[:page] || 1
           per_page = validated_params[:per_page] || EventIndexRequestSchema::DEFAULT_PER_PAGE
 
-          scope = Event.published.upcoming
+          scope = Event.published.upcoming.kept
             .search(validated_params[:q])
             .in_category(validated_params[:category])
 
@@ -30,7 +32,7 @@ module Api
           total = scope.count
 
           events = scope
-            .includes(event_types: :registration_event_types)
+            .includes(event_types: { registration_event_types: :registration })
             .order(start_at: :asc)
             .offset((page - 1) * per_page)
             .limit(per_page)
@@ -49,17 +51,22 @@ module Api
 
       # GET /api/v1/events/my — current user's created events
       def my_events
-        events = current_user.events.includes(:registrations, event_types: :registration_event_types).order(start_at: :asc)
+        events = current_user.events.kept.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
         render json: {
           events: events.map { |e|
-            event_json(e, include_types: true).merge(registrations_count: e.registrations.size)
+            # Ruby-side filter, not e.registrations.active.size — .active is a
+            # `where`, which would force a fresh query per event instead of
+            # using the already-preloaded array above.
+            active_count = e.registrations.count { |r| r.status != "cancelled" }
+            event_json(e, include_types: true).merge(registrations_count: active_count)
           }
         }
       end
 
       # GET /api/v1/events/:id
       def show
-        @event = Event.includes(:registrations, survey: :survey_questions, event_types: :registration_event_types)
+        @event = Event.includes(:registrations, survey: :survey_questions,
+                                 event_types: { registration_event_types: :registration })
           .find(params[:id])
         render json: { event: event_json(@event, include_count: true, include_survey: true, include_types: true) }
       end
@@ -90,9 +97,11 @@ module Api
         end
       end
 
-      # DELETE /api/v1/events/:id
+      # DELETE /api/v1/events/:id — soft-delete (see Event#discard!); the
+      # event, its registrations, and its waitlist entries are hidden, not
+      # destroyed.
       def destroy
-        @event.destroy!
+        @event.discard!
         render json: { message: "Event deleted" }
       end
 
@@ -107,7 +116,7 @@ module Api
       private
 
       def set_event
-        @event = Event.find(params[:id])
+        @event = Event.kept.find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
       end
@@ -146,7 +155,11 @@ module Api
           created_at: event.created_at,
           updated_at: event.updated_at
         }
-        json[:registrations_count] = event.registrations.size if include_count
+        # Ruby-side filter, not event.registrations.active.size — .active is a
+        # `where`, which would force a fresh query instead of using the
+        # already-preloaded array (#show, the only caller with include_count:
+        # true, eager-loads :registrations).
+        json[:registrations_count] = event.registrations.count { |r| r.status != "cancelled" } if include_count
         if include_survey && event.survey
           json[:survey] = {
             id:        event.survey.id,

@@ -150,6 +150,20 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["registrations"].map { |r| r["id"] }).to include(reg.id)
     end
 
+    it "excludes registrations the organizer has already removed" do
+      removed = create(:registration, event: event)
+      removed.discard!
+
+      get "/api/v1/events/#{event.id}/registrations",
+          headers: auth_headers(organizer),
+          as: :json
+
+      expect(response).to have_http_status(:ok)
+      ids = json["registrations"].map { |r| r["id"] }
+      expect(ids).to include(reg.id)
+      expect(ids).not_to include(removed.id)
+    end
+
     it "returns 404 when a non-organizer tries to access the list" do
       get "/api/v1/events/#{event.id}/registrations",
           headers: auth_headers(other),
@@ -167,6 +181,86 @@ RSpec.describe "Registrations API", type: :request do
 
       reg_json = json["registrations"].find { |r| r["id"] == reg.id }
       expect(reg_json["certificate_url"]).to be_present
+    end
+  end
+
+  # ── GET /api/v1/events/:event_id/registrations/export ────────────────────────
+  describe "GET /api/v1/events/:event_id/registrations/export" do
+    let!(:event) { create(:event, creator: organizer, currency: "usd") }
+
+    def csv_rows
+      CSV.parse(response.body, headers: true)
+    end
+
+    it "returns a CSV with the base columns and a row per participant" do
+      registration = create(:registration, :paid, event: event, user: participant)
+      registration.registration_event_types.create!(
+        event_type: event.event_types.create!(name: "5K", position: 0)
+      )
+      registration.update!(checked_in_at: Time.zone.parse("2026-08-17 09:00:00 UTC"))
+
+      get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(organizer)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Content-Type"]).to include("text/csv")
+      expect(response.headers["Content-Disposition"]).to include("attachment")
+
+      rows = csv_rows
+      expect(rows.headers).to include(
+        "Name", "Email", "Event Type(s)", "Status", "Payment Status",
+        "Amount Paid (USD)", "Checked In", "Checked In At", "Registered At"
+      )
+      row = rows.find { |r| r["Email"] == participant.email }
+      expect(row["Event Type(s)"]).to eq("5K")
+      expect(row["Status"]).to eq("confirmed")
+      expect(row["Payment Status"]).to eq("paid")
+      expect(row["Amount Paid (USD)"]).to eq("25.00")
+      expect(row["Checked In"]).to eq("Yes")
+    end
+
+    it "adds one column per survey question, with labels for choice answers" do
+      survey = organizer.surveys.create!(title: "Race survey")
+      text_q = survey.survey_questions.create!(
+        question_text: "Anything else?", question_type: "text", position: 0
+      )
+      choice_q = survey.survey_questions.create!(
+        question_text: "T-shirt size", question_type: "single_choice", position: 1,
+        options: [ { "id" => "s", "label" => "Small" }, { "id" => "m", "label" => "Medium" } ]
+      )
+      event.update!(survey: survey)
+      registration = create(:registration, event: event, user: participant)
+      registration.registration_answers.create!(survey_question: text_q, answer_text: "See you there!")
+      registration.registration_answers.create!(survey_question: choice_q, answer_options: [ "m" ])
+
+      get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(organizer)
+
+      row = csv_rows.find { |r| r["Email"] == participant.email }
+      expect(row["Anything else?"]).to eq("See you there!")
+      expect(row["T-shirt size"]).to eq("Medium")
+    end
+
+    it "excludes registrations the organizer has already removed" do
+      kept = create(:registration, event: event, user: participant)
+      removed = create(:registration, event: event, user: other)
+      removed.discard!
+
+      get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(organizer)
+
+      emails = csv_rows.map { |r| r["Email"] }
+      expect(emails).to include(kept.user.email)
+      expect(emails).not_to include(removed.user.email)
+    end
+
+    it "returns 404 when a non-organizer requests the export" do
+      get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(other)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "requires authentication" do
+      get "/api/v1/events/#{event.id}/registrations/export"
+
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 
@@ -220,13 +314,19 @@ RSpec.describe "Registrations API", type: :request do
     let!(:event) { create(:event, creator: organizer) }
     let!(:reg)   { create(:registration, event: event) }
 
-    it "allows the organizer to remove a participant" do
+    it "soft-deletes the registration rather than destroying the row" do
+      # See Registration#discard! — the row (and any Payment/Refund history)
+      # survives, just hidden and marked cancelled so it frees its capacity
+      # slot.
       delete "/api/v1/registrations/#{reg.id}",
              headers: auth_headers(organizer),
              as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(Registration.find_by(id: reg.id)).to be_nil
+      expect(Registration.kept.find_by(id: reg.id)).to be_nil
+      reg.reload
+      expect(reg.discarded?).to be(true)
+      expect(reg.status).to eq("cancelled")
     end
 
     it "returns 403 when a non-organizer tries to remove" do

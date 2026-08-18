@@ -91,10 +91,12 @@ RSpec.describe EventType do
       # Capacity can be lowered by an organizer after people have registered,
       # so "taken > capacity" is reachable and must not render as a negative
       # number of spots in the UI.
-      type = event.event_types.create!(name: "5K", position: 0, capacity: 2)
+      type = event.event_types.create!(name: "5K", position: 0, capacity: 3)
       3.times do
-        create(:registration, event: event).registration_event_types.create!(event_type: type)
+        registration = create(:registration, event: event)
+        RegistrationEventType.create!(registration: registration, event_type: type)
       end
+
       type.update_column(:capacity, 2)
 
       expect(type.reload.spots_remaining).to eq(0)
@@ -103,11 +105,17 @@ RSpec.describe EventType do
     it "reads a preloaded association without issuing another query" do
       # Regression guard for the N+1 fixed by switching .count → .size: with
       # registration_event_types eager-loaded, asking for spots_remaining must
-      # not hit the database again.
+      # not hit the database again. :registration must be nested under
+      # registration_event_types too — spots_remaining now checks each
+      # registration's status (to exclude cancelled/fully-refunded ones, see
+      # Refunds::IssueRefund), so *that* association needs to be preloaded as
+      # well or checking it would itself be a fresh query per row. Matches
+      # the real call sites' .includes chains (see EventsController).
       type = event.event_types.create!(name: "5K", position: 0, capacity: 10)
-      create(:registration, event: event).registration_event_types.create!(event_type: type)
+      registration = create(:registration, event: event)
+      registration.registration_event_types.create!(event_type: type)
 
-      loaded = EventType.includes(:registration_event_types).find(type.id)
+      loaded = EventType.includes(registration_event_types: :registration).find(type.id)
 
       queries = 0
       counter = ->(*, payload) { queries += 1 unless payload[:sql].match?(/\A(BEGIN|COMMIT|SAVEPOINT|RELEASE)/) }

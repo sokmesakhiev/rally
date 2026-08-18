@@ -7,7 +7,7 @@ module Api
 
       # GET /api/v1/surveys — current user's surveys
       def index
-        surveys = current_user.surveys.includes(:survey_questions).order(created_at: :desc)
+        surveys = current_user.surveys.kept.includes(:survey_questions).order(created_at: :desc)
         render json: { surveys: surveys.map { |s| survey_json(s) } }
       end
 
@@ -53,16 +53,16 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # DELETE /api/v1/surveys/:id
+      # DELETE /api/v1/surveys/:id — soft-delete (see Survey#discard!)
       def destroy
-        @survey.destroy!
+        @survey.discard!
         render json: { message: "Survey deleted" }
       end
 
       private
 
       def set_survey
-        @survey = Survey.find(params[:id])
+        @survey = Survey.kept.find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Survey not found" }, status: :not_found
       end

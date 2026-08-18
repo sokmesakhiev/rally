@@ -30,6 +30,15 @@ class Profile < ApplicationRecord
     payway_merchant_id.present? && payway_api_key.present?
   end
 
+  # payway_rsa_public_key is deliberately not required for payway_configured?
+  # — an organizer can take payments without it and only loses the ability to
+  # issue *gateway* refunds (AbaPayway::Client#refund) on their own
+  # PayWay-configured events until they add it; the manual/logged refund path
+  # (Refunds::IssueRefund) never needs it.
+  def payway_refund_configured?
+    payway_configured? && payway_rsa_public_key.present?
+  end
+
   # Never expose the real key to the frontend — just enough to confirm which
   # one is saved.
   def payway_api_key_masked

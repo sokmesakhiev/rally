@@ -351,7 +351,7 @@ RSpec.describe "Admin API", type: :request do
       expect(json["code"]).to eq("confirmation_required")
     end
 
-    it "deletes the event when confirmed" do
+    it "soft-deletes the event when confirmed, rather than destroying the row" do
       event = create(:event)
 
       expect {
@@ -359,9 +359,27 @@ RSpec.describe "Admin API", type: :request do
                params: { confirm: true },
                headers: auth_headers(admin),
                as: :json
-      }.to change(Event, :count).by(-1)
+      }.not_to change(Event, :count)
 
       expect(response).to have_http_status(:ok)
+      expect(event.reload.discarded?).to be(true)
+      expect(Event.kept.find_by(id: event.id)).to be_nil
+    end
+
+    it "records a queryable AdminAction for the deletion" do
+      event = create(:event)
+
+      expect {
+        delete "/api/v1/admin/events/#{event.id}",
+               params: { confirm: true },
+               headers: auth_headers(admin),
+               as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      action = AdminAction.last
+      expect(action.admin_id).to eq(admin.id)
+      expect(action.action).to eq("destroy_event")
+      expect(action.target).to eq(event)
     end
 
     it "refuses to delete an event that has paid registrations" do
@@ -385,14 +403,54 @@ RSpec.describe "Admin API", type: :request do
       event = create(:event)
       create(:registration, event: event, payment_status: "unpaid")
 
-      expect {
-        delete "/api/v1/admin/events/#{event.id}",
-               params: { confirm: true },
-               headers: auth_headers(admin),
-               as: :json
-      }.to change(Event, :count).by(-1)
+      delete "/api/v1/admin/events/#{event.id}",
+             params: { confirm: true },
+             headers: auth_headers(admin),
+             as: :json
 
       expect(response).to have_http_status(:ok)
+      expect(event.reload.discarded?).to be(true)
+    end
+  end
+
+  # ── GET /api/v1/admin/admin_actions ──────────────────────────────────────────
+  describe "GET /api/v1/admin/admin_actions" do
+    it "returns 404 for a non-admin" do
+      get "/api/v1/admin/admin_actions", headers: auth_headers(regular), as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "lists recorded admin actions, most recent first" do
+      event = create(:event)
+      create(:admin_action, admin: admin, action: "unpublish_event", target: event, created_at: 2.days.ago)
+      newer = create(:admin_action, admin: admin, action: "destroy_event", target: event)
+
+      get "/api/v1/admin/admin_actions", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["admin_actions"].first["id"]).to eq(newer.id)
+      expect(json["admin_actions"].length).to eq(2)
+    end
+
+    it "filters by action_type" do
+      event = create(:event)
+      create(:admin_action, admin: admin, action: "unpublish_event", target: event)
+      destroy_action = create(:admin_action, admin: admin, action: "destroy_event", target: event)
+
+      get "/api/v1/admin/admin_actions", params: { action_type: "destroy_event" }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+      expect(json["admin_actions"].map { |a| a["id"] }).to eq([ destroy_action.id ])
+    end
+
+    it "is populated automatically when an admin unpublishes or deletes an event" do
+      event = create(:event)
+
+      post "/api/v1/admin/events/#{event.id}/unpublish", headers: auth_headers(admin), as: :json
+
+      get "/api/v1/admin/admin_actions", headers: auth_headers(admin), as: :json
+
+      expect(json["admin_actions"].map { |a| a["action"] }).to include("unpublish_event")
     end
   end
 

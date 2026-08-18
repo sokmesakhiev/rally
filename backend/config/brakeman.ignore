@@ -1,28 +1,28 @@
 {
   "ignored_warnings": [
     {
-      "warning_type": "Command Injection",
-      "warning_code": 14,
-      "fingerprint": "28eaf461e590a2947c853352c83bf6ceb55aee616962744a159315a655181402",
-      "check_name": "Execute",
-      "message": "Possible command injection",
-      "file": "app/services/certificates/render_pdf.rb",
-      "line": 112,
-      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
-      "code": "Open3.capture3(\"soffice\", \"--headless\", \"--norestore\", \"--convert-to\", \"pdf\", \"--outdir\", workdir, \"-env:UserInstallation=file://#{File.join(workdir, \"lo_profile\")}\", odt_path)",
+      "warning_type": "Weak Cryptography",
+      "warning_code": 126,
+      "fingerprint": "b54fc43f0d1040a08f0cc3c815a323cf660cbfb60cc3e542be9da7d38e37beca",
+      "check_name": "WeakRSAKey",
+      "message": "Use of padding mode PKCS1 (default if not specified), which is known to be insecure. Use OAEP instead",
+      "file": "app/services/aba_payway/client.rb",
+      "line": 226,
+      "link": "https://brakemanscanner.org/docs/warning_types/weak_cryptography/",
+      "code": "OpenSSL::PKey::RSA.new(rsa_public_key).public_encrypt({ :mc_id => merchant_id, :tran_id => tran_id, :refund_amount => amount }.to_json.byteslice(0, 117), OpenSSL::PKey::RSA::PKCS1_PADDING)",
       "render_path": null,
       "location": {
         "type": "method",
-        "class": "Certificates::RenderPdf",
-        "method": "convert_to_pdf"
+        "class": "AbaPayway::Client",
+        "method": "build_merchant_auth"
       },
-      "user_input": "File.join(workdir, \"lo_profile\")",
-      "confidence": "Medium",
+      "user_input": "OpenSSL::PKey::RSA::PKCS1_PADDING",
+      "confidence": "High",
       "cwe_id": [
-        77
+        780
       ],
       "note": ""
     }
   ],
-  "brakeman_version": "8.0.5"
+  "brakeman_version": "8.0.6"
 }

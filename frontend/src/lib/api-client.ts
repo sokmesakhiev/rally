@@ -88,6 +88,54 @@ const api = {
   upload: <T>(path: string, form: FormData) => request<T>("POST", path, form, true),
 };
 
+/**
+ * Fetches a file from an authenticated endpoint and triggers a browser
+ * download. A plain `<a href>` can't carry the JWT (it lives in
+ * localStorage, not a cookie), so any download that requires auth goes
+ * through fetch + a Blob object URL instead of a direct link.
+ *
+ * The filename is read from the response's Content-Disposition header (set
+ * by the Rails `send_data` call) when present, falling back to
+ * `fallbackFilename` otherwise.
+ */
+async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, { method: "GET", headers });
+
+  if (!res.ok) {
+    // Error responses are JSON ({ error, code? }), same shape as the rest
+    // of the API — only the happy path is a raw file.
+    const text = await res.text();
+    let message = `API error ${res.status}`;
+    let code: string | undefined;
+    try {
+      const parsed = JSON.parse(text);
+      message = parsed.error ?? message;
+      code = parsed.code;
+    } catch {
+      // Response wasn't JSON — keep the generic message.
+    }
+    throw new ApiError(message, code);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/);
+  const filename = filenameMatch?.[1] ?? fallbackFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ApiUser {
@@ -413,6 +461,18 @@ export const registrationsApi = {
   // (returned by eventsApi.get, no auth required) instead.
   forEvent(eventId: string) {
     return api.get<{ registrations: ApiRegistration[] }>(`/events/${eventId}/registrations`);
+  },
+
+  /** Downloads the participant list as a CSV (name, email, event type(s),
+   * payment/check-in status, plus one column per survey question) for
+   * offline use — check-in sheets, mail merges. Organizer-only, same
+   * authorization as forEvent(). Triggers a browser file download rather
+   * than returning parsed data. */
+  exportCsv(eventId: string) {
+    return downloadFile(
+      `/events/${eventId}/registrations/export`,
+      `registrations-${eventId}.csv`,
+    );
   },
 
   create(eventId: string, opts?: { answers?: ApiRegistrationAnswer[]; eventTypeIds?: string[] }) {
