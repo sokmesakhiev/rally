@@ -84,7 +84,7 @@ const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
   upload: <T>(path: string, form: FormData) => request<T>("POST", path, form, true),
 };
 
@@ -292,6 +292,12 @@ export interface ApiProfile {
   payway_merchant_id: string | null;
   payway_api_key_masked: string | null;
   payway_configured: boolean;
+  /** Opt-out notification preferences — all default true. Only cover
+   * RegistrationMailer's non-essential emails; password resets, email
+   * verification, and the initial registration confirmation are always sent. */
+  notify_payment_received: boolean;
+  notify_refund_issued: boolean;
+  notify_promoted_from_waitlist: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -304,6 +310,9 @@ export interface ProfileUpdatePayload {
   avatar_url?: string | null;
   payway_merchant_id?: string;
   payway_api_key?: string;
+  notify_payment_received?: boolean;
+  notify_refund_issued?: boolean;
+  notify_promoted_from_waitlist?: boolean;
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -346,6 +355,42 @@ export const authApi = {
 
   signout() {
     clearToken();
+  },
+
+  /** Logged-in password change — distinct from the forgot-password flow
+   * (passwordResetsApi below), which needs no current password. Requires
+   * the current one as proof, so a Google-only account that never set a
+   * real password (see backend comment on AuthController#change_password)
+   * will always fail here — the forgot-password flow is its escape hatch. */
+  async changePassword(currentPassword: string, newPassword: string) {
+    return api.patch<{ message: string }>("/auth/password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+      new_password_confirmation: newPassword,
+    });
+  },
+
+  /** Changes the address immediately and drops email_verified back to
+   * false, sending a fresh verification email to the new address. Requires
+   * the current password — a bearer token alone shouldn't be enough to
+   * redirect account-recovery email to a different address. */
+  async changeEmail(currentPassword: string, newEmail: string) {
+    return api.patch<{ user: ApiUser }>("/auth/email", {
+      current_password: currentPassword,
+      new_email: newEmail,
+    });
+  },
+
+  /** Anonymizes the account (see backend User#discard!) — irreversible.
+   * Rejected with `code: "has_paid_events"` if the user organizes an event
+   * with a paid registration still outstanding; resolve those first. Clears
+   * the local token on success since the account can no longer sign in. */
+  async deleteAccount(currentPassword: string) {
+    const res = await api.delete<{ message: string }>("/auth/account", {
+      current_password: currentPassword,
+    });
+    clearToken();
+    return res;
   },
 };
 

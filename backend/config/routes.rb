@@ -9,10 +9,13 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       # Auth
-      post "auth/signup", to: "auth#signup"
-      post "auth/signin", to: "auth#signin"
-      post "auth/google", to: "auth#google"
-      get  "auth/me",     to: "auth#me"
+      post   "auth/signup", to: "auth#signup"
+      post   "auth/signin", to: "auth#signin"
+      post   "auth/google", to: "auth#google"
+      get    "auth/me",     to: "auth#me"
+      patch  "auth/password", to: "auth#change_password"
+      patch  "auth/email",    to: "auth#change_email"
+      delete "auth/account",  to: "auth#delete_account"
 
       # Password resets
       post  "password_resets",        to: "password_resets#create"

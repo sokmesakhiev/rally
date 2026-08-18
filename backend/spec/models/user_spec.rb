@@ -128,4 +128,72 @@ RSpec.describe User, type: :model do
       expect(user.password_reset_token).to be_nil
     end
   end
+
+  # ── Self-service account deletion ─────────────────────────────────────────────
+  describe "#discard!" do
+    it "anonymizes email, disables sign-in, and marks deleted_at without destroying the row" do
+      user = create(:user, email: "real@example.com", password: "securepass")
+      user.profile.update!(display_name: "Real Name", avatar_url: "https://example.com/a.png")
+
+      expect { user.discard! }.not_to change(User, :count)
+
+      user.reload
+      expect(user.discarded?).to be(true)
+      expect(user.email).to eq("deleted-#{user.id}@deleted.rally.invalid")
+      expect(user.authenticate("securepass")).to be_falsey
+      expect(User.kept).not_to include(user)
+      expect(User.discarded).to include(user)
+    end
+
+    it "scrubs the profile's PII and PayWay credentials" do
+      user = create(:user)
+      user.profile.update!(
+        display_name: "Real Name",
+        avatar_url: "https://example.com/a.png",
+        payway_merchant_id: "merchant123",
+        payway_api_key: "secret-key"
+      )
+
+      user.discard!
+
+      profile = user.profile.reload
+      expect(profile.display_name).to be_nil
+      expect(profile.avatar_url).to be_nil
+      expect(profile.payway_merchant_id).to be_nil
+      expect(profile.payway_api_key).to be_nil
+    end
+
+    it "clears google_uid so the same Google account can sign up fresh afterwards" do
+      user = create(:user, google_uid: "google-123", provider: "google")
+
+      user.discard!
+
+      expect(user.reload.google_uid).to be_nil
+    end
+
+    it "hides (discards) the user's own events, cascading to their registrations" do
+      user = create(:user)
+      event = create(:event, creator: user)
+      other_participant = create(:user)
+      registration = create(:registration, event: event, user: other_participant)
+
+      user.discard!
+
+      expect(event.reload.discarded?).to be(true)
+      expect(registration.reload.discarded?).to be(true)
+      # The other participant's own account is untouched.
+      expect(other_participant.reload.discarded?).to be(false)
+    end
+
+    it "does not destroy other users' payments/refunds tied to the deleted user's events" do
+      user = create(:user)
+      event = create(:event, creator: user, price_cents: 2500)
+      registration = create(:registration, :paid, event: event)
+      payment = create(:payment, :approved, registration: registration)
+
+      user.discard!
+
+      expect(Payment.exists?(payment.id)).to be(true)
+    end
+  end
 end

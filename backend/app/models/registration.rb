@@ -91,6 +91,18 @@ class Registration < ApplicationRecord
     deleted_at.present?
   end
 
+  # Whether this registration's participant wants a given non-essential
+  # notification email — see Profile's notify_* columns
+  # (notify_payment_received, notify_refund_issued,
+  # notify_promoted_from_waitlist) and the mailer call sites this gates
+  # (Refunds::IssueRefund, Waitlists::PromoteNext,
+  # ProcessAbaPaywayWebhookJob, PaymentsController#status). Opt-out, not
+  # opt-in — defaults to true even if the profile row is somehow missing,
+  # matching ProfilesController#profile_json's own default.
+  def wants_notification?(type)
+    user.profile&.public_send("notify_#{type}?") != false
+  end
+
   private
 
   def event_not_full
