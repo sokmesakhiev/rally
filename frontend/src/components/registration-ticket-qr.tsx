@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Ticket } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,18 +29,25 @@ export function RegistrationTicketQR({
 }: RegistrationTicketQRProps) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Radix's DialogContent isn't mounted into the DOM until the dialog is
+  // actually open (it's unmounted, not just hidden, while closed) — so
+  // canvasRef.current was still null the one time this effect ran on
+  // mount, and the canvas never got drawn into. Tracking `open` ourselves
+  // and depending on it here re-runs the draw once the canvas element
+  // actually exists.
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!open || !canvasRef.current) return;
     QRCode.toCanvas(canvasRef.current, registrationId, {
       width: 220,
       margin: 2,
       color: { dark: brandColor, light: "#ffffff" },
     });
-  }, [registrationId, brandColor]);
+  }, [open, registrationId, brandColor]);
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Ticket className="h-4 w-4" /> {t("registrationTicket.showTicket")}
