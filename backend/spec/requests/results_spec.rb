@@ -187,4 +187,34 @@ RSpec.describe "Results API", type: :request do
       expect(response).to have_http_status(:unauthorized)
     end
   end
+
+  # ── GET /api/v1/events/:event_id/results (public leaderboard) ────────────────
+  describe "GET /api/v1/events/:event_id/results" do
+    let!(:event) { create(:event, creator: organizer) }
+
+    it "requires no authentication" do
+      reg = create(:registration, event: event, user: participant)
+      create(:result, registration: reg, finish_time_seconds: 600)
+
+      get "/api/v1/events/#{event.id}/results"
+
+      expect(response).to have_http_status(:ok)
+      expect(json["groups"].first["results"].first["registration_id"]).to eq(reg.id)
+    end
+
+    it "returns one empty group when the event has no event types and nothing recorded yet" do
+      create(:registration, event: event)
+
+      get "/api/v1/events/#{event.id}/results"
+
+      expect(response).to have_http_status(:ok)
+      expect(json["groups"]).to eq([ { "event_type_id" => nil, "event_type_name" => nil, "results" => [] } ])
+    end
+
+    it "returns 404 for a non-existent event" do
+      get "/api/v1/events/00000000-0000-0000-0000-000000000000/results"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end

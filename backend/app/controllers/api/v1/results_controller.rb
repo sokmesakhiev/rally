@@ -1,9 +1,23 @@
 module Api
   module V1
     class ResultsController < BaseController
-      before_action :authenticate_user!
+      # Public — no auth — same as EventsController#show. Everything else on
+      # this controller is organizer-only.
+      before_action :authenticate_user!, except: [ :index ]
 
       MAX_IMPORT_FILE_SIZE = 2.megabytes
+
+      # GET /api/v1/events/:event_id/results — public leaderboard. Empty
+      # groups (nothing recorded yet) are still returned rather than 404ing
+      # — see Results::BuildLeaderboard's class comment for why that's the
+      # frontend's signal to hide the results section rather than a
+      # category-based check.
+      def index
+        event = Event.kept.find(params[:event_id])
+        render json: { groups: Results::BuildLeaderboard.call(event: event) }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
 
       # PATCH /api/v1/registrations/:id/result — organizer sets/updates/clears
       # one participant's finish time by hand. finish_time_seconds: null
