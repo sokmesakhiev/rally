@@ -380,6 +380,8 @@
     "tabResponses": "Responses",
     "statCheckedIn": "Checked in",
     "noParticipants": "No one has registered yet. Share your event to get sign-ups.",
+    "exportCsv": "Export CSV",
+    "exportCsvError": "Couldn't export the participant list. Try again.",
     "participantFallback": "Participant",
     "registeredOn": "Registered {{date}}",
     "paidBadge": "Paid",
