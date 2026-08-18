@@ -2,7 +2,7 @@ module Api
   module V1
     class AuthController < BaseController
       include UserPayload
-
+      
       before_action :authenticate_user!, only: [ :me, :change_password, :change_email, :delete_account ]
 
       # POST /api/v1/auth/signup
@@ -169,6 +169,28 @@ module Api
         end
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      private
+
+      def user_payload(user, token)
+        profile = user.profile
+        payload = {
+          user: {
+            id: user.id,
+            email: user.email,
+            display_name: profile&.display_name,
+            avatar_url: profile&.avatar_url,
+            email_verified: user.email_verified?,
+            # Drives whether the frontend shows the admin nav link. Not a
+            # security boundary — every admin endpoint checks server-side via
+            # require_admin! regardless of what the client believes.
+            admin: user.admin?,
+            created_at: user.created_at
+          }
+        }
+        payload[:token] = token if token
+        payload
       end
     end
   end
