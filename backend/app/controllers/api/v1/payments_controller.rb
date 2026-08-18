@@ -69,7 +69,9 @@ module Api
         when "APPROVED"
           payment.update!(status: "approved", paid_at: Time.current, raw_response: response)
           payment.registration.mark_paid_from_payment!(payment)
-          RegistrationMailer.payment_received(payment.registration).deliver_later
+          if payment.registration.wants_notification?(:payment_received)
+            RegistrationMailer.payment_received(payment.registration).deliver_later
+          end
         when "DECLINED"
           payment.update!(status: "declined", raw_response: response)
         when "CANCELLED"

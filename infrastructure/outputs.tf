@@ -69,6 +69,17 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
+# Bare name only (no registry host) — this is what the deploy-backend GitHub
+# Actions job's ECR_REPOSITORY variable must be set to (see
+# .github/workflows/deploy.yml, which builds the full "$REGISTRY/$REPOSITORY"
+# itself from this plus the ECR login step's registry output). Pasting
+# ecr_repository_url there instead doubles the registry host in the pushed
+# tag and makes ECR reject the push with "repository ... does not exist".
+output "ecr_repository_name" {
+  description = "Bare ECR repository name (no registry host) — set the GitHub Actions ECR_REPOSITORY variable to this, not ecr_repository_url."
+  value       = aws_ecr_repository.app.name
+}
+
 # ── ECS ───────────────────────────────────────────────────────────────────────
 
 output "ecs_cluster_name" {

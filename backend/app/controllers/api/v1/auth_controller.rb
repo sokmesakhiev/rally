@@ -1,7 +1,7 @@
 module Api
   module V1
     class AuthController < BaseController
-      before_action :authenticate_user!, only: [ :me ]
+      before_action :authenticate_user!, only: [ :me, :change_password, :change_email, :delete_account ]
 
       # POST /api/v1/auth/signup
       def signup
@@ -86,6 +86,87 @@ module Api
       # GET /api/v1/auth/me
       def me
         render json: user_payload(current_user, nil).except(:token)
+      end
+
+      # PATCH /api/v1/auth/password — logged-in password change. Distinct
+      # from PasswordResetsController's token-based forgot-password flow
+      # (which needs no current password, since proving control of the
+      # email inbox is the point of that one). A Google-only account whose
+      # password was never actually set by the user (see
+      # User.find_or_create_from_google!'s random unusable password) will
+      # always fail the current_password check here — their escape hatch is
+      # the existing forgot-password flow, which sets a real password with
+      # no current-password check at all.
+      def change_password
+        validate_params_with_schema(ChangePasswordRequestSchema) do |validated_params|
+          unless current_user.authenticate(validated_params[:current_password])
+            render json: { error: "Current password is incorrect" }, status: :unprocessable_entity
+            return
+          end
+
+          current_user.update!(
+            password: validated_params[:new_password],
+            password_confirmation: validated_params[:new_password_confirmation]
+          )
+          render json: { message: "Password updated" }
+        end
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PATCH /api/v1/auth/email — changes immediately and drops
+      # email_verified back to false rather than holding the change until
+      # the new address confirms it; reuses the same
+      # generate_email_verification_token!/UserMailer.email_verification
+      # flow signup already uses.
+      def change_email
+        validate_params_with_schema(ChangeEmailRequestSchema) do |validated_params|
+          unless current_user.authenticate(validated_params[:current_password])
+            render json: { error: "Current password is incorrect" }, status: :unprocessable_entity
+            return
+          end
+
+          current_user.update!(email: validated_params[:new_email], email_verified_at: nil)
+          current_user.generate_email_verification_token!
+          UserMailer.email_verification(current_user).deliver_later
+
+          render json: user_payload(current_user, nil).except(:token)
+        end
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # DELETE /api/v1/auth/account — see User#discard! for what actually
+      # happens. Blocked while the user organizes an event with a paid
+      # registration still outstanding, same guard
+      # Admin::EventsController#destroy uses for the same reason (hard data
+      # loss on money already exchanged) — here it blocks reaching #discard!
+      # at all rather than a per-event check, since deleting the account is
+      # all-or-nothing.
+      def delete_account
+        validate_params_with_schema(DeleteAccountRequestSchema) do |validated_params|
+          unless current_user.authenticate(validated_params[:current_password])
+            render json: { error: "Current password is incorrect" }, status: :unprocessable_entity
+            return
+          end
+
+          paid_event_count = Event.where(creator_id: current_user.id)
+            .joins(:registrations).where(registrations: { payment_status: "paid" })
+            .distinct.count
+          if paid_event_count.positive?
+            render json: {
+              error: "You organize #{paid_event_count} event(s) with paid registrations. " \
+                     "Resolve refunds before deleting your account.",
+              code: "has_paid_events"
+            }, status: :unprocessable_entity
+            return
+          end
+
+          current_user.discard!
+          render json: { message: "Account deleted" }
+        end
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private

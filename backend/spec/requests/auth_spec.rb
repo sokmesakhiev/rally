@@ -266,5 +266,181 @@ RSpec.describe "Auth API", type: :request do
 
       expect(response).to have_http_status(:unauthorized)
     end
+
+    it "returns 401 for a still-unexpired token belonging to a since-deleted account" do
+      user = create(:user)
+      headers = auth_headers(user)
+      user.discard!
+
+      get "/api/v1/auth/me", headers: headers, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(json["code"]).to eq("account_deleted")
+    end
+  end
+
+  # ── PATCH /api/v1/auth/password ──────────────────────────────────────────────
+  describe "PATCH /api/v1/auth/password" do
+    let!(:user) { create(:user, password: password) }
+
+    it "updates the password when the current one is correct" do
+      patch "/api/v1/auth/password",
+            params: { current_password: password, new_password: "newpassword123",
+                      new_password_confirmation: "newpassword123" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.authenticate("newpassword123")).to eq(user)
+    end
+
+    it "rejects an incorrect current password without changing anything" do
+      patch "/api/v1/auth/password",
+            params: { current_password: "wrongpass", new_password: "newpassword123",
+                      new_password_confirmation: "newpassword123" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(user.reload.authenticate(password)).to eq(user)
+    end
+
+    it "rejects a mismatched confirmation" do
+      patch "/api/v1/auth/password",
+            params: { current_password: password, new_password: "newpassword123",
+                      new_password_confirmation: "somethingelse" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "rejects a new password shorter than 8 characters" do
+      patch "/api/v1/auth/password",
+            params: { current_password: password, new_password: "short",
+                      new_password_confirmation: "short" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "returns 401 without a token" do
+      patch "/api/v1/auth/password",
+            params: { current_password: password, new_password: "newpassword123",
+                      new_password_confirmation: "newpassword123" },
+            as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
+  # ── PATCH /api/v1/auth/email ─────────────────────────────────────────────────
+  describe "PATCH /api/v1/auth/email" do
+    let!(:user) { create(:user, password: password) }
+
+    it "changes the email immediately and drops email_verified back to false" do
+      user.verify_email!
+      expect(user.email_verified?).to be(true)
+
+      patch "/api/v1/auth/email",
+            params: { current_password: password, new_email: "new-address@example.com" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["email"]).to eq("new-address@example.com")
+      expect(json["user"]["email_verified"]).to be(false)
+      expect(user.reload.email).to eq("new-address@example.com")
+    end
+
+    it "sends a new verification email to the new address" do
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/auth/email",
+                params: { current_password: password, new_email: "new-address@example.com" },
+                headers: auth_headers(user), as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([ "new-address@example.com" ])
+    end
+
+    it "rejects an incorrect current password" do
+      patch "/api/v1/auth/email",
+            params: { current_password: "wrongpass", new_email: "new-address@example.com" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(user.reload.email).not_to eq("new-address@example.com")
+    end
+
+    it "rejects an email already used by another account" do
+      create(:user, email: "taken@example.com")
+
+      patch "/api/v1/auth/email",
+            params: { current_password: password, new_email: "taken@example.com" },
+            headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "returns 401 without a token" do
+      patch "/api/v1/auth/email",
+            params: { current_password: password, new_email: "new-address@example.com" },
+            as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
+  # ── DELETE /api/v1/auth/account ──────────────────────────────────────────────
+  describe "DELETE /api/v1/auth/account" do
+    let!(:user) { create(:user, password: password) }
+
+    it "anonymizes the account when the current password is correct" do
+      headers = auth_headers(user)
+
+      delete "/api/v1/auth/account",
+             params: { current_password: password },
+             headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.discarded?).to be(true)
+    end
+
+    it "rejects an incorrect current password without deleting anything" do
+      delete "/api/v1/auth/account",
+             params: { current_password: "wrongpass" },
+             headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(user.reload.discarded?).to be(false)
+    end
+
+    it "blocks deletion while the user organizes an event with a paid registration" do
+      event = create(:event, creator: user)
+      create(:registration, event: event, payment_status: "paid")
+
+      delete "/api/v1/auth/account",
+             params: { current_password: password },
+             headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["code"]).to eq("has_paid_events")
+      expect(user.reload.discarded?).to be(false)
+    end
+
+    it "allows deletion when the user organizes an event with only unpaid registrations" do
+      event = create(:event, creator: user)
+      create(:registration, event: event, payment_status: "unpaid")
+
+      delete "/api/v1/auth/account",
+             params: { current_password: password },
+             headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.discarded?).to be(true)
+    end
+
+    it "returns 401 without a token" do
+      delete "/api/v1/auth/account", params: { current_password: password }, as: :json
+      expect(response).to have_http_status(:unauthorized)
+    end
   end
 end

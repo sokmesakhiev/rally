@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_18_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -154,6 +154,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000004) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.string "display_name"
+    t.boolean "notify_payment_received", default: true, null: false
+    t.boolean "notify_promoted_from_waitlist", default: true, null: false
+    t.boolean "notify_refund_issued", default: true, null: false
     t.text "payway_api_key"
     t.string "payway_merchant_id"
     t.text "payway_rsa_public_key"
@@ -250,6 +253,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000004) do
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
+    t.datetime "deleted_at"
     t.string "email", null: false
     t.datetime "email_verification_sent_at"
     t.string "email_verification_token"
@@ -263,6 +267,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000004) do
     t.string "suspension_reason"
     t.datetime "updated_at", null: false
     t.index ["admin"], name: "index_users_on_admin", where: "(admin = true)"
+    t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NOT NULL)"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["email_verification_token"], name: "index_users_on_email_verification_token", unique: true
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true

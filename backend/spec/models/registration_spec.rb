@@ -84,6 +84,22 @@ RSpec.describe Registration, type: :model do
     end
   end
 
+  # ── Notification preferences ────────────────────────────────────────────────
+  describe "#wants_notification?" do
+    it "defaults to true (opt-out, not opt-in)" do
+      registration = create(:registration)
+      expect(registration.wants_notification?(:payment_received)).to be(true)
+    end
+
+    it "is false once the participant's profile turns that preference off" do
+      registration = create(:registration)
+      registration.user.profile.update!(notify_payment_received: false)
+
+      expect(registration.wants_notification?(:payment_received)).to be(false)
+      expect(registration.wants_notification?(:refund_issued)).to be(true)
+    end
+  end
+
   # ── Check-in ─────────────────────────────────────────────────────────────────
   describe "#checked_in?" do
     it "is false when checked_in_at is blank" do
