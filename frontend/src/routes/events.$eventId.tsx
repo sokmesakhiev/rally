@@ -21,6 +21,7 @@ import {
   eventsApi,
   registrationsApi,
   waitlistApi,
+  resultsApi,
   type ApiRegistrationAnswer,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
@@ -30,6 +31,7 @@ import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
 import { PaymentPanel } from "@/components/payment-panel";
+import { ResultsLeaderboard } from "@/components/results-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -78,6 +80,14 @@ function EventDetail() {
     queryKey: ["my-waitlist", eventId, user?.id],
     enabled: !!user,
     queryFn: () => waitlistApi.myEntryForEvent(eventId),
+  });
+
+  // Public — no auth required. Empty groups (nothing recorded yet, which
+  // includes every non-race "gathering" event by design) mean
+  // ResultsLeaderboard renders nothing, so no conditional fetch needed.
+  const leaderboardQuery = useQuery({
+    queryKey: ["event-results", eventId],
+    queryFn: () => resultsApi.leaderboard(eventId).then((r) => r.groups),
   });
 
   const [waitlistPendingTypeId, setWaitlistPendingTypeId] = useState<string | null>(null);
@@ -497,6 +507,15 @@ function EventDetail() {
                 </div>
               )}
             </div>
+
+            {/* Results — auto-shown once an organizer has recorded any */}
+            {leaderboardQuery.data && (
+              <ResultsLeaderboard
+                groups={leaderboardQuery.data}
+                currentUserId={user?.id}
+                brandColor={brandColor}
+              />
+            )}
 
             {/* QR code */}
             <div className="mt-8 rounded-2xl border border-border bg-card p-6">

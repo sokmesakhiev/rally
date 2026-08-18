@@ -342,7 +342,11 @@
     "manualTitle": "Manual entry",
     "timePlaceholder": "H:MM:SS",
     "invalidTime": "Enter a time like 1:23:45 or 23:45.",
-    "savedToast": "Finish time saved"
+    "savedToast": "Finish time saved",
+    "leaderboardTitle": "Results",
+    "leaderboardDesc": "Final placements, ranked by finish time.",
+    "anonymousParticipant": "Participant",
+    "youBadge": "You"
   },
   "manageEvent": {
     "backToDashboard": "Back to dashboard",

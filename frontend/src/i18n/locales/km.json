@@ -336,7 +336,11 @@
     "manualTitle": "បញ្ចូលដោយដៃ",
     "timePlaceholder": "ម៉ោង:នាទី:វិនាទី",
     "invalidTime": "សូមបញ្ចូលពេលវេលាដូចជា 1:23:45 ឬ 23:45។",
-    "savedToast": "បានរក្សាទុកពេលវេលាបញ្ចប់"
+    "savedToast": "បានរក្សាទុកពេលវេលាបញ្ចប់",
+    "leaderboardTitle": "លទ្ធផល",
+    "leaderboardDesc": "លទ្ធផលចុងក្រោយ តម្រៀបតាមពេលវេលាបញ្ចប់។",
+    "anonymousParticipant": "អ្នកចូលរួម",
+    "youBadge": "អ្នក"
   },
   "manageEvent": {
     "backToDashboard": "ត្រឡប់ទៅផ្ទាំងគ្រប់គ្រង",

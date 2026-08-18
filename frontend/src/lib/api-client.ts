@@ -529,6 +529,24 @@ export interface ApiResultsImportSummary {
   errors: Array<{ row: number; email: string; reason: string }>;
 }
 
+export interface ApiLeaderboardEntry {
+  placement: number;
+  registration_id: string;
+  user_id: string;
+  display_name: string | null;
+  finish_time_seconds: number;
+}
+
+export interface ApiLeaderboardGroup {
+  /** Null when the event has no event types — one combined group. */
+  event_type_id: string | null;
+  event_type_name: string | null;
+  /** Ranked ascending by finish time; empty until an organizer records at
+   * least one result for this group (e.g. every non-race "gathering"
+   * event, by design — see Result's backend class comment). */
+  results: ApiLeaderboardEntry[];
+}
+
 export const resultsApi = {
   /** CSV columns: email,finish_time — finish_time accepts "H:MM:SS",
    * "MM:SS", or a bare number of seconds. */
@@ -536,6 +554,13 @@ export const resultsApi = {
     const form = new FormData();
     form.append("file", file);
     return api.upload<ApiResultsImportSummary>(`/events/${eventId}/results/import`, form);
+  },
+
+  /** Public — no auth required. Returns one group per event type (or a
+   * single combined group when the event has none), each independently
+   * ranked. */
+  leaderboard(eventId: string) {
+    return api.get<{ groups: ApiLeaderboardGroup[] }>(`/events/${eventId}/results`);
   },
 };
 

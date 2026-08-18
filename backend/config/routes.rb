@@ -54,6 +54,7 @@ Rails.application.routes.draw do
       # bulk via CSV.
       patch "registrations/:id/result",        to: "results#update"
       post  "events/:event_id/results/import", to: "results#import"
+      get   "events/:event_id/results",        to: "results#index"
 
       # Waitlists — join when an event/type is full, promoted automatically
       # (Waitlists::PromoteNext) when a registration is cancelled/removed.
