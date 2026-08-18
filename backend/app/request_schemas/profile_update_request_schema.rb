@@ -15,6 +15,9 @@ class ProfileUpdateRequestSchema < ApplicationRequestSchema
       optional(:payway_merchant_id).maybe(:string)
       optional(:payway_api_key).maybe(:string)
       optional(:payway_rsa_public_key).maybe(:string)
+      optional(:notify_payment_received).filled(:bool)
+      optional(:notify_refund_issued).filled(:bool)
+      optional(:notify_promoted_from_waitlist).filled(:bool)
     end
   end
 end

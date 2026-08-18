@@ -36,6 +36,9 @@ module Api
           # so no masking needed, but the frontend only needs to know refund
           # capability is on, not see the raw PEM block.
           payway_refund_configured: profile&.payway_refund_configured? || false,
+          notify_payment_received: profile&.notify_payment_received? != false,
+          notify_refund_issued: profile&.notify_refund_issued? != false,
+          notify_promoted_from_waitlist: profile&.notify_promoted_from_waitlist? != false,
           created_at: profile&.created_at,
           updated_at: profile&.updated_at
         }

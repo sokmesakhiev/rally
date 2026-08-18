@@ -52,7 +52,9 @@ module Refunds
         apply_refund!(refund)
       end
 
-      RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
+      if @payment.registration.wants_notification?(:refund_issued)
+        RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
+      end
       Result.new(status: :succeeded, refund: refund)
     end
 
@@ -75,7 +77,9 @@ module Refunds
         apply_refund!(refund)
       end
 
-      RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
+      if @payment.registration.wants_notification?(:refund_issued)
+        RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
+      end
       Result.new(status: :succeeded, refund: refund)
     end
 

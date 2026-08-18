@@ -31,6 +31,13 @@ class User < ApplicationRecord
   scope :suspended, -> { where.not(suspended_at: nil) }
   scope :active, -> { where(suspended_at: nil) }
 
+  # Soft-delete — see #discard! below. Explicit scopes, not a default_scope
+  # (same reasoning as Event/Registration/Survey/WaitlistEntry this
+  # session): a default_scope here would make any `belongs_to`/`has_many`
+  # pointing at a discarded user silently behave as if they don't exist.
+  scope :kept, -> { where(deleted_at: nil) }
+  scope :discarded, -> { where.not(deleted_at: nil) }
+
   def email_verified?
     email_verified_at.present?
   end
@@ -58,6 +65,57 @@ class User < ApplicationRecord
   # EventPlanPaymentsController so plan/capacity stay consistent).
   def unsuspend!
     update!(suspended_at: nil, suspension_reason: nil)
+  end
+
+  # Self-service account deletion — see Api::V1::AuthController#delete_account,
+  # which blocks calling this at all while the user organizes an event with
+  # a paid registration still outstanding (same guard
+  # Admin::EventsController#destroy uses). Anonymizes this account's own PII
+  # and permanently blocks sign-in, but deliberately does NOT hard-`destroy`
+  # the row — the has_many :events, dependent: :destroy chain above would
+  # cascade into every event this user organized, taking down *other*
+  # people's registrations/payments/refunds for those events too. Hiding
+  # (not destroying) their own remaining events is safe once the paid-event
+  # guard has already passed — nothing left has money attached to it.
+  #
+  # Distinct from #suspend! (admin-initiated, reversible, keeps real PII) —
+  # this is user-initiated and irreversible, hence its own deleted_at column
+  # rather than overloading suspended_at.
+  def discard!
+    transaction do
+      events.kept.each(&:discard!)
+      # password_confirmation is a virtual attr_accessor from has_secure_password
+      # that validates_confirmation_of checks *whenever it's already been set on
+      # this in-memory object* (e.g. by the factory/signup flow that created it),
+      # not just when explicitly passed here. Leaving it out would leave a stale
+      # confirmation value around that no longer matches the new random
+      # password, so it must be set alongside password, not omitted.
+      unusable_password = SecureRandom.hex(32)
+      update!(
+        email: "deleted-#{id}@deleted.rally.invalid",
+        password: unusable_password,
+        password_confirmation: unusable_password,
+        google_uid: nil,
+        provider: nil,
+        email_verified_at: nil,
+        email_verification_token: nil,
+        email_verification_sent_at: nil,
+        password_reset_token: nil,
+        password_reset_sent_at: nil,
+        deleted_at: Time.current
+      )
+      profile&.update!(
+        display_name: nil,
+        avatar_url: nil,
+        payway_merchant_id: nil,
+        payway_api_key: nil,
+        payway_rsa_public_key: nil
+      )
+    end
+  end
+
+  def discarded?
+    deleted_at.present?
   end
 
   def verify_email!

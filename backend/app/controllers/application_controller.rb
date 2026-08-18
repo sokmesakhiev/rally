@@ -29,6 +29,17 @@ class ApplicationController < ActionController::API
         return
       end
 
+      # Same stateless-token reasoning as the suspended check above — a
+      # 30-day-old token for a since-deleted (anonymized, see
+      # User#discard!) account must stop working immediately, not linger
+      # until it expires. 401, not 403: as far as this token's owner is
+      # concerned, that identity no longer exists.
+      if user.discarded?
+        render json: { error: "This account no longer exists.", code: "account_deleted" },
+               status: :unauthorized
+        return
+      end
+
       @current_user = user
       set_sentry_user
     rescue JWT::DecodeError, ActiveRecord::RecordNotFound

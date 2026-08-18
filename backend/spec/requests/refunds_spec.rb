@@ -104,6 +104,17 @@ RSpec.describe "Refunds API", type: :request do
         expect(response).to have_http_status(:unprocessable_entity)
       end
 
+      it "skips the refund_issued email when the participant has turned that notification off" do
+        registration.user.profile.update!(notify_refund_issued: false)
+        allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_return(gateway_success_response)
+
+        expect {
+          perform_enqueued_jobs do
+            post "/api/v1/payments/#{payment.id}/refunds", headers: auth_headers(organizer), as: :json
+          end
+        }.not_to change { ActionMailer::Base.deliveries.count }
+      end
+
       it "returns 502 and still logs a failed Refund when ABA PayWay is unreachable" do
         allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_raise(AbaPayway::RequestError, "timeout")
 
