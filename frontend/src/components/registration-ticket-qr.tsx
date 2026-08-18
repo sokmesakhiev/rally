@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Ticket } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -28,26 +28,30 @@ export function RegistrationTicketQR({
   brandColor = "#6366f1",
 }: RegistrationTicketQRProps) {
   const { t } = useTranslation();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Radix's DialogContent isn't mounted into the DOM until the dialog is
-  // actually open (it's unmounted, not just hidden, while closed) — so
-  // canvasRef.current was still null the one time this effect ran on
-  // mount, and the canvas never got drawn into. Tracking `open` ourselves
-  // and depending on it here re-runs the draw once the canvas element
-  // actually exists.
-  const [open, setOpen] = useState(false);
+  // A plain useRef isn't enough here: Radix's Dialog defers actually
+  // mounting DialogContent into the DOM by one extra render pass after
+  // `open` turns true (its Presence primitive sequences the mount through
+  // its own useLayoutEffect state machine, to support animate-out on
+  // close). An effect keyed on `open` therefore fires a tick before the
+  // canvas element exists, so it silently drew into nothing. A callback
+  // ref stored in state re-runs the draw exactly when the canvas node
+  // itself actually shows up (or goes away), independent of that timing.
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => setCanvasEl(node), []);
 
   useEffect(() => {
-    if (!open || !canvasRef.current) return;
-    QRCode.toCanvas(canvasRef.current, registrationId, {
+    if (!canvasEl) return;
+    QRCode.toCanvas(canvasEl, registrationId, {
       width: 220,
       margin: 2,
       color: { dark: brandColor, light: "#ffffff" },
+    }).catch((err) => {
+      console.error("Failed to render ticket QR code", err);
     });
-  }, [open, registrationId, brandColor]);
+  }, [canvasEl, registrationId, brandColor]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Ticket className="h-4 w-4" /> {t("registrationTicket.showTicket")}
