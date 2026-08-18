@@ -508,11 +508,6 @@ function EventDetail() {
                       eventTitle={ev.title}
                       brandColor={brandColor}
                     />
-                    <Button variant="outline" onClick={() => downloadICS(ev)}>
-                      <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
                     {regQuery.data.certificate_url && (
                       <Button asChild variant="outline">
                         <a href={regQuery.data.certificate_url} target="_blank" rel="noreferrer">
