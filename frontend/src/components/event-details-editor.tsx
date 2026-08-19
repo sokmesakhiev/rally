@@ -230,7 +230,7 @@ export function EventDetailsEditor({ event }: { event: ApiEvent }) {
           id="edit-price"
           type="number"
           min="0"
-          step="0.01"
+          step="1"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder={t("eventForm.pricePlaceholder")}

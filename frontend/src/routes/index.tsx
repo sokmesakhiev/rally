@@ -110,7 +110,7 @@ function Index() {
                 <a href="#how">{t("home.hero.ctaSecondary")}</a>
               </Button>
             </div>
-            <div className="mt-10 flex flex-wrap gap-8 text-sm text-muted-foreground">
+            {/* <div className="mt-10 flex flex-wrap gap-8 text-sm text-muted-foreground">
               <div>
                 <p className="font-display text-2xl font-bold text-foreground">12k+</p>
                 <p>{t("home.hero.statEvents")}</p>
@@ -123,7 +123,7 @@ function Index() {
                 <p className="font-display text-2xl font-bold text-foreground">4.9★</p>
                 <p>{t("home.hero.statRating")}</p>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </section>
@@ -289,7 +289,6 @@ function Index() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-muted-foreground sm:flex-row">
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
             <span className="font-display font-semibold text-foreground">Rally</span>
           </div>
           <p>{t("home.footer.tagline", { year: new Date().getFullYear() })}</p>

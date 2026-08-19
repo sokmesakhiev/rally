@@ -12,6 +12,7 @@ import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { authApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { getRecaptchaToken } from "@/lib/recaptcha";
+import logoUrl from "@/assets/logo.png";
 
 const GOOGLE_SIGN_IN_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
@@ -130,9 +131,11 @@ function AuthPage() {
       {/* Brand panel */}
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden p-12 md:flex [background-image:var(--gradient-surface)]">
         <Link to="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg [background-image:var(--gradient-hero)]">
-            <Activity className="h-5 w-5 text-primary-foreground" />
-          </span>
+          <img
+            src={logoUrl}
+            alt={t("common.rallyLogoAlt")}
+            className="relative h-16 cursor-pointer"
+          />
           <span className="font-display text-lg font-bold">Rally</span>
         </Link>
         <div>
