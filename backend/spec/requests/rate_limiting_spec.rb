@@ -89,6 +89,66 @@ RSpec.describe "Rate limiting", type: :request, rack_attack: true do
     end
   end
 
+  describe "guest checkout throttling" do
+    let!(:event) { create(:event) }
+
+    it "returns 429 after 10 guest registrations from one IP in an hour" do
+      11.times do |i|
+        post "/api/v1/events/#{event.id}/registrations",
+             params: { guest: { name: "Guest #{i}", email: "guest#{i}@example.com" } },
+             as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
+    it "throttles by the target email even when IPs differ, so a victim can't be mail-bombed by rotating IPs" do
+      6.times do |i|
+        post "/api/v1/events/#{event.id}/registrations",
+             params: { guest: { name: "Guest", email: "victim@example.com" } },
+             headers: { "REMOTE_ADDR" => "203.0.113.#{i + 1}" },
+             as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
+    it "does not count a signed-in participant's registration against the guest-only limit" do
+      user = create(:user)
+
+      post "/api/v1/events/#{event.id}/registrations", headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+    end
+  end
+
+  describe "change email throttling" do
+    let!(:user) { create(:user, password: password) }
+
+    it "returns 429 after 10 change-email requests from one IP in an hour" do
+      11.times do |i|
+        patch "/api/v1/auth/email",
+              params: { current_password: password, new_email: "new#{i}@example.com" },
+              headers: auth_headers(user),
+              as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
+    it "throttles by the target email even when the account/IP differ" do
+      6.times do |i|
+        attacker = create(:user)
+        patch "/api/v1/auth/email",
+              params: { current_password: "password123", new_email: "victim@example.com" },
+              headers: auth_headers(attacker).merge("REMOTE_ADDR" => "203.0.113.#{i + 1}"),
+              as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+  end
+
   describe "safelisted paths" do
     it "never throttles the ABA PayWay webhook" do
       # Well past every limit, including the blanket req/ip one.
