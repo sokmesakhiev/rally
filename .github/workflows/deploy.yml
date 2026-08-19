@@ -104,6 +104,50 @@ jobs:
       - name: Invalidate CloudFront
         run: aws cloudfront create-invalidation  --distribution-id ${{secrets.CLOUDFRONT_DIST_ID}} --paths "/*"
 
+      # continue-on-error is deliberate: a broken Telegram integration (bad
+      # token/chat id, API outage) shouldn't flip an otherwise-successful
+      # deploy to red in the Actions UI. --fail-with-body still makes curl
+      # itself exit non-zero on a Telegram API error, so that failure is
+      # visible as a step warning instead of vanishing silently — the
+      # previous `curl --silent` (no -f) always exited 0 regardless of what
+      # Telegram actually returned, so a wrong token/chat id would fail with
+      # zero indication anything was wrong.
+      - name: Notify Telegram — success
+        if: success()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "Rally frontend deployment succeeded"
+          MESSAGE=$(printf '✅ Rally frontend deployed\nRepo: %s\nBranch: %s\nCommit: %s\nRun: %s' \
+            "$REPO" "$BRANCH" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$MESSAGE"
+
+      - name: Notify Telegram — failure
+        if: failure()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "Rally frontend deployment failed"
+          MESSAGE=$(printf '❌ Rally frontend deployment failed\nRepo: %s\nBranch: %s\nCommit: %s\nRun: %s' \
+            "$REPO" "$BRANCH" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$MESSAGE"
+
   deploy-backend:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
@@ -174,3 +218,39 @@ jobs:
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE"
+
+      - name: Notify Telegram — success
+        if: success()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "Rally backend deployment succeeded"
+          MESSAGE=$(printf '✅ Rally backend deployed\nRepo: %s\nBranch: %s\nCommit: %s\nRun: %s' \
+            "$REPO" "$BRANCH" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$MESSAGE"
+
+      - name: Notify Telegram — failure
+        if: failure()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "Rally backend deployment failed"
+          MESSAGE=$(printf '❌ Rally backend deployment failed\nRepo: %s\nBranch: %s\nCommit: %s\nRun: %s' \
+            "$REPO" "$BRANCH" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$MESSAGE"
