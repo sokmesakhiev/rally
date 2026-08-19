@@ -44,6 +44,42 @@ RSpec.describe "Profiles API", type: :request do
       expect(json["profile"]["avatar_url"]).to eq("https://example.com/avatar.png")
     end
 
+    it "updates phone" do
+      patch "/api/v1/profile",
+            params: { profile: { phone: "012 345 678" } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["profile"]["phone"]).to eq("012 345 678")
+      expect(user.profile.reload.phone).to eq("012 345 678")
+    end
+
+    it "rejects a phone number already used by another account" do
+      other = create(:user)
+      other.profile.update!(phone: "012345678")
+
+      patch "/api/v1/profile",
+            params: { profile: { phone: "012345678" } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "surfaces email_auto_generated so the frontend can nudge for a real email" do
+      checkout = Registrations::GuestCheckout.call(email: nil, phone: "012345678", name: "Dara Kim")
+      # auth_headers signs in with a known password ("password123") — a
+      # guest-checkout account has a random, never-shown one (see
+      # Registrations::GuestCheckout), so build the token directly instead
+      # of going through the real signin flow.
+      token = JsonWebToken.encode(user_id: checkout.user.id)
+
+      get "/api/v1/profile", headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+      expect(json["profile"]["email_auto_generated"]).to be(true)
+    end
+
     it "returns 401 without a token" do
       patch "/api/v1/profile", params: { profile: { display_name: "X" } }, as: :json
       expect(response).to have_http_status(:unauthorized)

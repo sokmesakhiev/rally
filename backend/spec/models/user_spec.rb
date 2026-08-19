@@ -150,6 +150,7 @@ RSpec.describe User, type: :model do
       user.profile.update!(
         display_name: "Real Name",
         avatar_url: "https://example.com/a.png",
+        phone: "012345678",
         payway_merchant_id: "merchant123",
         payway_api_key: "secret-key"
       )
@@ -159,8 +160,19 @@ RSpec.describe User, type: :model do
       profile = user.profile.reload
       expect(profile.display_name).to be_nil
       expect(profile.avatar_url).to be_nil
+      expect(profile.phone).to be_nil
       expect(profile.payway_merchant_id).to be_nil
       expect(profile.payway_api_key).to be_nil
+    end
+
+    it "resets email_auto_generated so a deleted account doesn't linger in the 'add a real email' nudge" do
+      checkout = Registrations::GuestCheckout.call(email: nil, phone: "012345678", name: "Guest")
+      user = checkout.user
+      expect(user.email_auto_generated?).to be(true)
+
+      user.discard!
+
+      expect(user.reload.email_auto_generated?).to be(false)
     end
 
     it "clears google_uid so the same Google account can sign up fresh afterwards" do

@@ -41,7 +41,7 @@ module Registrations
 
     def headers
       [
-        "Name", "Email", "Event Type(s)", "Status", "Payment Status",
+        "Name", "Email", "Phone", "Event Type(s)", "Status", "Payment Status",
         "Amount Paid (#{event.currency.upcase})", "Checked In", "Checked In At",
         "Registered At"
       ] + questions.map(&:question_text)
@@ -50,7 +50,12 @@ module Registrations
     def row(registration)
       [
         registration.user.profile&.display_name.presence || "—",
-        registration.user.email,
+        # Blank rather than the "guest-...@guest.rally.invalid" placeholder
+        # for a phone-only guest checkout (see Registrations::GuestCheckout
+        # / User#email_auto_generated) — that address isn't something an
+        # organizer should copy into a mail merge.
+        registration.user.email_auto_generated? ? nil : registration.user.email,
+        registration.user.profile&.phone,
         registration.event_types.map(&:name).join(", "),
         registration.status,
         registration.payment_status,

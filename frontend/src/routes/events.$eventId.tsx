@@ -55,6 +55,10 @@ export const Route = createFileRoute("/events/$eventId")({
 type RegStep = "idle" | "guest" | "types" | "survey";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Deliberately lenient — mirrors Profile's own format check on the backend.
+// Cambodian numbers show up as "012 345 678", "+855 12 345 678", etc., and
+// this form isn't the place to enforce one canonical shape.
+const PHONE_RE = /^[+]?[\d\s-]{7,20}$/;
 
 function EventDetail() {
   const { eventId } = Route.useParams();
@@ -67,12 +71,26 @@ function EventDetail() {
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
-  const guestValid = guestName.trim().length > 0 && EMAIL_RE.test(guestEmail.trim());
+  const [guestPhone, setGuestPhone] = useState("");
+  // Phone is Cambodia's most common contact channel — a first-class
+  // alternative to email here, not a fallback. At least one of the two
+  // (plus a name) is required; either alone is enough.
+  const guestEmailValid = guestEmail.trim().length === 0 || EMAIL_RE.test(guestEmail.trim());
+  const guestPhoneValid = guestPhone.trim().length === 0 || PHONE_RE.test(guestPhone.trim());
+  const guestHasContact =
+    (guestEmail.trim().length > 0 && guestEmailValid) ||
+    (guestPhone.trim().length > 0 && guestPhoneValid);
+  const guestValid = guestName.trim().length > 0 && guestHasContact;
 
   // Only actually sent to the backend when there's no signed-in user — see
   // registrationsApi.create.
   function guestPayload() {
-    return user ? undefined : { name: guestName.trim(), email: guestEmail.trim() };
+    if (user) return undefined;
+    return {
+      name: guestName.trim(),
+      email: guestEmail.trim() || undefined,
+      phone: guestPhone.trim() || undefined,
+    };
   }
 
   const eventQuery = useQuery({
@@ -166,12 +184,16 @@ function EventDetail() {
             onClick: () => joinWaitlist.mutate({ eventTypeIds: selectedTypeIds }),
           },
         });
-      } else if (e.code === "email_registered") {
-        // The email they typed on the guest form already has an account —
-        // bounce back to that step so they can see the note and switch to
-        // signing in instead of just seeing a generic failure toast.
+      } else if (e.code === "email_registered" || e.code === "phone_registered") {
+        // The email or phone they typed on the guest form already has an
+        // account — bounce back to that step so they can see the note and
+        // switch to signing in instead of just seeing a generic failure toast.
         setRegStep("guest");
-        toast.error(e.message ?? t("eventDetail.guestEmailTaken"), {
+        const fallback =
+          e.code === "phone_registered"
+            ? t("eventDetail.guestPhoneTaken")
+            : t("eventDetail.guestEmailTaken");
+        toast.error(e.message ?? fallback, {
           action: {
             label: t("eventDetail.signInInstead"),
             onClick: () => navigate({ to: "/auth" }),
@@ -406,7 +428,23 @@ function EventDetail() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="guest-email">{t("eventDetail.guestEmail")}</Label>
+                    <Label htmlFor="guest-phone">{t("eventDetail.guestPhone")}</Label>
+                    <Input
+                      id="guest-phone"
+                      type="tel"
+                      value={guestPhone}
+                      onChange={(e) => setGuestPhone(e.target.value)}
+                      placeholder={t("eventDetail.guestPhonePlaceholder")}
+                      autoComplete="tel"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guest-email">
+                      {t("eventDetail.guestEmail")}{" "}
+                      <span className="text-muted-foreground font-normal">
+                        {t("eventDetail.guestEmailOrPhoneNote")}
+                      </span>
+                    </Label>
                     <Input
                       id="guest-email"
                       type="email"

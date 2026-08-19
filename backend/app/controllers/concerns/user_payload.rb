@@ -18,6 +18,13 @@ module UserPayload
       user: {
         id: user.id,
         email: user.email,
+        # True for a phone-only guest checkout — see
+        # Registrations::GuestCheckout — meaning `email` above is a
+        # placeholder, not something the frontend should ever display or
+        # rely on being reachable. Drives the "add your real email" nudge
+        # on the account settings page.
+        email_auto_generated: user.email_auto_generated?,
+        phone: profile&.phone,
         display_name: profile&.display_name,
         avatar_url: profile&.avatar_url,
         email_verified: user.email_verified?,

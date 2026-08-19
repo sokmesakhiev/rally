@@ -12,6 +12,7 @@ class ProfileUpdateRequestSchema < ApplicationRequestSchema
     required(:profile).hash do
       optional(:display_name).maybe(:string)
       optional(:avatar_url).maybe(:string)
+      optional(:phone).maybe(:string)
       optional(:payway_merchant_id).maybe(:string)
       optional(:payway_api_key).maybe(:string)
       optional(:payway_rsa_public_key).maybe(:string)
