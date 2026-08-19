@@ -3,6 +3,21 @@ class Profile < ApplicationRecord
 
   validates :user_id, uniqueness: true
 
+  # Cambodia's most common contact channel — often more reliable than email
+  # for reaching a participant. Unique (nulls allowed) so
+  # Registrations::GuestCheckout can treat it as an identity-matching field
+  # the same way it already treats email: a match against an existing
+  # account is a conflict to resolve (sign in), not something to silently
+  # merge into. Deliberately lenient format check — Cambodian numbers show
+  # up as "012 345 678", "+855 12 345 678", "0123456789", etc., and this
+  # app isn't the place to enforce a single canonical format.
+  # before_validation :nilify_blank_phone (below) runs first, so "" is
+  # already nil by the time these checks run — allow_nil: true is all
+  # that's needed here.
+  validates :phone, uniqueness: true, allow_nil: true,
+                     format: { with: /\A[+]?[\d\s-]{7,20}\z/, message: "doesn't look like a phone number" }
+  before_validation :nilify_blank_phone
+
   # PayWay's API key is a payment-gateway secret — encrypted at rest via
   # Active Record encryption (keys configured in
   # config/initializers/active_record_encryption.rb). It's never returned as
@@ -51,5 +66,13 @@ class Profile < ApplicationRecord
   def nilify_blank_payway_fields
     self.payway_merchant_id = payway_merchant_id.presence
     self.payway_api_key = payway_api_key.presence
+  end
+
+  # Same "" vs nil treatment as the PayWay fields above — a cleared field in
+  # the UI should actually clear the column, not save an empty string that
+  # both looks "present" to a naive check and would collide with every
+  # other blank phone number under the unique index if it didn't.
+  def nilify_blank_phone
+    self.phone = phone.presence
   end
 end

@@ -10,9 +10,12 @@
 # guest is also optional at the schema level (a signed-in request sends
 # none of it) — RegistrationsController#create is what actually requires it
 # once it knows there's no current_user, since that decision needs request
-# state (the Authorization header) this schema never sees either. Email
-# format/uniqueness is left to Registrations::GuestCheckout/User, same
-# division of labor AuthSignupRequestSchema uses for signup.
+# state (the Authorization header) this schema never sees either. Both
+# email and phone are optional here too — the controller requires at least
+# one (phone-only registration is a first-class path, not a fallback; see
+# Registrations::GuestCheckout). Email/phone format & uniqueness are left
+# to GuestCheckout/User/Profile, same division of labor
+# AuthSignupRequestSchema uses for signup.
 class RegistrationCreateRequestSchema < ApplicationRequestSchema
   params do
     optional(:event_type_ids).array(:string)
@@ -23,7 +26,8 @@ class RegistrationCreateRequestSchema < ApplicationRequestSchema
     end
     optional(:guest).hash do
       required(:name).filled(:string)
-      required(:email).filled(:string)
+      optional(:email).maybe(:string)
+      optional(:phone).maybe(:string)
     end
   end
 end

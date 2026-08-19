@@ -189,12 +189,21 @@ RSpec.describe "Registrations API", type: :request do
       expect(Registration.exists?(event_id: event.id, user_id: participant.id)).to be(false)
     end
 
-    it "requires both name and email" do
+    it "requires a name" do
       post "/api/v1/events/#{event.id}/registrations",
         params: { guest: { email: "dara@example.com" } },
         as: :json
 
       expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "requires a phone number or email" do
+      post "/api/v1/events/#{event.id}/registrations",
+        params: { guest: { name: "Dara Kim" } },
+        as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["code"]).to eq("contact_required")
     end
 
     it "sends the confirmation email with a claim-your-account nudge" do
@@ -207,6 +216,55 @@ RSpec.describe "Registrations API", type: :request do
       mail = ActionMailer::Base.deliveries.last
       expect(mail.to).to eq([ "dara@example.com" ])
       expect(mail.body.encoded).to include("Set a password")
+    end
+
+    # ── Phone-only — Cambodia's most common contact channel ──────────────────
+    describe "registering with only a phone number" do
+      it "creates an account with an auto-generated placeholder email" do
+        expect {
+          post "/api/v1/events/#{event.id}/registrations",
+            params: { guest: { name: "Dara Kim", phone: "012 345 678" } },
+            as: :json
+        }.to change(User, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        user = User.find(json["registration"]["user_id"])
+        expect(user.email_auto_generated?).to be(true)
+        expect(user.email).to match(/@guest\.rally\.invalid\z/)
+        expect(user.profile.phone).to eq("012 345 678")
+      end
+
+      it "still returns an auth token so the guest can pay/view registrations" do
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Dara Kim", phone: "012345678" } },
+          as: :json
+
+        expect(json["auth"]["token"]).to be_present
+        expect(json["auth"]["user"]["email_auto_generated"]).to be(true)
+        expect(json["auth"]["user"]["phone"]).to eq("012345678")
+      end
+
+      it "does not enqueue a confirmation email to the unreachable placeholder address" do
+        expect {
+          perform_enqueued_jobs do
+            post "/api/v1/events/#{event.id}/registrations",
+              params: { guest: { name: "Dara Kim", phone: "012345678" } },
+              as: :json
+          end
+        }.not_to change { ActionMailer::Base.deliveries.count }
+      end
+
+      it "rejects with phone_registered rather than silently attaching to an existing account" do
+        participant.profile.update!(phone: "012345678")
+
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Someone Else", phone: "012345678" } },
+          as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("phone_registered")
+        expect(Registration.exists?(event_id: event.id, user_id: participant.id)).to be(false)
+      end
     end
   end
 
@@ -267,6 +325,7 @@ RSpec.describe "Registrations API", type: :request do
     end
 
     it "returns a CSV with the base columns and a row per participant" do
+      participant.profile.update!(phone: "012345678")
       registration = create(:registration, :paid, event: event, user: participant)
       registration.registration_event_types.create!(
         event_type: event.event_types.create!(name: "5K", position: 0)
@@ -281,15 +340,27 @@ RSpec.describe "Registrations API", type: :request do
 
       rows = csv_rows
       expect(rows.headers).to include(
-        "Name", "Email", "Event Type(s)", "Status", "Payment Status",
+        "Name", "Email", "Phone", "Event Type(s)", "Status", "Payment Status",
         "Amount Paid (USD)", "Checked In", "Checked In At", "Registered At"
       )
       row = rows.find { |r| r["Email"] == participant.email }
+      expect(row["Phone"]).to eq("012345678")
       expect(row["Event Type(s)"]).to eq("5K")
       expect(row["Status"]).to eq("confirmed")
       expect(row["Payment Status"]).to eq("paid")
       expect(row["Amount Paid (USD)"]).to eq("25.00")
       expect(row["Checked In"]).to eq("Yes")
+    end
+
+    it "leaves Email blank rather than showing a phone-only guest's placeholder address" do
+      checkout = Registrations::GuestCheckout.call(email: nil, phone: "012345678", name: "Dara Kim")
+      create(:registration, event: event, user: checkout.user)
+
+      get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(organizer)
+
+      row = csv_rows.find { |r| r["Phone"] == "012345678" }
+      expect(row["Email"]).to be_nil
+      expect(row["Name"]).to eq("Dara Kim")
     end
 
     it "adds one column per survey question, with labels for choice answers" do

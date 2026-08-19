@@ -28,6 +28,12 @@ module Api
           user_id: current_user.id,
           display_name: profile&.display_name,
           avatar_url: profile&.avatar_url,
+          phone: profile&.phone,
+          # See UserPayload for the fuller explanation — same "add your
+          # real email" signal, just surfaced here too since the account
+          # settings page loads this endpoint, not /auth/me, to render its
+          # own fields.
+          email_auto_generated: current_user.email_auto_generated?,
           # Never the plaintext key — only enough to confirm what's saved.
           payway_merchant_id: profile&.payway_merchant_id,
           payway_api_key_masked: profile&.payway_api_key_masked,

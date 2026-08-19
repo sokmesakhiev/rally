@@ -93,6 +93,12 @@ class User < ApplicationRecord
       unusable_password = SecureRandom.hex(32)
       update!(
         email: "deleted-#{id}@deleted.rally.invalid",
+        # The account's own placeholder now, not a "please add a real
+        # email" nudge — leaving this true post-deletion would make
+        # User.where(email_auto_generated: true) (the query behind that
+        # nudge) surface dead, anonymized accounts alongside the phone-only
+        # guests it's actually meant for.
+        email_auto_generated: false,
         password: unusable_password,
         password_confirmation: unusable_password,
         google_uid: nil,
@@ -107,6 +113,7 @@ class User < ApplicationRecord
       profile&.update!(
         display_name: nil,
         avatar_url: nil,
+        phone: nil,
         payway_merchant_id: nil,
         payway_api_key: nil,
         payway_rsa_public_key: nil

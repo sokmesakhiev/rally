@@ -12,7 +12,11 @@ export function VerifyEmailBanner() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  if (!user || user.email_verified) return null;
+  // A phone-only guest's email is an auto-generated placeholder (see
+  // Registrations::GuestCheckout / ApiUser.email_auto_generated) — asking
+  // them to "verify" an address that was never theirs to begin with would
+  // be actively misleading. AddRealEmailBanner covers that case instead.
+  if (!user || user.email_verified || user.email_auto_generated) return null;
 
   const resend = async () => {
     setSending(true);
