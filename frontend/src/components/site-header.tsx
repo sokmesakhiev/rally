@@ -14,6 +14,7 @@ import {
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useAuth } from "@/lib/use-auth";
 import { VerifyEmailBanner } from "@/components/verify-email-banner";
+import { AddRealEmailBanner } from "@/components/add-real-email-banner";
 // Imported as a module (not a literal "/src/assets/..." string) so Vite
 // processes and hashes it into dist/client/assets/ at build time — a literal
 // path only works with the dev server, which serves src/ directly; the
@@ -52,12 +53,18 @@ export function SiteHeader() {
     };
   }
 
+  // A phone-only guest's email is an auto-generated placeholder (see
+  // ApiUser.email_auto_generated) — "guest-3f9a1b2c@..." makes for a
+  // nonsensical greeting, so fall back to their phone number instead.
   const greetingName =
-    user?.display_name?.trim() || user?.email.split("@")[0] || t("header.fallbackName");
+    user?.display_name?.trim() ||
+    (user?.email_auto_generated ? user?.phone : user?.email.split("@")[0]) ||
+    t("header.fallbackName");
   const initials = greetingName.slice(0, 2).toUpperCase();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+      <AddRealEmailBanner />
       <VerifyEmailBanner />
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
         <Link to="/" className="flex items-center gap-2">

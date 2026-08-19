@@ -141,6 +141,12 @@ async function downloadFile(path: string, fallbackFilename: string): Promise<voi
 export interface ApiUser {
   id: string;
   email: string;
+  /** True for a phone-only guest checkout (see registrationsApi.create) —
+   * `email` above is an auto-generated "guest-...@guest.rally.invalid"
+   * placeholder, not a real address. Show `phone` instead where possible,
+   * and prompt to add a real email rather than displaying this one. */
+  email_auto_generated: boolean;
+  phone: string | null;
   display_name: string | null;
   avatar_url: string | null;
   email_verified: boolean;
@@ -288,6 +294,10 @@ export interface ApiProfile {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  phone: string | null;
+  /** See ApiUser.email_auto_generated — same signal, surfaced here too
+   * since profile.tsx loads this endpoint rather than /auth/me. */
+  email_auto_generated: boolean;
   /** Never the plaintext key — see payway_api_key_masked. */
   payway_merchant_id: string | null;
   payway_api_key_masked: string | null;
@@ -308,6 +318,7 @@ export interface ApiProfile {
 export interface ProfileUpdatePayload {
   display_name?: string | null;
   avatar_url?: string | null;
+  phone?: string | null;
   payway_merchant_id?: string;
   payway_api_key?: string;
   notify_payment_received?: boolean;
@@ -521,19 +532,21 @@ export const registrationsApi = {
   },
 
   /** `guest` is only needed when the visitor isn't signed in (see
-   * useAuth()'s `user`) — the backend requires one or the other. On a
-   * successful guest registration the response includes `auth: { token,
-   * user }`, the same shape authApi.signup/signin/google return; this
-   * stores the token immediately so the very next authenticated call
-   * (payment creation, "My registrations") works without the caller having
-   * to do anything extra. Call useAuth()'s `refresh()` afterward to pick up
-   * the new `user` in context. */
+   * useAuth()'s `user`) — the backend requires a name plus at least one of
+   * email/phone (phone is Cambodia's most common contact channel, so it's
+   * a first-class alternative to email, not a fallback). On a successful
+   * guest registration the response includes `auth: { token, user }`, the
+   * same shape authApi.signup/signin/google return; this stores the token
+   * immediately so the very next authenticated call (payment creation, "My
+   * registrations") works without the caller having to do anything extra.
+   * Call useAuth()'s `refresh()` afterward to pick up the new `user` in
+   * context. */
   async create(
     eventId: string,
     opts?: {
       answers?: ApiRegistrationAnswer[];
       eventTypeIds?: string[];
-      guest?: { name: string; email: string };
+      guest?: { name: string; email?: string; phone?: string };
     },
   ) {
     const res = await api.post<{

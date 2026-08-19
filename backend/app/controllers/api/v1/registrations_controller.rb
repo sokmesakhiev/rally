@@ -63,34 +63,52 @@ module Api
       # Accepts:
       #   answers:        [{ survey_question_id, answer_text?, answer_options? }]
       #   event_type_ids: ["uuid", ...]
-      #   guest:          { name, email } — required when there's no signed-in
-      #                   user (see authenticate_user_optional!); ignored
-      #                   otherwise.
+      #   guest:          { name, email?, phone? } — required when there's no
+      #                   signed-in user (see authenticate_user_optional!),
+      #                   ignored otherwise. At least one of email/phone is
+      #                   required — phone-only is a first-class path, most
+      #                   common contact channel in Cambodia (see
+      #                   Registrations::GuestCheckout).
       def create
         validate_params_with_schema(RegistrationCreateRequestSchema) do |validated_params|
           is_guest = current_user.nil?
+          guest_params = validated_params[:guest]
 
-          if is_guest && validated_params[:guest].blank?
+          if is_guest && guest_params.blank?
             render json: {
-              error: "Sign in, or provide your name and email, to register.",
+              error: "Sign in, or provide your name and a phone number or email, to register.",
               code: "guest_info_required"
+            }, status: :unprocessable_entity
+            return
+          end
+
+          if is_guest && guest_params[:email].blank? && guest_params[:phone].blank?
+            render json: {
+              error: "Provide a phone number or email so we can reach you.",
+              code: "contact_required"
             }, status: :unprocessable_entity
             return
           end
 
           if is_guest
             checkout = Registrations::GuestCheckout.call(
-              email: validated_params.dig(:guest, :email),
-              name: validated_params.dig(:guest, :name)
+              email: guest_params[:email],
+              phone: guest_params[:phone],
+              name: guest_params[:name]
             )
             unless checkout.ok?
               # Don't silently attach the registration to an account this
               # visitor hasn't proven they control — see GuestCheckout's
               # class comment. Direct them to sign in instead.
-              render json: {
-                error: "An account already exists with this email. Please sign in to register.",
-                code: "email_registered"
-              }, status: :unprocessable_entity
+              conflict_json =
+                if checkout.conflict_field == :phone
+                  { error: "An account already exists with this phone number. Please sign in to register.",
+                    code: "phone_registered" }
+                else
+                  { error: "An account already exists with this email. Please sign in to register.",
+                    code: "email_registered" }
+                end
+              render json: conflict_json, status: :unprocessable_entity
               return
             end
             registrant = checkout.user
@@ -132,7 +150,12 @@ module Api
               end
             end
 
-            RegistrationMailer.confirmation(registration, new_guest_account: is_guest).deliver_later
+            # A phone-only guest's email is a placeholder nobody can read
+            # (see GuestCheckout) — sending there would just bounce, so skip
+            # it entirely rather than queue a delivery that can't succeed.
+            unless registrant.email_auto_generated?
+              RegistrationMailer.confirmation(registration, new_guest_account: is_guest).deliver_later
+            end
 
             response_json = { registration: registration_json(registration, include_types: true) }
             # A guest has no token yet — hand back the same { user:, token: }
@@ -313,7 +336,8 @@ module Api
         if include_profile && reg.user&.profile
           json[:profile] = {
             display_name: reg.user.profile.display_name,
-            avatar_url:   reg.user.profile.avatar_url
+            avatar_url:   reg.user.profile.avatar_url,
+            phone:        reg.user.profile.phone
           }
         end
 
