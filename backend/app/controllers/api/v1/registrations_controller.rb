@@ -151,9 +151,13 @@ module Api
             end
 
             # A phone-only guest's email is a placeholder nobody can read
-            # (see GuestCheckout) — sending there would just bounce, so skip
-            # it entirely rather than queue a delivery that can't succeed.
-            unless registrant.email_auto_generated?
+            # (see GuestCheckout) — sending there would just bounce, so send
+            # an SMS-equivalent confirmation instead (currently a stub — see
+            # SendPhoneConfirmationJob / Registrations::SendPhoneConfirmation
+            # and Ticket 1 in registration-engagement-tickets.md).
+            if registrant.email_auto_generated?
+              SendPhoneConfirmationJob.perform_later(registration)
+            else
               RegistrationMailer.confirmation(registration, new_guest_account: is_guest).deliver_later
             end
 

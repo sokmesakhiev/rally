@@ -254,6 +254,27 @@ RSpec.describe "Registrations API", type: :request do
         }.not_to change { ActionMailer::Base.deliveries.count }
       end
 
+      it "enqueues a phone confirmation instead of an email" do
+        expect {
+          post "/api/v1/events/#{event.id}/registrations",
+            params: { guest: { name: "Dara Kim", phone: "012345678" } },
+            as: :json
+        }.to have_enqueued_job(SendPhoneConfirmationJob)
+      end
+
+      it "delivers the phone confirmation via Sms::Client (currently the null stub — see Ticket 1)" do
+        expect(Sms::Client).to receive(:deliver).with(
+          to: "012345678",
+          body: a_string_including(event.title)
+        )
+
+        perform_enqueued_jobs do
+          post "/api/v1/events/#{event.id}/registrations",
+            params: { guest: { name: "Dara Kim", phone: "012345678" } },
+            as: :json
+        end
+      end
+
       it "rejects with phone_registered rather than silently attaching to an existing account" do
         participant.profile.update!(phone: "012345678")
 
