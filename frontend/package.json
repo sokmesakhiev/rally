@@ -68,7 +68,7 @@
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.85.0",
     "react-i18next": "^17.0.11",
-    "react-resizable-panels": "^4.12.2",
+    "react-resizable-panels": "^4.12.3",
     "recharts": "^3.10.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.5.0",
@@ -80,7 +80,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@lovable.dev/vite-tanstack-config": "^2.14.0",
+    "@lovable.dev/vite-tanstack-config": "^2.15.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
