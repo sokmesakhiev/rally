@@ -92,5 +92,130 @@ RSpec.describe "Event plan payments API", type: :request do
         expect(event.reload).to be_is_published
       end
     end
+
+    # ── Changing plan on an already-published event ──────────────────────────
+    context "when the event is already published" do
+      # Seeds the paid history a real "small" event would already have from
+      # its initial publish — #amount_already_paid_cents sums paid
+      # EventPlanPayment rows, so a published event with no such row would
+      # (incorrectly, for these tests) look like it had paid nothing yet.
+      let!(:event) do
+        create(:event, creator: organizer, is_published: true, plan: "small", capacity: 200).tap do |e|
+          e.event_plan_payments.create!(
+            user: organizer, plan: "small", tran_id: "seed-#{e.id}",
+            amount_cents: Event::PLANS["small"][:price_cents], currency: "usd",
+            status: "paid", paid_at: 1.day.ago
+          )
+        end
+      end
+
+      it "rejects requesting the same plan again" do
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "small" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["error"]).to include("already on this plan")
+      end
+
+      it "charges only the prorated difference when upgrading" do
+        allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+        expected_delta = Event::PLANS["medium"][:price_cents] - Event::PLANS["small"][:price_cents]
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "medium" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["plan_payment"]["amount_cents"]).to eq(expected_delta)
+        expect(json["plan_payment"]["status"]).to eq("pending")
+        # Not applied until ABA confirms — same as the initial-publish flow.
+        expect(event.reload.plan).to eq("small")
+      end
+
+      it "downgrades immediately with no charge and no refund" do
+        expect_any_instance_of(AbaPayway::Client).not_to receive(:generate_qr)
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "free" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["plan_payment"]["amount_cents"]).to eq(0)
+        expect(json["plan_payment"]["status"]).to eq("paid")
+        event.reload
+        expect(event.plan).to eq("free")
+        expect(event.capacity).to eq(Event::PLANS["free"][:capacity])
+      end
+
+      it "doesn't re-charge for a plan already covered by the high-water mark" do
+        # Paid for "large" once, downgraded to "small" (no refund — the
+        # organizer's total paid-in stays at large's price), now moving back
+        # up to "medium", which large already covers.
+        event.event_plan_payments.create!(
+          user: organizer, plan: "large", tran_id: "seed-large-#{event.id}",
+          amount_cents: Event::PLANS["large"][:price_cents] - Event::PLANS["small"][:price_cents],
+          currency: "usd", status: "paid", paid_at: 12.hours.ago
+        )
+        event.update_columns(plan: "large", capacity: Event::PLANS["large"][:capacity])
+
+        expect_any_instance_of(AbaPayway::Client).not_to receive(:generate_qr)
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "medium" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["plan_payment"]["amount_cents"]).to eq(0)
+        expect(event.reload.plan).to eq("medium")
+      end
+
+      it "rejects downgrading below the number of people already registered" do
+        create_list(:registration, 21, event: event) # small's cap is 200; free's is 20
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "free" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("plan_capacity_too_low")
+        expect(json["error"]).to include("already registered")
+        expect(event.reload.plan).to eq("small")
+      end
+
+      it "blocks starting a new plan change while an earlier one is still pending" do
+        allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+        post "/api/v1/events/#{event.id}/plan_payments", params: { plan: "medium" },
+             headers: auth_headers(organizer), as: :json
+        expect(response).to have_http_status(:created)
+
+        post "/api/v1/events/#{event.id}/plan_payments", params: { plan: "large" },
+             headers: auth_headers(organizer), as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("plan_change_pending")
+      end
+
+      it "allows a new plan change once the earlier pending one has expired" do
+        event.event_plan_payments.create!(
+          user: organizer, plan: "medium", tran_id: "expired-#{event.id}",
+          amount_cents: 1, currency: "usd", status: "pending",
+          expires_at: 1.minute.ago
+        )
+        allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "medium" },
+             headers: auth_headers(organizer),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+      end
+    end
   end
 end
