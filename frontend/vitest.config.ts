@@ -4,14 +4,12 @@ import react from "@vitejs/plugin-react";
 /**
  * Standalone test config, deliberately NOT extending vite.config.ts.
  *
- * vite.config.ts goes through @lovable.dev/vite-tanstack-config, which bundles
- * the full TanStack Start plugin chain (tanstackStart, nitro with a cloudflare
- * target, componentTagger, error-logger plugins, sandbox port detection). Those
- * exist to build and serve an SSR app; under Vitest they'd try to set up a
- * server environment and route generation around every test run. Reusing only
- * the two plugins tests actually need — React transform and the `@/` path
- * alias from tsconfig — keeps runs fast and avoids coupling the test setup to
- * that wrapper's internals.
+ * vite.config.ts wires up the full TanStack Start plugin chain (tanstackStart,
+ * tsconfig-paths, Tailwind). Those exist to build and serve the app; under
+ * Vitest they'd try to set up route generation and CSS processing around every
+ * test run for no benefit. Reusing only the two plugins tests actually need —
+ * React transform and the `@/` path alias from tsconfig — keeps runs fast and
+ * avoids coupling the test setup to the rest of the build config.
  */
 export default defineConfig({
   plugins: [react()],
