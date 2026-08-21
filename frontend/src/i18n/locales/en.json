@@ -383,6 +383,11 @@
     "loadingPlans": "Loading plans…",
     "upToPeople": "Up to {{count}} people",
     "tooSmall": "Too small for your event types",
+    "currentPlanTitle": "Current plan",
+    "currentPlanDesc": "You're on the {{plan}} plan — up to {{capacity}} people.",
+    "changePlanDesc": "Upgrading charges only the difference from what you've already paid. Downgrading is free, with no refund for the difference.",
+    "currentPlanBadge": "Current",
+    "tooSmallRegistered": "Too small for the people already registered",
     "statParticipants": "Participants",
     "statPaid": "Paid",
     "statRevenue": "Revenue",
@@ -632,7 +637,11 @@
     "startError": "Could not start this plan.",
     "paymentReceived": "Payment received — event published!",
     "paidMessage": "{{amount}} paid.",
-    "autoPublishNote": "We'll publish your event automatically once payment is received."
+    "autoPublishNote": "We'll publish your event automatically once payment is received.",
+    "planChanged": "Plan changed!",
+    "planChangeApplied": "Your event is now on the new plan.",
+    "paymentReceivedChange": "Payment received — plan changed!",
+    "autoApplyNote": "We'll apply your new plan automatically once payment is received."
   },
   "eventQrCode": {
     "scanToRegister": "Scan to register for this event",

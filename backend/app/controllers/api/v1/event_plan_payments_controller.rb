@@ -4,15 +4,13 @@ module Api
       before_action :authenticate_user!
 
       # POST /api/v1/events/:event_id/plan_payments
-      # Starts (or completes, for the free tier) the "pay to publish" flow
-      # for one of the current user's events.
+      # Starts (or completes, for the free tier / a $0 delta) the "pay for a
+      # plan" flow for one of the current user's events — both the initial
+      # publish, and (see #published_plan_change_guard! and
+      # #amount_already_paid_cents below) changing plan on an already-
+      # published event.
       def create
         event = current_user.events.includes(:event_types).find(params[:event_id])
-
-        if event.is_published?
-          render json: { error: "This event is already published." }, status: :unprocessable_entity
-          return
-        end
 
         plan = params[:plan].to_s
         details = Event::PLANS[plan]
@@ -21,12 +19,14 @@ module Api
           return
         end
 
-        # Reject upfront, before charging anything (or publishing the free
-        # tier), if the event's own types already add up to more people than
-        # this plan allows. Checked here rather than relying solely on
-        # Event's own capacity validation because that only runs once we try
-        # to persist the update — we never want to take an organizer's
-        # payment and then fail to actually publish the event.
+        # Reject upfront, before charging anything (or applying the plan),
+        # if the event doesn't actually fit under it — either its own types'
+        # combined limit, or (only relevant once people can already be
+        # registered, i.e. a change on a published event) how many are
+        # actually registered right now. Checked here rather than relying
+        # solely on Event's own capacity validation because that only runs
+        # once we try to persist the update — we never want to take an
+        # organizer's payment and then fail to actually apply the plan.
         combined_type_capacity = event.combined_event_type_capacity
         if combined_type_capacity > details[:capacity]
           render json: {
@@ -38,12 +38,29 @@ module Api
           return
         end
 
-        # Re-publishing under the same plan the organizer already paid for
-        # (e.g. after unpublishing) doesn't require a new charge.
-        if event.plan == plan
-          event.update!(is_published: true)
-          render json: { event: event_json(event) }, status: :created
+        registered_count = event.registrations.active.count
+        if registered_count > details[:capacity]
+          render json: {
+            error: "The #{details[:label]} plan allows up to #{details[:capacity]} people, but " \
+                   "#{registered_count} are already registered. Pick a plan with room for everyone " \
+                   "already signed up.",
+            code: "plan_capacity_too_low"
+          }, status: :unprocessable_entity
           return
+        end
+
+        if event.is_published?
+          return unless published_plan_change_guard!(event, plan)
+          charge_amount = [ details[:price_cents] - amount_already_paid_cents(event), 0 ].max
+        else
+          # Re-publishing under the same plan the organizer already paid for
+          # (e.g. after unpublishing) doesn't require a new charge.
+          if event.plan == plan
+            event.update!(is_published: true)
+            render json: { event: event_json(event) }, status: :created
+            return
+          end
+          charge_amount = details[:price_cents]
         end
 
         tran_id = "pln#{SecureRandom.alphanumeric(14)}"
@@ -52,14 +69,18 @@ module Api
           user: current_user,
           plan: plan,
           tran_id: tran_id,
-          amount_cents: details[:price_cents],
+          amount_cents: charge_amount,
           currency: "usd",
           status: "pending",
           expires_at: 15.minutes.from_now
         )
 
-        # Free tier — nothing to charge, publish immediately.
-        if details[:price_cents].zero?
+        # Nothing to charge — either the free tier (initial publish), a
+        # downgrade (never charged, never refunded), or an upgrade back to a
+        # plan whose price is already covered by what's been paid for this
+        # event before (the high-water-mark rule in
+        # #amount_already_paid_cents). Apply immediately, no gateway involved.
+        if charge_amount.zero?
           plan_payment.mark_paid!
           render json: { event: event_json(event.reload), plan_payment: plan_payment_json(plan_payment) }, status: :created
           return
@@ -69,7 +90,7 @@ module Api
           profile = current_user.profile
           response = AbaPayway::Client.new.generate_qr(
             tran_id: tran_id,
-            amount_cents: details[:price_cents],
+            amount_cents: charge_amount,
             currency: "usd",
             lifetime_minutes: 15,
             first_name: profile&.display_name.presence || "Rally",
@@ -113,6 +134,44 @@ module Api
       end
 
       private
+
+      # Guards specific to changing plan on an event that's already
+      # published (as opposed to the initial publish flow above). Renders
+      # its own error response and returns false when blocked; the caller
+      # (#create) bails out in that case.
+      def published_plan_change_guard!(event, plan)
+        if event.plan == plan
+          render json: { error: "This event is already on this plan." }, status: :unprocessable_entity
+          return false
+        end
+
+        # Block starting a second plan change while an earlier one hasn't
+        # resolved yet — same reasoning as not letting a guest submit two
+        # concurrent registrations. An expired attempt doesn't count; the
+        # organizer should be able to just try again.
+        if event.event_plan_payments.pending.where("expires_at > ?", Time.current).exists?
+          render json: {
+            error: "A plan change is already in progress for this event. Wait for it to complete or expire, then try again.",
+            code: "plan_change_pending"
+          }, status: :unprocessable_entity
+          return false
+        end
+
+        true
+      end
+
+      # High-water-mark rule: an organizer never pays twice for capacity
+      # they've already bought for this event, even after downgrading (which
+      # is never refunded — see EventPlanPayment#mark_paid!) and later
+      # upgrading back. Every *paid* EventPlanPayment row represents an
+      # actual charge already made (the full tier price on first publish,
+      # the delta on every change since — see #create above; downgrades
+      # always charge 0), so their sum is exactly the highest plan price
+      # ever reached for this event, without needing a separate running-total
+      # column to keep in sync.
+      def amount_already_paid_cents(event)
+        event.event_plan_payments.where(status: "paid").sum(:amount_cents)
+      end
 
       def refresh_if_stale!(plan_payment)
         return unless plan_payment.pending?
