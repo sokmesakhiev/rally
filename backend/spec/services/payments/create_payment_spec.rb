@@ -64,6 +64,22 @@ RSpec.describe Payments::CreatePayment do
     }.not_to change(Payment, :count)
   end
 
+  # Regression coverage for change-event-plan-tickets.md's "Ticket B" bug:
+  # a still-unpaid registration's charge used to be recomputed live from the
+  # event's *current* price_cents, so an organizer editing the price while a
+  # registrant hadn't paid yet would silently change what the next payment
+  # attempt charged. amount_owed_cents now snapshots what was true at
+  # registration time, so it stays fixed regardless of later price edits.
+  it "charges the price snapshotted at registration time, not the event's current price" do
+    registration.update!(amount_owed_cents: 2500)
+    event.update!(price_cents: 9900)
+    allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+
+    result = call
+
+    expect(result.payment.amount_cents).to eq(2500)
+  end
+
   it "marks the payment declined and returns :declined when PayWay responds with a non-zero status code" do
     allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(
       { status: { code: "1", message: "Insufficient funds" } }
