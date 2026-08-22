@@ -80,6 +80,34 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["registration"]["payment_status"]).to eq("unpaid")
     end
 
+    # See change-event-plan-tickets.md's "Ticket B" — amount_owed_cents is
+    # snapshotted once at creation so it stays fixed even if the organizer
+    # edits the price later while the registration is still unpaid (see
+    # Registration#owed_amount_cents and spec/models/registration_spec.rb).
+    it "snapshots amount_owed_cents at creation time from the event's price" do
+      paid_event = create(:event, :paid, price_cents: 2500, creator: organizer)
+
+      post "/api/v1/events/#{paid_event.id}/registrations",
+           headers: auth_headers(participant),
+           as: :json
+
+      registration = Registration.find(json["registration"]["id"])
+      expect(registration.amount_owed_cents).to eq(2500)
+    end
+
+    it "snapshots amount_owed_cents from the selected event type's price, not the flat event price" do
+      typed_event = create(:event, :paid, price_cents: 2500, creator: organizer)
+      type = typed_event.event_types.create!(name: "10K", price_cents: 4000, position: 0)
+
+      post "/api/v1/events/#{typed_event.id}/registrations",
+           params: { event_type_ids: [ type.id ] },
+           headers: auth_headers(participant),
+           as: :json
+
+      registration = Registration.find(json["registration"]["id"])
+      expect(registration.amount_owed_cents).to eq(4000)
+    end
+
     it "prevents double-registration" do
       create(:registration, event: event, user: participant)
       post "/api/v1/events/#{event.id}/registrations",

@@ -35,12 +35,16 @@ class Registration < ApplicationRecord
   validates :user_id, uniqueness: { scope: :event_id, message: "already registered for this event" }
   validate :event_not_full, on: :create
 
-  # Amount owed, computed from selected event types (falling back to the
-  # flat event price when no types were selected / the event has none).
+  # Amount owed. `amount_owed_cents` is a snapshot taken once at creation
+  # time (see Api::V1::RegistrationsController#compute_amount and
+  # Waitlists::PromoteNext#compute_amount) so a still-unpaid registration
+  # keeps owing what it owed when the participant registered, even if the
+  # organizer changes the event/event-type price afterward — see
+  # change-event-plan-tickets.md's "Ticket B". Rows created before this
+  # column existed have no snapshot (nil) and fall back to the old
+  # behavior of recomputing live from the *current* price.
   def owed_amount_cents
-    types = event_types.to_a
-    return event.price_cents if types.empty?
-    types.sum(&:effective_price_cents)
+    amount_owed_cents || live_owed_amount_cents
   end
 
   def latest_payment
@@ -104,6 +108,14 @@ class Registration < ApplicationRecord
   end
 
   private
+
+  # Legacy path for rows with no amount_owed_cents snapshot — see
+  # #owed_amount_cents above.
+  def live_owed_amount_cents
+    types = event_types.to_a
+    return event.price_cents if types.empty?
+    types.sum(&:effective_price_cents)
+  end
 
   def event_not_full
     return unless event&.capacity

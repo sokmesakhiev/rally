@@ -880,7 +880,7 @@ function ManageEvent() {
                 </div>
 
                 {/* Core details editor — title/date/price/etc. */}
-                <EventDetailsEditor event={ev} />
+                <EventDetailsEditor event={ev} registeredCount={participants.length} />
 
                 {/* Branding editor card */}
                 <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
