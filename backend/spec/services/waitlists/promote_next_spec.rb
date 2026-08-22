@@ -77,6 +77,17 @@ RSpec.describe Waitlists::PromoteNext do
       expect(promoted_paid.payment_status).to eq("unpaid")
     end
 
+    it "snapshots amount_owed_cents on the promoted registration (Ticket B)" do
+      paid_event = create(:event, :paid, price_cents: 2500, capacity: 1)
+      holder = create(:registration, event: paid_event)
+      create(:waitlist_entry, event: paid_event)
+      holder.destroy!
+
+      promoted = described_class.call(paid_event).first
+
+      expect(promoted.amount_owed_cents).to eq(2500)
+    end
+
     it "wires up the entry's requested event types on the new registration" do
       event = create(:event, capacity: 10)
       type = event.event_types.create!(name: "5K", capacity: 1, position: 0)

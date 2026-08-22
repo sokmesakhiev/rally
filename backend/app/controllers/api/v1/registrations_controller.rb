@@ -129,7 +129,8 @@ module Api
               event: @event,
               status: "confirmed",
               payment_status: amount == 0 ? "paid" : "unpaid",
-              amount_paid_cents: 0
+              amount_paid_cents: 0,
+              amount_owed_cents: amount
             )
 
             # Wire up event types

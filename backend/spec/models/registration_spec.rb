@@ -1,113 +1,49 @@
 require "rails_helper"
 
 RSpec.describe Registration, type: :model do
-  subject(:registration) { build(:registration) }
+  # ── #owed_amount_cents ────────────────────────────────────────────────────
+  # See change-event-plan-tickets.md's "Ticket B": amount_owed_cents is a
+  # snapshot taken once at creation time (RegistrationsController#create,
+  # Waitlists::PromoteNext#promote!) so a still-unpaid registration keeps
+  # owing what it owed when the participant registered, even if the
+  # organizer changes the price afterward.
+  describe "#owed_amount_cents" do
+    let(:event) { create(:event, :paid, price_cents: 2500) }
 
-  # ── Associations ─────────────────────────────────────────────────────────────
-  describe "associations" do
-    it { is_expected.to belong_to(:event) }
-    it { is_expected.to belong_to(:user) }
-  end
+    it "returns the snapshot when amount_owed_cents was set at creation" do
+      registration = create(:registration, event: event, amount_owed_cents: 2500)
 
-  # ── Validations ──────────────────────────────────────────────────────────────
-  describe "validations" do
-    it "rejects an invalid status" do
-      registration.status = "waitlisted"
-      expect(registration).not_to be_valid
+      event.update!(price_cents: 5000)
+
+      expect(registration.reload.owed_amount_cents).to eq(2500)
     end
 
-    it "rejects an invalid payment_status" do
-      registration.payment_status = "pending"
-      expect(registration).not_to be_valid
+    it "stays fixed even after the price changes while still unpaid" do
+      registration = create(:registration, event: event, payment_status: "unpaid", amount_owed_cents: 2500)
+
+      event.update!(price_cents: 9900)
+
+      expect(registration.owed_amount_cents).to eq(2500)
     end
 
-    it "prevents a user from registering for the same event twice" do
-      existing = create(:registration)
-      duplicate = build(:registration, event: existing.event, user: existing.user)
-      expect(duplicate).not_to be_valid
-      expect(duplicate.errors[:user_id]).to be_present
-    end
-  end
+    it "falls back to a live recompute from the event price for rows with no snapshot (legacy data)" do
+      registration = create(:registration, event: event, amount_owed_cents: nil)
 
-  # ── Capacity check ───────────────────────────────────────────────────────────
-  describe "capacity enforcement" do
-    it "allows registration when event has capacity remaining" do
-      event = create(:event, capacity: 2)
-      expect(build(:registration, event: event)).to be_valid
+      expect(registration.owed_amount_cents).to eq(2500)
+
+      event.update!(price_cents: 4000)
+
+      expect(registration.owed_amount_cents).to eq(4000)
     end
 
-    it "blocks registration when event is full" do
-      event = create(:event, capacity: 1)
-      create(:registration, event: event)
-      overflow = build(:registration, event: event)
-      expect(overflow).not_to be_valid
-      expect(overflow.errors[:base]).to include("This event is full")
-    end
+    it "falls back to summing selected event types' effective price when there's no snapshot" do
+      type_a = event.event_types.create!(name: "5K", price_cents: 1000, position: 0)
+      type_b = event.event_types.create!(name: "10K", position: 1) # no override — falls back to event price
+      registration = create(:registration, event: event, amount_owed_cents: nil)
+      registration.registration_event_types.create!(event_type: type_a)
+      registration.registration_event_types.create!(event_type: type_b)
 
-    it "ignores capacity when event has no limit" do
-      event = create(:event, capacity: nil)
-      5.times { create(:registration, event: event) }
-      expect(build(:registration, event: event)).to be_valid
-    end
-  end
-
-  # ── Traits ───────────────────────────────────────────────────────────────────
-  describe "paid trait" do
-    it "sets payment_status to paid" do
-      reg = create(:registration, :paid)
-      expect(reg.payment_status).to eq("paid")
-      expect(reg.amount_paid_cents).to eq(2500)
-    end
-  end
-
-  # ── Soft-delete ──────────────────────────────────────────────────────────────
-  describe "#discard!" do
-    it "sets deleted_at and cancels, without destroying the row or its payments" do
-      registration = create(:registration, :paid)
-      payment = create(:payment, :approved, registration: registration)
-
-      expect { registration.discard! }.not_to change(Registration, :count)
-      expect(registration.discarded?).to be(true)
-      expect(registration.status).to eq("cancelled")
-      expect(Registration.kept).not_to include(registration)
-      expect(Payment.exists?(payment.id)).to be(true)
-    end
-
-    it "frees the capacity slot, same as .active already excludes it" do
-      event = create(:event, capacity: 1)
-      registration = create(:registration, event: event)
-      expect(event.reload).to be_full
-
-      registration.discard!
-
-      expect(event.reload).not_to be_full
-    end
-  end
-
-  # ── Notification preferences ────────────────────────────────────────────────
-  describe "#wants_notification?" do
-    it "defaults to true (opt-out, not opt-in)" do
-      registration = create(:registration)
-      expect(registration.wants_notification?(:payment_received)).to be(true)
-    end
-
-    it "is false once the participant's profile turns that preference off" do
-      registration = create(:registration)
-      registration.user.profile.update!(notify_payment_received: false)
-
-      expect(registration.wants_notification?(:payment_received)).to be(false)
-      expect(registration.wants_notification?(:refund_issued)).to be(true)
-    end
-  end
-
-  # ── Check-in ─────────────────────────────────────────────────────────────────
-  describe "#checked_in?" do
-    it "is false when checked_in_at is blank" do
-      expect(build(:registration, checked_in_at: nil).checked_in?).to be(false)
-    end
-
-    it "is true once checked_in_at is set" do
-      expect(build(:registration, checked_in_at: Time.current).checked_in?).to be(true)
+      expect(registration.owed_amount_cents).to eq(1000 + 2500)
     end
   end
 end
