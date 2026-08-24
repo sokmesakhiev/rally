@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { Loader2, Smartphone, RefreshCw, Check, AlertCircle } from "lucide-react";
@@ -44,7 +44,17 @@ export function PaymentPanel({
 }: PaymentPanelProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // A plain useRef isn't reliable here: if the effect that draws the QR
+  // runs before React has actually attached the canvas to the DOM (e.g.
+  // this panel remounting as part of a parent re-render), canvasRef.current
+  // is still null and the draw call is silently skipped — the box renders
+  // but stays empty forever, since the effect never reruns just because a
+  // ref value changed. A callback ref stored in state re-runs the draw
+  // exactly when the canvas node itself shows up (or goes away) — same fix
+  // RegistrationTicketQR uses for the same class of timing issue.
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => setCanvasEl(node), []);
+  const [qrError, setQrError] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
 
   const createPayment = useMutation({
@@ -83,17 +93,26 @@ export function PaymentPanel({
   }, [payment?.status]);
 
   useEffect(() => {
-    if (payment?.qr_string && canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, payment.qr_string, {
-        width: 220,
-        margin: 2,
-        color: { dark: "#1a1a2e", light: "#ffffff" },
-      }).catch(() => {});
-    }
-  }, [payment?.qr_string]);
+    if (!canvasEl || !payment?.qr_string) return;
+
+    setQrError(false);
+    QRCode.toCanvas(canvasEl, payment.qr_string, {
+      width: 220,
+      margin: 2,
+      color: { dark: "#1a1a2e", light: "#ffffff" },
+    }).catch((err) => {
+      // Previously swallowed entirely, which meant an encoding failure (or
+      // any other draw error) left the box permanently blank with no way
+      // to tell why — surface it so it's diagnosable, and let the person
+      // still pay via the ABA Mobile deep link / regenerate instead.
+      console.error("Failed to render payment QR code", err);
+      setQrError(true);
+    });
+  }, [canvasEl, payment?.qr_string]);
 
   function regenerate() {
     setPaymentId(null);
+    setQrError(false);
     createPayment.reset();
     createPayment.mutate();
   }
@@ -179,12 +198,19 @@ export function PaymentPanel({
         </p>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={220}
-        height={220}
-        className="rounded-xl border border-border shadow-sm"
-      />
+      {qrError ? (
+        <div className="flex h-[220px] w-[220px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 p-4 text-center">
+          <AlertCircle className="h-5 w-5 text-destructive" />
+          <p className="text-xs text-muted-foreground">{t("paymentPanel.qrRenderError")}</p>
+        </div>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          width={220}
+          height={220}
+          className="rounded-xl border border-border shadow-sm"
+        />
+      )}
 
       {payment.abapay_deeplink && (
         <Button
@@ -195,6 +221,12 @@ export function PaymentPanel({
           <a href={payment.abapay_deeplink}>
             <Smartphone className="h-4 w-4" /> {t("paymentPanel.openAbaMobile")}
           </a>
+        </Button>
+      )}
+
+      {qrError && (
+        <Button variant="outline" size="sm" onClick={regenerate}>
+          <RefreshCw className="h-4 w-4" /> {t("paymentPanel.generateNewQr")}
         </Button>
       )}
 
