@@ -626,6 +626,7 @@
     "paidMessage": "បានទូទាត់ {{amount}} — អ្នករួចរាល់ហើយ។",
     "qrExpired": "កូដ QR នេះបានផុតកំណត់។",
     "generateNewQr": "បង្កើតកូដ QR ថ្មី",
+    "qrRenderError": "មិនអាចបង្ហាញកូដ QR បានទេ។ សូមប្រើប៊ូតុងខាងក្រោម ឬបង្កើតកូដថ្មី។",
     "paymentStatusMessage": "ការទូទាត់នេះត្រូវបាន {{status}}។ អ្នកអាចព្យាយាមម្តងទៀត។",
     "status": {
       "declined": "បដិសេធ",
