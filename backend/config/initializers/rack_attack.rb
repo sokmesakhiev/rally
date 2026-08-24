@@ -123,6 +123,20 @@ class Rack::Attack
     req.ip if req.post? && req.path == "/api/v1/uploads"
   end
 
+  # ── Payments (now reachable without a session) ──
+  #
+  # Api::V1::PaymentsController accepts an anonymous request authorized by a
+  # matching email/phone instead of a login (see GuestCheckout) — that's an
+  # intentional trade-off, not a bug, but it does mean this endpoint is a
+  # softer target than a normal authenticated one, so it gets its own limit
+  # rather than relying on the generic req/ip backstop. Registration and
+  # payment ids are UUIDs (not guessable on their own), but this is cheap
+  # defense in depth regardless. Covers both POST .../payments and
+  # GET /payments/:id under one counter.
+  throttle("payments/ip", limit: 30, period: 10.minutes) do |req|
+    req.ip if req.path.match?(%r{\A/api/v1/(registrations/[^/]+/payments|payments/[^/]+)\z})
+  end
+
   ### Response ################################################################
 
   # JSON, not Rack::Attack's default text/plain body — every other error in

@@ -187,17 +187,17 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["registration"]["user_id"]).to eq(user.id)
     end
 
-    it "returns a token so the frontend can treat the guest as signed in" do
+    # Guest checkout never issues a session, whether the account is brand
+    # new or an existing one — see Registrations::GuestCheckout's class
+    # comment. Payment is authorized later via matching contact info
+    # instead (see the Payments API spec).
+    it "does not return an auth token for a brand-new guest registration" do
       post "/api/v1/events/#{event.id}/registrations",
         params: { guest: { name: "Dara Kim", email: "dara@example.com" } },
         as: :json
 
-      expect(json["auth"]["token"]).to be_present
-      expect(json["auth"]["user"]["email"]).to eq("dara@example.com")
-
-      # The returned token actually works for follow-up authenticated calls.
-      get "/api/v1/auth/me", headers: { "Authorization" => "Bearer #{json['auth']['token']}" }, as: :json
-      expect(response).to have_http_status(:ok)
+      expect(response).to have_http_status(:created)
+      expect(json).not_to have_key("auth")
     end
 
     it "does not return an auth token for a signed-in request" do
@@ -207,14 +207,21 @@ RSpec.describe "Registrations API", type: :request do
       expect(json).not_to have_key("auth")
     end
 
-    it "rejects with email_registered rather than silently attaching to an existing account" do
-      post "/api/v1/events/#{event.id}/registrations",
-        params: { guest: { name: "Someone Else", email: participant.email } },
-        as: :json
+    it "attaches to the existing account when the email matches, without creating a duplicate or a session" do
+      # Force the lazy `let` to create participant *before* the count is
+      # sampled — referencing it for the first time inside the `expect`
+      # block would count participant's own creation as the change.
+      existing_email = participant.email
 
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(json["code"]).to eq("email_registered")
-      expect(Registration.exists?(event_id: event.id, user_id: participant.id)).to be(false)
+      expect {
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Someone Else", email: existing_email } },
+          as: :json
+      }.not_to change(User, :count)
+
+      expect(response).to have_http_status(:created)
+      expect(json["registration"]["user_id"]).to eq(participant.id)
+      expect(json).not_to have_key("auth")
     end
 
     it "requires a name" do
@@ -234,7 +241,7 @@ RSpec.describe "Registrations API", type: :request do
       expect(json["code"]).to eq("contact_required")
     end
 
-    it "sends the confirmation email with a claim-your-account nudge" do
+    it "sends the confirmation email with a claim-your-account nudge for a brand-new guest account" do
       perform_enqueued_jobs do
         post "/api/v1/events/#{event.id}/registrations",
           params: { guest: { name: "Dara Kim", email: "dara@example.com" } },
@@ -244,6 +251,23 @@ RSpec.describe "Registrations API", type: :request do
       mail = ActionMailer::Base.deliveries.last
       expect(mail.to).to eq([ "dara@example.com" ])
       expect(mail.body.encoded).to include("Set a password")
+    end
+
+    # Attaching to an existing account (see the "attaches to the existing
+    # account" example above) is not the same as creating one — that
+    # visitor already has an account, whether or not they remember it, so
+    # the "you don't have a password yet" nudge would be actively
+    # misleading.
+    it "omits the claim-your-account nudge when attaching to an existing account" do
+      perform_enqueued_jobs do
+        post "/api/v1/events/#{event.id}/registrations",
+          params: { guest: { name: "Someone Else", email: participant.email } },
+          as: :json
+      end
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ participant.email ])
+      expect(mail.body.encoded).not_to include("Set a password")
     end
 
     # ── Phone-only — Cambodia's most common contact channel ──────────────────
@@ -262,14 +286,13 @@ RSpec.describe "Registrations API", type: :request do
         expect(user.profile.phone).to eq("012 345 678")
       end
 
-      it "still returns an auth token so the guest can pay/view registrations" do
+      it "does not return an auth token either" do
         post "/api/v1/events/#{event.id}/registrations",
           params: { guest: { name: "Dara Kim", phone: "012345678" } },
           as: :json
 
-        expect(json["auth"]["token"]).to be_present
-        expect(json["auth"]["user"]["email_auto_generated"]).to be(true)
-        expect(json["auth"]["user"]["phone"]).to eq("012345678")
+        expect(response).to have_http_status(:created)
+        expect(json).not_to have_key("auth")
       end
 
       it "does not enqueue a confirmation email to the unreachable placeholder address" do
@@ -282,16 +305,17 @@ RSpec.describe "Registrations API", type: :request do
         }.not_to change { ActionMailer::Base.deliveries.count }
       end
 
-      it "rejects with phone_registered rather than silently attaching to an existing account" do
+      it "attaches to the existing account when the phone matches, without creating a duplicate" do
         participant.profile.update!(phone: "012345678")
 
-        post "/api/v1/events/#{event.id}/registrations",
-          params: { guest: { name: "Someone Else", phone: "012345678" } },
-          as: :json
+        expect {
+          post "/api/v1/events/#{event.id}/registrations",
+            params: { guest: { name: "Someone Else", phone: "012345678" } },
+            as: :json
+        }.not_to change(User, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(json["code"]).to eq("phone_registered")
-        expect(Registration.exists?(event_id: event.id, user_id: participant.id)).to be(false)
+        expect(response).to have_http_status(:created)
+        expect(json["registration"]["user_id"]).to eq(participant.id)
       end
     end
   end

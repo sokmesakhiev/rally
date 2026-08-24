@@ -89,6 +89,20 @@ RSpec.describe "Rate limiting", type: :request, rack_attack: true do
     end
   end
 
+  describe "payments throttling" do
+    it "returns 429 after 30 payment requests from one IP in 10 minutes" do
+      # Covers both the POST .../payments and GET /payments/:id shapes under
+      # one counter — see rack_attack.rb's "payments/ip" throttle. A
+      # not-found id is enough to exercise the path match without touching
+      # the ABA PayWay gateway.
+      31.times do
+        get "/api/v1/payments/00000000-0000-0000-0000-000000000000", as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+  end
+
   describe "safelisted paths" do
     it "never throttles the ABA PayWay webhook" do
       # Well past every limit, including the blanket req/ip one.

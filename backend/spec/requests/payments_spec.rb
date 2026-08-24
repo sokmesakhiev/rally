@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "Payments API", type: :request do
-  let(:user) { create(:user) }
+  let(:user) { create(:user, email: "payer@example.com") }
   let(:event) { create(:event, :paid, price_cents: 2500, currency: "usd") }
   let(:registration) { create(:registration, event: event, user: user, payment_status: "unpaid") }
 
@@ -28,9 +28,48 @@ RSpec.describe "Payments API", type: :request do
       expect(json["payment"]["amount_cents"]).to eq(2500)
     end
 
-    it "requires authentication" do
+    # Guest checkout (see Registrations::GuestCheckout) never issues a
+    # session, so an anonymous request has to be able to pay too — a
+    # matching email/phone stands in for the login, same trust level
+    # GuestCheckout itself uses to attach the registration in the first
+    # place.
+    it "allows an anonymous request when the email matches the registrant's account" do
+      allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+
+      post "/api/v1/registrations/#{registration.id}/payments",
+           params: { email: user.email }, as: :json
+
+      expect(response).to have_http_status(:created)
+    end
+
+    it "allows an anonymous request when the phone matches the registrant's account" do
+      user.profile.update!(phone: "012345678")
+      allow_any_instance_of(AbaPayway::Client).to receive(:generate_qr).and_return(generate_qr_response)
+
+      post "/api/v1/registrations/#{registration.id}/payments",
+           params: { phone: "012345678" }, as: :json
+
+      expect(response).to have_http_status(:created)
+    end
+
+    it "returns 404 for an anonymous request with no matching contact info" do
+      post "/api/v1/registrations/#{registration.id}/payments",
+           params: { email: "someone-else@example.com" }, as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for an anonymous request with no contact info at all" do
       post "/api/v1/registrations/#{registration.id}/payments", as: :json
-      expect(response).to have_http_status(:unauthorized)
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 when signed in as a different user, even with the right registration id" do
+      other = create(:user)
+
+      post "/api/v1/registrations/#{registration.id}/payments", headers: auth_headers(other), as: :json
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it "rejects when already paid" do
@@ -73,6 +112,28 @@ RSpec.describe "Payments API", type: :request do
       payment = create(:payment, registration: registration)
 
       get "/api/v1/payments/#{payment.id}", headers: auth_headers(other), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "allows an anonymous poll when the email matches the registrant's account" do
+      payment = create(:payment, registration: registration, status: "approved")
+
+      # No `as: :json` here deliberately — combined with `params:` on a GET,
+      # Rails' JSON test encoder JSON-encodes params into the request body
+      # rather than the query string, which this endpoint (like any GET)
+      # doesn't read from. A plain query string works, and the controller
+      # already forces JSON responses regardless of the request's format
+      # (see ApplicationController#set_default_format).
+      get "/api/v1/payments/#{payment.id}", params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 404 for an anonymous poll with no matching contact info" do
+      payment = create(:payment, registration: registration)
+
+      get "/api/v1/payments/#{payment.id}", as: :json
 
       expect(response).to have_http_status(:not_found)
     end

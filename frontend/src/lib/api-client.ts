@@ -534,14 +534,16 @@ export const registrationsApi = {
   /** `guest` is only needed when the visitor isn't signed in (see
    * useAuth()'s `user`) — the backend requires a name plus at least one of
    * email/phone (phone is Cambodia's most common contact channel, so it's
-   * a first-class alternative to email, not a fallback). On a successful
-   * guest registration the response includes `auth: { token, user }`, the
-   * same shape authApi.signup/signin/google return; this stores the token
-   * immediately so the very next authenticated call (payment creation, "My
-   * registrations") works without the caller having to do anything extra.
-   * Call useAuth()'s `refresh()` afterward to pick up the new `user` in
-   * context. */
-  async create(
+   * a first-class alternative to email, not a fallback).
+   *
+   * Guest checkout never signs the visitor in — not even when the contact
+   * info matches an existing account (it's silently attached to that
+   * account instead; see Registrations::GuestCheckout on the backend). No
+   * token comes back here. Hang on to the same `guest` contact info the
+   * caller passed in and pass it again to paymentsApi.create/status,
+   * which authorize a guest's payment by matching contact info instead of
+   * a session. */
+  create(
     eventId: string,
     opts?: {
       answers?: ApiRegistrationAnswer[];
@@ -549,16 +551,11 @@ export const registrationsApi = {
       guest?: { name: string; email?: string; phone?: string };
     },
   ) {
-    const res = await api.post<{
-      registration: ApiRegistration;
-      auth?: { token: string; user: ApiUser };
-    }>(`/events/${eventId}/registrations`, {
+    return api.post<{ registration: ApiRegistration }>(`/events/${eventId}/registrations`, {
       answers: opts?.answers ?? [],
       event_type_ids: opts?.eventTypeIds ?? [],
       guest: opts?.guest,
     });
-    if (res.auth) setToken(res.auth.token);
-    return res;
   },
 
   myRegistrationForEvent(eventId: string) {
@@ -769,13 +766,34 @@ export interface ApiPayment {
   created_at: string;
 }
 
+/** Only needed when there's no signed-in session — guest checkout never
+ * signs anyone in (see registrationsApi.create). The backend authorizes
+ * the request by matching this against the registration's own account
+ * instead of a login; either field alone is enough if it matches. */
+export interface GuestContact {
+  email?: string;
+  phone?: string;
+}
+
+function guestContactQuery(guestContact?: GuestContact): string {
+  if (!guestContact) return "";
+  const params = new URLSearchParams();
+  if (guestContact.email) params.set("email", guestContact.email);
+  if (guestContact.phone) params.set("phone", guestContact.phone);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const paymentsApi = {
-  create(registrationId: string) {
-    return api.post<{ payment: ApiPayment }>(`/registrations/${registrationId}/payments`);
+  create(registrationId: string, guestContact?: GuestContact) {
+    return api.post<{ payment: ApiPayment }>(`/registrations/${registrationId}/payments`, {
+      email: guestContact?.email,
+      phone: guestContact?.phone,
+    });
   },
 
-  status(paymentId: string) {
-    return api.get<{ payment: ApiPayment }>(`/payments/${paymentId}`);
+  status(paymentId: string, guestContact?: GuestContact) {
+    return api.get<{ payment: ApiPayment }>(`/payments/${paymentId}${guestContactQuery(guestContact)}`);
   },
 };
 

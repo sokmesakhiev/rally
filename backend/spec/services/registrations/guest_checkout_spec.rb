@@ -6,6 +6,7 @@ RSpec.describe Registrations::GuestCheckout, type: :model do
       result = described_class.call(email: "  Dara@Example.com  ", phone: nil, name: "  Dara Kim  ")
 
       expect(result.ok?).to be(true)
+      expect(result.newly_created).to be(true)
       user = result.user
       expect(user).to be_persisted
       expect(user.email).to eq("dara@example.com")
@@ -20,15 +21,25 @@ RSpec.describe Registrations::GuestCheckout, type: :model do
       expect(result.user.profile.display_name).to be_nil
     end
 
-    it "returns a conflict result instead of reusing an existing account matched by email" do
+    it "attaches to the existing account instead of creating a duplicate when the email matches" do
       existing = create(:user)
 
       result = described_class.call(email: existing.email, phone: nil, name: "Someone Else")
 
-      expect(result.ok?).to be(false)
-      expect(result.status).to eq(:conflict)
-      expect(result.conflict_field).to eq(:email)
-      expect(result.user).to be_nil
+      expect(result.ok?).to be(true)
+      expect(result.newly_created).to be(false)
+      expect(result.user).to eq(existing)
+      expect(User.where(email: existing.email).count).to eq(1)
+    end
+
+    it "does not overwrite the existing account's profile with the newly typed name/phone" do
+      existing = create(:user)
+      existing.profile.update!(display_name: "Real Name", phone: "011111111")
+
+      described_class.call(email: existing.email, phone: nil, name: "Someone Else")
+
+      expect(existing.profile.reload.display_name).to eq("Real Name")
+      expect(existing.profile.phone).to eq("011111111")
     end
 
     # ── Phone-only registration — Cambodia's most common contact channel ────────
@@ -64,16 +75,27 @@ RSpec.describe Registrations::GuestCheckout, type: :model do
     end
 
     describe "phone already registered" do
-      it "returns a conflict result instead of reusing the existing account" do
+      it "attaches to the existing account instead of creating a duplicate" do
         existing = create(:user)
         existing.profile.update!(phone: "012345678")
 
         result = described_class.call(email: nil, phone: "012345678", name: "Someone Else")
 
-        expect(result.ok?).to be(false)
-        expect(result.status).to eq(:conflict)
-        expect(result.conflict_field).to eq(:phone)
-        expect(result.user).to be_nil
+        expect(result.ok?).to be(true)
+        expect(result.user).to eq(existing)
+        expect(User.count).to eq(1)
+      end
+    end
+
+    describe "email and phone match two different accounts" do
+      it "prefers the email match" do
+        by_email = create(:user)
+        by_phone = create(:user)
+        by_phone.profile.update!(phone: "012345678")
+
+        result = described_class.call(email: by_email.email, phone: "012345678", name: "Someone")
+
+        expect(result.user).to eq(by_email)
       end
     end
   end

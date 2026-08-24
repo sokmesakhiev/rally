@@ -4,12 +4,16 @@ import QRCode from "qrcode";
 import { Loader2, Smartphone, RefreshCw, Check, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { paymentsApi, type ApiPayment } from "@/lib/api-client";
+import { paymentsApi, type ApiPayment, type GuestContact } from "@/lib/api-client";
 import { formatPrice } from "@/lib/event-utils";
 
 interface PaymentPanelProps {
   registrationId: string;
   brandColor?: string;
+  /** Only needed when rendered for a signed-out guest — see
+   * registrationsApi.create/paymentsApi.create. Omit entirely for a
+   * signed-in user; the session already authorizes the payment. */
+  guestContact?: GuestContact;
   /** Called once the payment status becomes "approved". */
   onPaid?: () => void;
 }
@@ -35,6 +39,7 @@ function useCountdown(expiresAt: string | null) {
 export function PaymentPanel({
   registrationId,
   brandColor = "#6366f1",
+  guestContact,
   onPaid,
 }: PaymentPanelProps) {
   const { t } = useTranslation();
@@ -43,7 +48,7 @@ export function PaymentPanel({
   const [paymentId, setPaymentId] = useState<string | null>(null);
 
   const createPayment = useMutation({
-    mutationFn: () => paymentsApi.create(registrationId),
+    mutationFn: () => paymentsApi.create(registrationId, guestContact),
     onSuccess: (res) => setPaymentId(res.payment.id),
   });
 
@@ -57,7 +62,7 @@ export function PaymentPanel({
 
   const statusQuery = useQuery({
     queryKey: ["payment-status", paymentId],
-    queryFn: () => paymentsApi.status(paymentId!),
+    queryFn: () => paymentsApi.status(paymentId!, guestContact),
     enabled: !!paymentId,
     refetchInterval: (query) => {
       const p = query.state.data?.payment as ApiPayment | undefined;
