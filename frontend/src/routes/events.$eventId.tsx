@@ -23,6 +23,8 @@ import {
   waitlistApi,
   resultsApi,
   type ApiRegistrationAnswer,
+  type ApiRegistration,
+  type GuestContact,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
@@ -64,11 +66,18 @@ const PHONE_RE = /^[+]?[\d\s-]{7,20}$/;
 function EventDetail() {
   const { eventId } = Route.useParams();
   const { t } = useTranslation();
-  const { user, loading, refresh } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [regStep, setRegStep] = useState<RegStep>("idle");
+  // Guest checkout never signs the visitor in (see registrationsApi.create)
+  // — regQuery below only runs for a signed-in user, so a guest's own
+  // just-created registration is held here instead, entirely client-side.
+  // It won't survive a page refresh; the confirmation email is the durable
+  // record for a guest, same as a store's "check your email for your
+  // order" pattern.
+  const [guestRegistration, setGuestRegistration] = useState<ApiRegistration | null>(null);
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
   // Collected on the survey step, then held until the confirm step (or,
   // when no confirm step applies, submitted immediately) — see
@@ -93,6 +102,16 @@ function EventDetail() {
     if (user) return undefined;
     return {
       name: guestName.trim(),
+      email: guestEmail.trim() || undefined,
+      phone: guestPhone.trim() || undefined,
+    };
+  }
+
+  // Same contact info, reused to authorize the payment step for a guest
+  // (no session to authorize it with instead) — see paymentsApi.create/status.
+  function guestContact(): GuestContact | undefined {
+    if (user) return undefined;
+    return {
       email: guestEmail.trim() || undefined,
       phone: guestPhone.trim() || undefined,
     };
@@ -156,16 +175,19 @@ function EventDetail() {
       eventTypeIds?: string[];
       guest?: { name: string; email: string };
     }) => registrationsApi.create(eventId, opts),
-    onSuccess: async (res) => {
+    onSuccess: (res) => {
       setRegStep("idle");
       setSelectedTypeIds([]);
       setPendingAnswers([]);
-      // A guest registration silently signs the visitor in (see
-      // registrationsApi.create) — pick up the new user in auth context so
-      // the rest of this page (payment, "you're registered") renders as
-      // signed-in immediately instead of after a manual refresh.
-      if (res.auth) await refresh();
-      queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
+      // Guest checkout never signs the visitor in (see
+      // registrationsApi.create) — hold onto the new registration directly
+      // instead of relying on regQuery, which only runs for a signed-in
+      // user.
+      if (!user) {
+        setGuestRegistration(res.registration);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["public-event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["my-registrations"] });
 
@@ -190,21 +212,6 @@ function EventDetail() {
             onClick: () => joinWaitlist.mutate({ eventTypeIds: selectedTypeIds }),
           },
         });
-      } else if (e.code === "email_registered" || e.code === "phone_registered") {
-        // The email or phone they typed on the guest form already has an
-        // account — bounce back to that step so they can see the note and
-        // switch to signing in instead of just seeing a generic failure toast.
-        setRegStep("guest");
-        const fallback =
-          e.code === "phone_registered"
-            ? t("eventDetail.guestPhoneTaken")
-            : t("eventDetail.guestEmailTaken");
-        toast.error(e.message ?? fallback, {
-          action: {
-            label: t("eventDetail.signInInstead"),
-            onClick: () => navigate({ to: "/auth" }),
-          },
-        });
       } else {
         toast.error(e.message ?? t("eventDetail.toastRegisterError"));
       }
@@ -212,6 +219,11 @@ function EventDetail() {
   });
 
   const ev = eventQuery.data;
+  // A signed-in user's registration comes from regQuery; a guest's comes
+  // from client-side state set after registering (see the register
+  // mutation above) since there's no session for regQuery to authenticate
+  // with.
+  const activeReg = user ? regQuery.data : guestRegistration;
   const hasTypes = !!ev?.event_types?.length;
   const hasSurvey = !!ev?.survey?.questions?.length;
   const registeredCount = ev?.registrations_count ?? 0;
@@ -637,17 +649,26 @@ function EventDetail() {
                     </Button>
                   </div>
                 </div>
-              ) : regQuery.data && regQuery.data.payment_status === "unpaid" ? (
+              ) : activeReg && activeReg.payment_status === "unpaid" ? (
                 /* Registered, payment still pending */
                 <PaymentPanel
-                  registrationId={regQuery.data.id}
+                  registrationId={activeReg.id}
                   brandColor={brandColor}
+                  guestContact={guestContact()}
                   onPaid={() => {
-                    queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
+                    if (user) {
+                      queryClient.invalidateQueries({ queryKey: ["my-reg", eventId] });
+                    } else {
+                      // No session to refetch from — update the client-side
+                      // copy directly (see guestRegistration above).
+                      setGuestRegistration((prev) =>
+                        prev ? { ...prev, payment_status: "paid" } : prev,
+                      );
+                    }
                     if (ev) downloadICS(ev);
                   }}
                 />
-              ) : regQuery.data ? (
+              ) : activeReg ? (
                 /* Already registered and paid (or free) */
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
@@ -657,37 +678,37 @@ function EventDetail() {
                     >
                       <Check className="h-5 w-5" /> {t("eventDetail.youAreRegistered")}
                     </p>
-                    {regQuery.data.event_types?.length > 0 && (
+                    {activeReg.event_types?.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {regQuery.data.event_types.map((et) => (
+                        {activeReg.event_types.map((et) => (
                           <Badge key={et.id} variant="secondary">
                             {et.name}
                           </Badge>
                         ))}
                       </div>
                     )}
-                    {regQuery.data.checked_in_at && (
+                    {activeReg.checked_in_at && (
                       <Badge variant="secondary" className="mt-2">
                         {t("dashboard.checkedIn")}
                       </Badge>
                     )}
-                    {regQuery.data.finish_time_seconds != null && (
+                    {activeReg.finish_time_seconds != null && (
                       <p className="mt-1 text-sm text-muted-foreground">
                         {t("dashboard.yourFinishTime", {
-                          time: formatFinishTime(regQuery.data.finish_time_seconds),
+                          time: formatFinishTime(activeReg.finish_time_seconds),
                         })}
                       </p>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <RegistrationTicketQR
-                      registrationId={regQuery.data.id}
+                      registrationId={activeReg.id}
                       eventTitle={ev.title}
                       brandColor={brandColor}
                     />
-                    {regQuery.data.certificate_url && (
+                    {activeReg.certificate_url && (
                       <Button asChild variant="outline">
-                        <a href={regQuery.data.certificate_url} target="_blank" rel="noreferrer">
+                        <a href={activeReg.certificate_url} target="_blank" rel="noreferrer">
                           <Award className="h-4 w-4" /> {t("eventDetail.downloadCertificate")}
                         </a>
                       </Button>

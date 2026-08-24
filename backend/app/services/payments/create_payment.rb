@@ -7,13 +7,20 @@ module Payments
   # Payment with whatever PayWay said (success / declined / unreachable).
   #
   # Deliberately framework-agnostic — takes plain values in (`registration`,
-  # `current_user`, `callback_url`), not the controller/request itself, so
-  # it's usable/testable outside of a request cycle. Returns a Result
-  # instead of rendering or raising for expected outcomes (already paid,
-  # nothing owed, gateway declined/unreachable); the controller maps
-  # `Result#status` to the right HTTP status code. Actual bugs (bad
-  # registration state, AR validation failures on Payment itself) still
-  # raise normally — only PayWay's own error modes are captured here.
+  # `callback_url`), not the controller/request itself, so it's
+  # usable/testable outside of a request cycle. Returns a Result instead of
+  # rendering or raising for expected outcomes (already paid, nothing owed,
+  # gateway declined/unreachable); the controller maps `Result#status` to
+  # the right HTTP status code. Actual bugs (bad registration state, AR
+  # validation failures on Payment itself) still raise normally — only
+  # PayWay's own error modes are captured here.
+  #
+  # Payer details (name/email for the gateway request) come from
+  # `registration.user`, not a separately-passed current_user — payments can
+  # now be made anonymously by a guest whose contact info matches the
+  # registration's account (see Api::V1::PaymentsController), so there may
+  # be no signed-in user for this request at all. The registrant's own
+  # account is the payer either way.
   class CreatePayment
     PAYMENT_LIFETIME_MINUTES = 15
 
@@ -23,9 +30,8 @@ module Payments
       end
     end
 
-    def initialize(registration:, current_user:, callback_url:)
+    def initialize(registration:, callback_url:)
       @registration = registration
-      @current_user = current_user
       @callback_url = callback_url
     end
 
@@ -74,7 +80,8 @@ module Payments
     # responding normally with a decline, which is a non-nil response with
     # a non-zero status code (handled by the caller via success_response?).
     def request_qr(payment, amount_cents)
-      profile = @current_user.profile
+      payer = @registration.user
+      profile = payer.profile
       AbaPayway::Client.for_event(@registration.event).generate_qr(
         tran_id: payment.tran_id,
         amount_cents: amount_cents,
@@ -82,7 +89,7 @@ module Payments
         lifetime_minutes: PAYMENT_LIFETIME_MINUTES,
         first_name: profile&.display_name.presence || "Rally",
         last_name: "Participant",
-        email: @current_user.email,
+        email: payer.email,
         callback_url: @callback_url
       )
     rescue AbaPayway::Error => e

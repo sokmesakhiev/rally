@@ -18,7 +18,7 @@ RSpec.describe Payments::CreatePayment do
   end
 
   def call
-    described_class.new(registration: registration, current_user: user, callback_url: callback_url).call
+    described_class.new(registration: registration, callback_url: callback_url).call
   end
 
   it "opens a pending payment and marks it created with the QR payload on success" do
@@ -78,6 +78,21 @@ RSpec.describe Payments::CreatePayment do
     result = call
 
     expect(result.payment.amount_cents).to eq(2500)
+  end
+
+  # Guest checkout (see Registrations::GuestCheckout) never issues a session,
+  # so there's no separately-passed current_user for an anonymous payment —
+  # the registrant's own account is always the payer.
+  it "sources payer details from the registration's own user, not a separate current_user" do
+    guest = create(:user, email: "guest@example.com")
+    guest.profile.update!(display_name: "Guest Person")
+    registration.update!(user: guest)
+
+    expect_any_instance_of(AbaPayway::Client).to receive(:generate_qr)
+      .with(hash_including(email: "guest@example.com", first_name: "Guest Person"))
+      .and_return(generate_qr_response)
+
+    call
   end
 
   it "marks the payment declined and returns :declined when PayWay responds with a non-zero status code" do

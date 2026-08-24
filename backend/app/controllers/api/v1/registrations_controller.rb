@@ -1,8 +1,6 @@
 module Api
   module V1
     class RegistrationsController < BaseController
-      include UserPayload
-
       # #create serves both signed-in participants and anonymous guest
       # checkout — see authenticate_user_optional! and
       # Registrations::GuestCheckout. Every other action still requires a
@@ -91,29 +89,20 @@ module Api
           end
 
           if is_guest
+            # Attaches to an existing account when the email/phone matches
+            # one, without issuing a session for it — see GuestCheckout's
+            # class comment for why this is safe and why sign-in is never
+            # forced here.
             checkout = Registrations::GuestCheckout.call(
               email: guest_params[:email],
               phone: guest_params[:phone],
               name: guest_params[:name]
             )
-            unless checkout.ok?
-              # Don't silently attach the registration to an account this
-              # visitor hasn't proven they control — see GuestCheckout's
-              # class comment. Direct them to sign in instead.
-              conflict_json =
-                if checkout.conflict_field == :phone
-                  { error: "An account already exists with this phone number. Please sign in to register.",
-                    code: "phone_registered" }
-                else
-                  { error: "An account already exists with this email. Please sign in to register.",
-                    code: "email_registered" }
-                end
-              render json: conflict_json, status: :unprocessable_entity
-              return
-            end
             registrant = checkout.user
+            new_guest_account = checkout.newly_created
           else
             registrant = current_user
+            new_guest_account = false
           end
 
           if registrant.registrations.exists?(event_id: @event.id)
@@ -155,21 +144,14 @@ module Api
             # (see GuestCheckout) — sending there would just bounce, so skip
             # it entirely rather than queue a delivery that can't succeed.
             unless registrant.email_auto_generated?
-              RegistrationMailer.confirmation(registration, new_guest_account: is_guest).deliver_later
+              RegistrationMailer.confirmation(registration, new_guest_account: new_guest_account).deliver_later
             end
 
-            response_json = { registration: registration_json(registration, include_types: true) }
-            # A guest has no token yet — hand back the same { user:, token: }
-            # shape AuthController's signup/signin/google return, so the
-            # frontend can silently store it and treat them as signed in for
-            # the rest of this flow (paying, "My registrations"). A
-            # signed-in request already has a working token and needs none
-            # of this.
-            if is_guest
-              response_json[:auth] = user_payload(registrant, JsonWebToken.encode(user_id: registrant.id))
-            end
-
-            render json: response_json, status: :created
+            # No auth token for a guest registration — see GuestCheckout's
+            # class comment. The frontend keeps the guest's own contact info
+            # around client-side to authorize the payment step instead (see
+            # Api::V1::PaymentsController).
+            render json: { registration: registration_json(registration, include_types: true) }, status: :created
           end
         end
       rescue ActiveRecord::RecordInvalid => e
