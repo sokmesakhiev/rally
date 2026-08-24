@@ -59,7 +59,22 @@ function toCents(value: string): number {
   return Math.round(parsed * 100);
 }
 
-export function EventDetailsEditor({ event }: { event: ApiEvent }) {
+export function EventDetailsEditor({
+  event,
+  registeredCount = 0,
+}: {
+  event: ApiEvent;
+  /**
+   * Count of active (non-cancelled) registrations, passed down from
+   * ManageEvent's already-loaded participants list. Purely informational —
+   * lets the price field tell the organizer how many people are already
+   * grandfathered in before they save a change. See
+   * change-event-plan-tickets.md's "Ticket B": amount_owed_cents is
+   * snapshotted per-registration server-side, so this is just messaging,
+   * not something the frontend needs to enforce.
+   */
+  registeredCount?: number;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -235,7 +250,11 @@ export function EventDetailsEditor({ event }: { event: ApiEvent }) {
           onChange={(e) => setPrice(e.target.value)}
           placeholder={t("eventForm.pricePlaceholder")}
         />
-        <p className="text-xs text-muted-foreground">{t("manageEvent.priceChangeHint")}</p>
+        <p className="text-xs text-muted-foreground">
+          {registeredCount > 0
+            ? t("manageEvent.priceChangeHintWithCount", { count: registeredCount })
+            : t("manageEvent.priceChangeHint")}
+        </p>
       </div>
 
       <Button onClick={() => save.mutate()} disabled={!canSave || save.isPending} className="gap-2">

@@ -231,17 +231,19 @@ function ManageEvent() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // ── Publishing (pricing plan + payment) ──
+  // ── Publishing (pricing plan + payment) ── also used for changing plan on
+  // an already-published event, see the "Change plan" section below.
   const plansQuery = useQuery({
     queryKey: ["event-plans"],
     queryFn: async () => {
       const { plans } = await eventPlansApi.list();
       return plans;
     },
-    enabled: !!ev && !ev.is_published,
+    enabled: !!ev,
   });
 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [showChangePlan, setShowChangePlan] = useState(false);
 
   const unpublishEvent = useMutation({
     mutationFn: () => eventsApi.unpublish(eventId),
@@ -464,6 +466,111 @@ function ManageEvent() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Change plan (published events only) */}
+            {ev.is_published && (
+              <div className="mt-8 rounded-2xl border border-border bg-card p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold">{t("manageEvent.currentPlanTitle")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("manageEvent.currentPlanDesc", {
+                        plan: ev.plan ? ev.plan.replace("_", " ") : "—",
+                        capacity: ev.capacity ?? "—",
+                      })}
+                    </p>
+                  </div>
+                  {!selectedPlan && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowChangePlan((v) => !v)}
+                    >
+                      {showChangePlan ? t("common.cancel") : t("manageEvent.changePlan")}
+                    </Button>
+                  )}
+                </div>
+
+                {showChangePlan &&
+                  (selectedPlan ? (
+                    <div className="mt-5 rounded-xl border border-border bg-muted/30 p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium capitalize">
+                          {selectedPlan.replace("_", " ")} {t("manageEvent.planSuffix")}
+                        </p>
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedPlan(null)}>
+                          {t("manageEvent.changePlan")}
+                        </Button>
+                      </div>
+                      <PlanPaymentPanel
+                        eventId={eventId}
+                        plan={selectedPlan}
+                        brandColor={activeBrandColor}
+                        mode="change"
+                        onPublished={() => {
+                          setSelectedPlan(null);
+                          setShowChangePlan(false);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {t("manageEvent.changePlanDesc")}
+                      </p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        {plansQuery.isLoading && (
+                          <p className="text-sm text-muted-foreground">
+                            {t("manageEvent.loadingPlans")}
+                          </p>
+                        )}
+                        {plansQuery.data?.map((plan) => {
+                          const isCurrent = plan.id === ev.plan;
+                          const tooSmallForTypes = plan.capacity < combinedTypeCapacity;
+                          const tooSmallForRegistered = plan.capacity < participants.length;
+                          const disabled = isCurrent || tooSmallForTypes || tooSmallForRegistered;
+                          return (
+                            <button
+                              key={plan.id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => setSelectedPlan(plan.id)}
+                              className={cn(
+                                "rounded-xl border border-border bg-card p-4 text-left transition-colors",
+                                disabled ? "cursor-not-allowed opacity-50" : "hover:border-primary",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold">{plan.label}</p>
+                                {isCurrent && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {t("manageEvent.currentPlanBadge")}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="mt-1 text-lg font-bold">
+                                {plan.price_cents === 0
+                                  ? t("common.free")
+                                  : formatPrice(plan.price_cents, "usd")}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {t("manageEvent.upToPeople", { count: plan.capacity })}
+                              </p>
+                              {!isCurrent && (tooSmallForTypes || tooSmallForRegistered) && (
+                                <p className="mt-1 text-xs text-destructive">
+                                  {tooSmallForRegistered
+                                    ? t("manageEvent.tooSmallRegistered")
+                                    : t("manageEvent.tooSmall")}
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ))}
               </div>
             )}
 
@@ -773,7 +880,7 @@ function ManageEvent() {
                 </div>
 
                 {/* Core details editor — title/date/price/etc. */}
-                <EventDetailsEditor event={ev} />
+                <EventDetailsEditor event={ev} registeredCount={participants.length} />
 
                 {/* Branding editor card */}
                 <div className="rounded-2xl border border-border bg-card p-6 space-y-5">

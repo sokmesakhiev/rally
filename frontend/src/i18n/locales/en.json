@@ -300,7 +300,18 @@
     "guestEmailPlaceholder": "you@example.com",
     "signInInstead": "Sign in instead",
     "guestEmailTaken": "An account already exists with this email. Please sign in to register.",
-    "guestPhoneTaken": "An account already exists with this phone number. Please sign in to register."
+    "guestPhoneTaken": "An account already exists with this phone number. Please sign in to register.",
+    "reviewAndConfirm": "Review & confirm",
+    "confirmTitle": "Confirm your registration",
+    "confirmDesc": "Please check your details below before you pay.",
+    "confirmName": "Name",
+    "confirmNoName": "Not provided",
+    "confirmContact": "Contact",
+    "confirmNoContact": "Not provided",
+    "confirmSelectedTypes": "Selected",
+    "confirmTotal": "Total due",
+    "nonRefundableNotice": "Registrations aren't refundable for details entered incorrectly (wrong name, email, phone, or event type) — please double-check everything above before continuing.",
+    "confirmAndRegister": "Confirm & register"
   },
   "dashboard": {
     "title": "Your dashboard",
@@ -383,6 +394,11 @@
     "loadingPlans": "Loading plans…",
     "upToPeople": "Up to {{count}} people",
     "tooSmall": "Too small for your event types",
+    "currentPlanTitle": "Current plan",
+    "currentPlanDesc": "You're on the {{plan}} plan — up to {{capacity}} people.",
+    "changePlanDesc": "Upgrading charges only the difference from what you've already paid. Downgrading is free, with no refund for the difference.",
+    "currentPlanBadge": "Current",
+    "tooSmallRegistered": "Too small for the people already registered",
     "statParticipants": "Participants",
     "statPaid": "Paid",
     "statRevenue": "Revenue",
@@ -437,6 +453,7 @@
     "toastDetailsSaved": "Event details saved",
     "mapPinPreserved": "The existing map pin is kept when you edit this text.",
     "priceChangeHint": "Changing the price does not alter what existing participants already owe or paid.",
+    "priceChangeHintWithCount": "{{count}} people already registered at the old price and won't be affected — this only applies to new registrations.",
     "certificateTitle": "Certificate of participation",
     "certificateDesc": "Optional. Upload a .odt (OpenDocument Text) design and Rally will automatically generate a personalized PDF certificate for every confirmed, paid participant once the event ends — no check-in required, so this covers everyone registered, not just people who actually showed up.",
     "saveCertificate": "Save certificate template",
@@ -632,7 +649,11 @@
     "startError": "Could not start this plan.",
     "paymentReceived": "Payment received — event published!",
     "paidMessage": "{{amount}} paid.",
-    "autoPublishNote": "We'll publish your event automatically once payment is received."
+    "autoPublishNote": "We'll publish your event automatically once payment is received.",
+    "planChanged": "Plan changed!",
+    "planChangeApplied": "Your event is now on the new plan.",
+    "paymentReceivedChange": "Payment received — plan changed!",
+    "autoApplyNote": "We'll apply your new plan automatically once payment is received."
   },
   "eventQrCode": {
     "scanToRegister": "Scan to register for this event",

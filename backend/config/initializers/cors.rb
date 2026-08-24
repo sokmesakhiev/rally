@@ -1,9 +1,10 @@
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
     if Rails.env.development?
-      # The frontend's dev server port isn't fixed — @lovable.dev/vite-tanstack-config's
-      # sandbox detection can pick something other than Vite's default 5173 (e.g. 8080).
-      # Allow any localhost port locally rather than chasing specific numbers.
+      # frontend/vite.config.ts pins the dev server to port 8080, but allow any
+      # localhost port locally rather than chasing one specific number — e.g.
+      # running vite with an explicit --port override still works without
+      # editing this file.
       origins(/\Ahttp:\/\/(localhost|127\.0\.0\.1):\d+\z/)
     else
       origins ENV.fetch("FRONTEND_URL", "http://localhost:3000"),

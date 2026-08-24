@@ -13,6 +13,14 @@ interface PlanPaymentPanelProps {
   brandColor?: string;
   /** Called once the event is actually published (free tier, or approved payment). */
   onPublished?: () => void;
+  /**
+   * "publish" (default) is the initial draft → live flow. "change" is
+   * picking a different plan on an already-published event (see
+   * registration-engagement-tickets.md's "change event plan" work) — same
+   * endpoint, same polling, just different success copy since the event
+   * isn't newly "published" in that case.
+   */
+  mode?: "publish" | "change";
 }
 
 function useCountdown(expiresAt: string | null) {
@@ -52,6 +60,7 @@ export function PlanPaymentPanel({
   plan,
   brandColor = "#6366f1",
   onPublished,
+  mode = "publish",
 }: PlanPaymentPanelProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -170,8 +179,12 @@ export function PlanPaymentPanel({
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-5 w-5" style={{ color: brandColor }} />
         </span>
-        <p className="font-medium">{t("planPaymentPanel.eventPublished")}</p>
-        <p className="text-sm text-muted-foreground">{t("planPaymentPanel.nowVisible")}</p>
+        <p className="font-medium">
+          {mode === "change" ? t("planPaymentPanel.planChanged") : t("planPaymentPanel.eventPublished")}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {mode === "change" ? t("planPaymentPanel.planChangeApplied") : t("planPaymentPanel.nowVisible")}
+        </p>
       </div>
     );
   }
@@ -207,7 +220,11 @@ export function PlanPaymentPanel({
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-5 w-5" style={{ color: brandColor }} />
         </span>
-        <p className="font-medium">{t("planPaymentPanel.paymentReceived")}</p>
+        <p className="font-medium">
+          {mode === "change"
+            ? t("planPaymentPanel.paymentReceivedChange")
+            : t("planPaymentPanel.paymentReceived")}
+        </p>
         <p className="text-sm text-muted-foreground">
           {t("planPaymentPanel.paidMessage", {
             amount: formatPrice(payment.amount_cents, payment.currency),
@@ -276,7 +293,9 @@ export function PlanPaymentPanel({
         </Button>
       )}
 
-      <p className="text-xs text-muted-foreground">{t("planPaymentPanel.autoPublishNote")}</p>
+      <p className="text-xs text-muted-foreground">
+        {mode === "change" ? t("planPaymentPanel.autoApplyNote") : t("planPaymentPanel.autoPublishNote")}
+      </p>
     </div>
   );
 }

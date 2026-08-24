@@ -64,7 +64,8 @@ module Waitlists
           event: @event,
           status: "confirmed",
           payment_status: amount.zero? ? "paid" : "unpaid",
-          amount_paid_cents: 0
+          amount_paid_cents: 0,
+          amount_owed_cents: amount
         )
 
         Array(entry.event_type_ids).each do |type_id|
