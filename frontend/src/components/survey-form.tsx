@@ -17,9 +17,20 @@ interface SurveyFormProps {
   onSubmit: (answers: ApiRegistrationAnswer[]) => void;
   onBack: () => void;
   isPending: boolean;
+  /** Overrides the submit button's label — e.g. "Review & confirm" when a
+   * confirm step follows instead of registering immediately. Defaults to
+   * surveyForm.completeRegistration. */
+  submitLabel?: string;
 }
 
-export function SurveyForm({ survey, brandColor, onSubmit, onBack, isPending }: SurveyFormProps) {
+export function SurveyForm({
+  survey,
+  brandColor,
+  onSubmit,
+  onBack,
+  isPending,
+  submitLabel,
+}: SurveyFormProps) {
   const { t } = useTranslation();
   // answers keyed by question id
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
@@ -146,7 +157,7 @@ export function SurveyForm({ survey, brandColor, onSubmit, onBack, isPending }: 
           className="flex-1 text-white hover:opacity-90 disabled:opacity-50"
         >
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t("surveyForm.completeRegistration")}
+          {submitLabel ?? t("surveyForm.completeRegistration")}
         </Button>
       </div>
     </form>

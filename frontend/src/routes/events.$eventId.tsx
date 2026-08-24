@@ -51,8 +51,9 @@ export const Route = createFileRoute("/events/$eventId")({
 });
 
 // Registration steps:
-//   idle → (guest, if not signed in) → (types if event has types) → (survey if event has survey) → done
-type RegStep = "idle" | "guest" | "types" | "survey";
+//   idle → (guest, if not signed in) → (types if event has types) → (survey if event has survey)
+//   → (confirm, if the selected total is > 0 — see registration-flow-review-2026-08-24.md) → done
+type RegStep = "idle" | "guest" | "types" | "survey" | "confirm";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Deliberately lenient — mirrors Profile's own format check on the backend.
@@ -69,6 +70,10 @@ function EventDetail() {
 
   const [regStep, setRegStep] = useState<RegStep>("idle");
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
+  // Collected on the survey step, then held until the confirm step (or,
+  // when no confirm step applies, submitted immediately) — see
+  // proceedPastLastStep below.
+  const [pendingAnswers, setPendingAnswers] = useState<ApiRegistrationAnswer[]>([]);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -154,6 +159,7 @@ function EventDetail() {
     onSuccess: async (res) => {
       setRegStep("idle");
       setSelectedTypeIds([]);
+      setPendingAnswers([]);
       // A guest registration silently signs the visitor in (see
       // registrationsApi.create) — pick up the new user in auth context so
       // the rest of this page (payment, "you're registered") renders as
@@ -212,6 +218,19 @@ function EventDetail() {
   const isFull = !!ev?.capacity && registeredCount >= ev.capacity;
   const brandColor = ev?.brand_color ?? "#6366f1";
 
+  // What the current selection actually costs — the flat event price, or
+  // the sum of selected types' own prices (falling back to the flat price
+  // per-type when a type has none of its own). Drives whether a "confirm
+  // before you pay" step is inserted — see registration-flow-review-2026-08-24.md.
+  const totalDueCents = !ev
+    ? 0
+    : hasTypes
+      ? ev.event_types
+          .filter((et) => selectedTypeIds.includes(et.id))
+          .reduce((sum, et) => sum + (et.price_cents ?? ev.price_cents), 0)
+      : ev.price_cents;
+  const requiresConfirm = totalDueCents > 0;
+
   // Called when the user clicks the main "Register" button. Not signed in?
   // Collect a name + email first (no account, no navigating away) — see the
   // "guest" step below — then continue exactly the same way a signed-in
@@ -235,7 +254,7 @@ function EventDetail() {
     } else if (hasSurvey) {
       setRegStep("survey");
     } else {
-      register.mutate({ guest: guestPayload() });
+      proceedPastLastStep([]);
     }
   }
 
@@ -244,13 +263,44 @@ function EventDetail() {
     if (hasSurvey) {
       setRegStep("survey");
     } else {
-      register.mutate({ eventTypeIds: selectedTypeIds, guest: guestPayload() });
+      proceedPastLastStep([]);
     }
   }
 
   // Called from survey "Complete registration"
   function handleSurveyDone(answers: ApiRegistrationAnswer[]) {
-    register.mutate({ answers, eventTypeIds: selectedTypeIds, guest: guestPayload() });
+    proceedPastLastStep(answers);
+  }
+
+  // Common tail of every path (guest-only, guest+types, +survey, ...) once
+  // there's nothing left to collect. Paid selections (event or guest —
+  // both, per registration-flow-review-2026-08-24.md) get one more step to
+  // review what they entered before the charge happens; free ones register
+  // immediately exactly like before.
+  function proceedPastLastStep(answers: ApiRegistrationAnswer[]) {
+    setPendingAnswers(answers);
+    if (requiresConfirm) {
+      setRegStep("confirm");
+    } else {
+      register.mutate({ answers, eventTypeIds: selectedTypeIds, guest: guestPayload() });
+    }
+  }
+
+  // Called from the confirm step's "Confirm & register" button.
+  function handleConfirmRegister() {
+    register.mutate({
+      answers: pendingAnswers,
+      eventTypeIds: selectedTypeIds,
+      guest: guestPayload(),
+    });
+  }
+
+  // Where "Back" on the confirm step should return to — whichever step was
+  // actually last shown before landing here.
+  function confirmBackTarget(): RegStep {
+    if (hasSurvey) return "survey";
+    if (hasTypes) return "types";
+    return user ? "idle" : "guest";
   }
 
   function toggleType(id: string) {
@@ -485,7 +535,13 @@ function EventDetail() {
                   onBack={() => setRegStep("idle")}
                   brandColor={brandColor}
                   isPending={register.isPending}
-                  nextLabel={hasSurvey ? t("eventDetail.nextSurvey") : t("eventDetail.register")}
+                  nextLabel={
+                    hasSurvey
+                      ? t("eventDetail.nextSurvey")
+                      : requiresConfirm
+                        ? t("eventDetail.reviewAndConfirm")
+                        : t("eventDetail.register")
+                  }
                   onJoinWaitlist={handleJoinWaitlistForType}
                   waitlistPendingTypeId={waitlistPendingTypeId}
                 />
@@ -497,7 +553,90 @@ function EventDetail() {
                   isPending={register.isPending}
                   onBack={() => setRegStep(hasTypes ? "types" : "idle")}
                   onSubmit={handleSurveyDone}
+                  submitLabel={requiresConfirm ? t("eventDetail.reviewAndConfirm") : undefined}
                 />
+              ) : regStep === "confirm" ? (
+                /* Confirm step — shown only for paid selections (event or
+                   guest checkout, per registration-flow-review-2026-08-24.md)
+                   right before the actual POST /registrations call, so a
+                   typo'd contact or wrong event type gets caught before the
+                   charge instead of after. */
+                <div className="space-y-5">
+                  <div>
+                    <p className="font-medium">{t("eventDetail.confirmTitle")}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t("eventDetail.confirmDesc")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-border bg-card p-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">{t("eventDetail.confirmName")}</span>
+                      <span className="font-medium">
+                        {user ? user.display_name || t("eventDetail.confirmNoName") : guestName}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        {t("eventDetail.confirmContact")}
+                      </span>
+                      <span className="font-medium">
+                        {user
+                          ? [
+                              user.phone,
+                              user.email_auto_generated ? null : user.email,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || t("eventDetail.confirmNoContact")
+                          : [guestPhone.trim(), guestEmail.trim()].filter(Boolean).join(" · ")}
+                      </span>
+                    </div>
+                    {hasTypes && (
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          {t("eventDetail.confirmSelectedTypes")}
+                        </span>
+                        <span className="text-right font-medium">
+                          {ev.event_types
+                            .filter((et) => selectedTypeIds.includes(et.id))
+                            .map((et) => et.name)
+                            .join(", ")}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+                      <span className="text-muted-foreground">{t("eventDetail.confirmTotal")}</span>
+                      <span className="text-base font-semibold" style={{ color: brandColor }}>
+                        {formatPrice(totalDueCents, ev.currency)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+                    {t("eventDetail.nonRefundableNotice")}
+                  </p>
+
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={register.isPending}
+                      onClick={() => setRegStep(confirmBackTarget())}
+                    >
+                      {t("common.back")}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={register.isPending}
+                      onClick={handleConfirmRegister}
+                      style={{ backgroundColor: brandColor }}
+                      className="flex-1 text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      {register.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {t("eventDetail.confirmAndRegister")}
+                    </Button>
+                  </div>
+                </div>
               ) : regQuery.data && regQuery.data.payment_status === "unpaid" ? (
                 /* Registered, payment still pending */
                 <PaymentPanel

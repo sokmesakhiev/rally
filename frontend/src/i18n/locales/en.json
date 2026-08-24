@@ -300,7 +300,18 @@
     "guestEmailPlaceholder": "you@example.com",
     "signInInstead": "Sign in instead",
     "guestEmailTaken": "An account already exists with this email. Please sign in to register.",
-    "guestPhoneTaken": "An account already exists with this phone number. Please sign in to register."
+    "guestPhoneTaken": "An account already exists with this phone number. Please sign in to register.",
+    "reviewAndConfirm": "Review & confirm",
+    "confirmTitle": "Confirm your registration",
+    "confirmDesc": "Please check your details below before you pay.",
+    "confirmName": "Name",
+    "confirmNoName": "Not provided",
+    "confirmContact": "Contact",
+    "confirmNoContact": "Not provided",
+    "confirmSelectedTypes": "Selected",
+    "confirmTotal": "Total due",
+    "nonRefundableNotice": "Registrations aren't refundable for details entered incorrectly (wrong name, email, phone, or event type) — please double-check everything above before continuing.",
+    "confirmAndRegister": "Confirm & register"
   },
   "dashboard": {
     "title": "Your dashboard",
