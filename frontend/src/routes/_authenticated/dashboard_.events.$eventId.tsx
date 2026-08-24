@@ -776,13 +776,34 @@ function ManageEvent() {
                               <Check className="h-4 w-4" /> {t("manageEvent.markPaid")}
                             </Button>
                           ))}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeParticipant.mutate(p.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                {t("manageEvent.removeParticipantDialogTitle")}
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {t("manageEvent.removeParticipantDialogDesc", {
+                                  name: p.profile?.display_name ?? t("manageEvent.participantFallback"),
+                                })}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                              <AlertDialogAction
+                                disabled={removeParticipant.isPending}
+                                onClick={() => removeParticipant.mutate(p.id)}
+                              >
+                                {t("common.remove")}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   ))}
