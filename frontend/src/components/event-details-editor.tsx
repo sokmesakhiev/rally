@@ -357,7 +357,10 @@ export function EventDetailsEditor({
             types={types}
             onTypesChange={handleTypesChange}
             eventPriceCents={isPaid ? toCents(price) : 0}
+<<<<<<< HEAD
             allowPricing={canPrice}
+=======
+>>>>>>> 0f06714 (Add editable to event type (#269))
           />
         )}
       </div>
