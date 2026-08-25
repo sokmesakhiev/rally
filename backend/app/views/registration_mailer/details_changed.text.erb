@@ -1,0 +1,16 @@
+Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,
+
+The organizer of <%= @event.title %> just updated some details for your registration:
+<% if @changes[:price_cents] -%>
+Price: <%= format_money(@changes[:price_cents][:from]) %> -> <%= format_money(@changes[:price_cents][:to]) %> <%= @event.currency.to_s.upcase %>
+<% end -%>
+<% if @changes[:start_at] -%>
+Starts: <%= format_time(@changes[:start_at][:from]) %> -> <%= format_time(@changes[:start_at][:to]) %>
+<% end -%>
+<% if @changes[:end_at] -%>
+Ends: <%= @changes[:end_at][:from] ? format_time(@changes[:end_at][:from]) : "—" %> -> <%= @changes[:end_at][:to] ? format_time(@changes[:end_at][:to]) : "—" %>
+<% end -%>
+
+Please review your registration: <%= @event_url %>
+
+— The Rally team

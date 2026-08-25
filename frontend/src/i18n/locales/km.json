@@ -557,6 +557,8 @@
     "notifyRefundIssuedDesc": "នៅពេលការសងប្រាក់វិញត្រូវបានផ្តល់សម្រាប់ការចុះឈ្មោះមួយរបស់អ្នក។",
     "notifyPromotedFromWaitlist": "បានតម្លើងឋានៈពីបញ្ជីរង់ចាំ",
     "notifyPromotedFromWaitlistDesc": "នៅពេលអ្នកត្រូវបានផ្លាស់ប្តូរចេញពីបញ្ជីរង់ចាំទៅជាកន្លែងបានបញ្ជាក់។",
+    "notifyEventDetailsChanged": "ព័ត៌មានលម្អិតព្រឹត្តិការណ៍មានការផ្លាស់ប្តូរ",
+    "notifyEventDetailsChangedDesc": "នៅពេលព្រឹត្តិការណ៍ដែលអ្នកបានចុះឈ្មោះ មានការផ្លាស់ប្តូរតម្លៃ ឬកាលបរិច្ឆេទ។",
     "saveNotifications": "រក្សាទុកចំណូលចិត្ត",
     "toastNotificationsSaved": "បានរក្សាទុកចំណូលចិត្តការជូនដំណឹង",
     "toastNotificationsSaveError": "មិនអាចរក្សាទុកចំណូលចិត្តការជូនដំណឹងរបស់អ្នកបានទេ។",

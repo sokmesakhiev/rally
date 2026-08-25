@@ -308,6 +308,7 @@ export interface ApiProfile {
   notify_payment_received: boolean;
   notify_refund_issued: boolean;
   notify_promoted_from_waitlist: boolean;
+  notify_event_details_changed: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -324,6 +325,7 @@ export interface ProfileUpdatePayload {
   notify_payment_received?: boolean;
   notify_refund_issued?: boolean;
   notify_promoted_from_waitlist?: boolean;
+  notify_event_details_changed?: boolean;
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────

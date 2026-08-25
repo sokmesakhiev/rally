@@ -1,0 +1,18 @@
+Hi<%= @creator.profile&.display_name.present? ? " #{@creator.profile.display_name}" : "" %>,
+
+Your event <%= @event.title %> has been created.
+
+When: <%= @event.start_at.strftime("%A, %B %-d, %Y at %-I:%M %p") %>
+<% if @event.location.present? -%>
+Where: <%= @event.location %>
+<% end -%>
+
+<% if @event.is_published -%>
+It's live and open for registration.
+<% else -%>
+It's not published yet — finish the publishing steps (including plan payment, if applicable) from your dashboard to make it visible to participants.
+<% end -%>
+
+Manage your event: <%= @manage_url %>
+
+— The Rally team

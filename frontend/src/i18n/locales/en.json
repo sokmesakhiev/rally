@@ -562,6 +562,8 @@
     "notifyRefundIssuedDesc": "When a refund is issued for one of your registrations.",
     "notifyPromotedFromWaitlist": "Promoted from waitlist",
     "notifyPromotedFromWaitlistDesc": "When you're moved off a waitlist into a confirmed spot.",
+    "notifyEventDetailsChanged": "Event details changed",
+    "notifyEventDetailsChangedDesc": "When an event you're registered for changes its price or dates.",
     "saveNotifications": "Save preferences",
     "toastNotificationsSaved": "Notification preferences saved",
     "toastNotificationsSaveError": "Could not save your notification preferences.",

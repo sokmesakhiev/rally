@@ -350,6 +350,18 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to be_present
     end
+
+    it "emails the creator a confirmation once the event is created" do
+      expect {
+        perform_enqueued_jobs do
+          post "/api/v1/events", params: valid_params, headers: auth_headers(user), as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ user.email ])
+      expect(mail.subject).to include("has been created")
+    end
   end
 
   # ── PATCH /api/v1/events/:id ─────────────────────────────────────────────────
@@ -485,6 +497,66 @@ RSpec.describe "Events API", type: :request do
     it "returns 401 without a token" do
       patch "/api/v1/events/#{event.id}", params: { event: { title: "X" } }, as: :json
       expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "emails active registrants when the price changes" do
+      registration = create(:registration, event: event)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { price_cents: 2500 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ registration.user.email ])
+      expect(mail.subject).to include("Details changed")
+    end
+
+    it "emails active registrants when start_at changes" do
+      registration = create(:registration, event: event)
+      new_start = event.start_at + 3.days
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { start_at: new_start.iso8601 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([ registration.user.email ])
+    end
+
+    it "does not email registrants when only unrelated fields change" do
+      create(:registration, event: event)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { title: "New Title" } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.not_to change { ActionMailer::Base.deliveries.count }
+    end
+
+    it "does not email a registrant who opted out of this notification" do
+      registration = create(:registration, event: event)
+      registration.user.profile.update!(notify_event_details_changed: false)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { price_cents: 2500 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.not_to change { ActionMailer::Base.deliveries.count }
     end
   end
 
