@@ -23,6 +23,7 @@ import { eventCategoryOptions } from "@/lib/event-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -85,6 +86,11 @@ export function EventDetailsEditor({
   const [routeMapUrl, setRouteMapUrl] = useState(event.route_map_url ?? "");
   const [startAt, setStartAt] = useState(toDateTimeLocal(event.start_at));
   const [endAt, setEndAt] = useState(toDateTimeLocal(event.end_at));
+  // Same on/off toggle as the create form (events.new.tsx) — the price
+  // field only makes sense to show once "paid" is selected, same reasoning
+  // there: showing an always-visible $0 price input for a free event reads
+  // as "this event costs $0" rather than "this event has no price at all".
+  const [isPaid, setIsPaid] = useState(event.price_cents > 0);
   const [price, setPrice] = useState(
     event.price_cents ? (event.price_cents / 100).toFixed(2) : "",
   );
@@ -100,6 +106,7 @@ export function EventDetailsEditor({
     setRouteMapUrl(event.route_map_url ?? "");
     setStartAt(toDateTimeLocal(event.start_at));
     setEndAt(toDateTimeLocal(event.end_at));
+    setIsPaid(event.price_cents > 0);
     setPrice(event.price_cents ? (event.price_cents / 100).toFixed(2) : "");
   }, [event]);
 
@@ -133,7 +140,7 @@ export function EventDetailsEditor({
         // UTC the API stores.
         start_at: new Date(startAt).toISOString(),
         end_at: endAt ? new Date(endAt).toISOString() : null,
-        price_cents: toCents(price),
+        price_cents: isPaid ? toCents(price) : 0,
       }),
     onSuccess: () => {
       // Both the organizer's view and the public event page show these fields.
@@ -239,23 +246,33 @@ export function EventDetailsEditor({
       </div>
       {dateError && <p className="text-sm text-destructive">{dateError}</p>}
 
-      <div className="space-y-2">
-        <Label htmlFor="edit-price">{t("eventForm.price")}</Label>
-        <Input
-          id="edit-price"
-          type="number"
-          min="0"
-          step="1"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder={t("eventForm.pricePlaceholder")}
-        />
-        <p className="text-xs text-muted-foreground">
-          {registeredCount > 0
-            ? t("manageEvent.priceChangeHintWithCount", { count: registeredCount })
-            : t("manageEvent.priceChangeHint")}
-        </p>
+      <div className="flex items-center justify-between rounded-xl border border-border p-4">
+        <div>
+          <p className="font-medium">{t("eventForm.paidEvent")}</p>
+          <p className="text-sm text-muted-foreground">{t("eventForm.paidEventDesc")}</p>
+        </div>
+        <Switch checked={isPaid} onCheckedChange={setIsPaid} />
       </div>
+
+      {isPaid && (
+        <div className="space-y-2">
+          <Label htmlFor="edit-price">{t("eventForm.price")}</Label>
+          <Input
+            id="edit-price"
+            type="number"
+            min="0"
+            step="1"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder={t("eventForm.pricePlaceholder")}
+          />
+          <p className="text-xs text-muted-foreground">
+            {registeredCount > 0
+              ? t("manageEvent.priceChangeHintWithCount", { count: registeredCount })
+              : t("manageEvent.priceChangeHint")}
+          </p>
+        </div>
+      )}
 
       <Button onClick={() => save.mutate()} disabled={!canSave || save.isPending} className="gap-2">
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
