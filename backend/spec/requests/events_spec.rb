@@ -595,6 +595,41 @@ RSpec.describe "Events API", type: :request do
     end
   end
 
+  # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
+  describe "GET /api/v1/events/:id/activity" do
+    let!(:event) { create(:event, creator: user) }
+
+    it "returns the event's activity, newest first" do
+      older = EventActivity.log!(
+        event: event, actor: user, action: "remove_participant",
+        metadata: { "participant_name" => "Dara Kim" }
+      )
+      older.update_column(:created_at, 1.day.ago)
+      newer = EventActivity.log!(
+        event: event, actor: user, action: "update_event_details",
+        metadata: { "price_cents" => { "from" => 0, "to" => 5000 } }
+      )
+
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      ids = json["activities"].map { |a| a["id"] }
+      expect(ids).to eq([ newer.id, older.id ])
+      expect(json["activities"].first["action"]).to eq("update_event_details")
+      expect(json["activities"].first["actor_name"]).to be_present
+    end
+
+    it "returns 404 for a non-organizer" do
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(other), as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 401 without a token" do
+      get "/api/v1/events/#{event.id}/activity", as: :json
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
   # ── DELETE /api/v1/events/:id ────────────────────────────────────────────────
   describe "DELETE /api/v1/events/:id" do
     let!(:event) { create(:event, creator: user) }

@@ -95,6 +95,7 @@ module Api
           if @event.update(validated_params[:event])
             log_event_details_changes
             NotifyEventDetailsChangedJob.perform_later(@event, changes) if changes.any?
+            
             render json: { event: event_json(@event, include_types: true) }
           else
             render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
