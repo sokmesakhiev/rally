@@ -5,6 +5,7 @@ class Event < ApplicationRecord
   has_many :event_types, -> { order(position: :asc) }, dependent: :destroy
   has_many :event_plan_payments, dependent: :destroy
   has_many :waitlist_entries, -> { order(created_at: :asc) }, dependent: :destroy
+  has_many :event_activities, dependent: :destroy
 
   accepts_nested_attributes_for :event_types,
     allow_destroy: true,

@@ -147,6 +147,9 @@ export function EventDetailsEditor({
       queryClient.invalidateQueries({ queryKey: ["event", event.id] });
       queryClient.invalidateQueries({ queryKey: ["public-event", event.id] });
       queryClient.invalidateQueries({ queryKey: ["my-events"] });
+      // A price/date change may have just been logged — see
+      // Api::V1::EventsController#log_event_details_changes.
+      queryClient.invalidateQueries({ queryKey: ["event-activity", event.id] });
       toast.success(t("manageEvent.toastDetailsSaved"));
     },
     onError: (e: Error) => toast.error(e.message),
