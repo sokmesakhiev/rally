@@ -150,6 +150,10 @@ export interface ApiUser {
   display_name: string | null;
   avatar_url: string | null;
   email_verified: boolean;
+  /** Admin-granted organizer verification — NOT the same as email_verified
+   * above, which is self-service. Gates creating paid events. Like `admin`,
+   * this only drives UI affordances; EventsController re-checks server-side. */
+  verified: boolean;
   /** Drives whether the admin nav link renders. NOT a security boundary —
    * every admin endpoint re-checks server-side. */
   admin?: boolean;
@@ -870,6 +874,10 @@ export interface ApiAdminUser {
   email: string;
   display_name: string | null;
   email_verified: boolean;
+  /** Admin-granted organizer verification — unrelated to email_verified
+   * above. Gates creating paid events. See User#verified? server-side. */
+  verified: boolean;
+  verified_at: string | null;
   admin: boolean;
   suspended: boolean;
   suspended_at: string | null;
@@ -964,6 +972,16 @@ export const adminApi = {
   /** Does NOT re-publish events the suspension took down. */
   unsuspendUser(id: string) {
     return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/unsuspend`);
+  },
+
+  /** Unlocks creating paid events for this organizer — see User#verified?. */
+  verifyUser(id: string) {
+    return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/verify`);
+  },
+
+  /** Forward-looking only — the organizer's existing paid events stay live. */
+  unverifyUser(id: string) {
+    return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/unverify`);
   },
 
   events(opts?: {

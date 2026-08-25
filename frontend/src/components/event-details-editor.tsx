@@ -20,7 +20,9 @@ import { toast } from "sonner";
 
 import { eventsApi, type ApiEvent, type ApiEventTypeDraft } from "@/lib/api-client";
 import { eventCategoryOptions } from "@/lib/event-utils";
+import { useAuth } from "@/lib/use-auth";
 import { EventTypeBuilder, newEventType } from "@/components/event-type-builder";
+import { PaidEventGate } from "@/components/paid-event-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,6 +99,13 @@ export function EventDetailsEditor({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // An event that's already paid stays editable even by an organizer who
+  // isn't (or is no longer) verified — the server only gates the free → paid
+  // transition, so locking the form here would strand them on their own live
+  // event. See PaidEventGate's `alreadyPaid` and User#unverify!.
+  const canPrice = Boolean(user?.verified) || event.price_cents > 0;
 
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description ?? "");
@@ -307,13 +316,12 @@ export function EventDetailsEditor({
       </div>
       {dateError && <p className="text-sm text-destructive">{dateError}</p>}
 
-      <div className="flex items-center justify-between rounded-xl border border-border p-4">
-        <div>
-          <p className="font-medium">{t("eventForm.paidEvent")}</p>
-          <p className="text-sm text-muted-foreground">{t("eventForm.paidEventDesc")}</p>
-        </div>
-        <Switch checked={isPaid} onCheckedChange={setIsPaid} />
-      </div>
+      <PaidEventGate
+        verified={Boolean(user?.verified)}
+        isPaid={isPaid}
+        onIsPaidChange={setIsPaid}
+        alreadyPaid={event.price_cents > 0}
+      />
 
       {isPaid && (
         <div className="space-y-2">
@@ -349,6 +357,7 @@ export function EventDetailsEditor({
             types={types}
             onTypesChange={handleTypesChange}
             eventPriceCents={isPaid ? toCents(price) : 0}
+            allowPricing={canPrice}
           />
         )}
       </div>
