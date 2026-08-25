@@ -28,6 +28,12 @@ module UserPayload
         display_name: profile&.display_name,
         avatar_url: profile&.avatar_url,
         email_verified: user.email_verified?,
+        # Admin-granted organizer verification, NOT the self-service email
+        # check above — this is what unlocks creating paid events. Drives the
+        # frontend's paid-event gating (a UX affordance only; the real check
+        # is EventsController#reject_unverified_paid_event!). See
+        # User#verified?.
+        verified: user.verified?,
         # Drives whether the frontend shows the admin nav link. Not a
         # security boundary — every admin endpoint checks server-side via
         # require_admin! regardless of what the client believes.

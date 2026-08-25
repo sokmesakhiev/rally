@@ -1,7 +1,14 @@
 require "rails_helper"
 
 RSpec.describe "Events API", type: :request do
-  let(:user)  { create(:user) }
+  # Verified by default: most specs here exercise ordinary organizer
+  # behaviour, and paid events (which several of them create) require an
+  # admin-verified account — see User#verified? and
+  # EventsController#reject_unverified_paid_event!. The specs that are
+  # actually *about* that gate create their own unverified organizer
+  # explicitly, so the restriction is never something you have to infer from
+  # this line.
+  let(:user)  { create(:user, :verified) }
   let(:other) { create(:user) }
 
   # ── GET /api/v1/events ───────────────────────────────────────────────────────
@@ -351,6 +358,70 @@ RSpec.describe "Events API", type: :request do
       expect(json["error"]).to be_present
     end
 
+    # ── Paid events require an admin-verified organizer ──
+    context "paid-event verification gating" do
+      # Explicitly unverified — the outer `user` is verified (see the top of
+      # this file), which is the wrong subject for these particular specs.
+      let(:unverified) { create(:user) }
+
+      it "rejects a paid event from an unverified organizer" do
+        expect {
+          post "/api/v1/events",
+               params: valid_params.deep_merge(event: { price_cents: 2500 }),
+               headers: auth_headers(unverified),
+               as: :json
+        }.not_to change(Event, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("verification_required")
+      end
+
+      it "rejects a paid event smuggled in via a per-type price" do
+        # event-level price_cents is 0 here — the only price is on the type,
+        # which EventType#effective_price_cents would still charge.
+        params = valid_params.deep_merge(
+          event: {
+            price_cents: 0,
+            event_types_attributes: [ { name: "10K", price_cents: 1500, position: 0 } ]
+          }
+        )
+
+        expect {
+          post "/api/v1/events", params: params, headers: auth_headers(unverified), as: :json
+        }.not_to change(Event, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("verification_required")
+      end
+
+      it "allows a free event from an unverified organizer" do
+        post "/api/v1/events", params: valid_params, headers: auth_headers(unverified), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["event"]["price_cents"]).to eq(0)
+      end
+
+      it "allows free event types (no per-type price) from an unverified organizer" do
+        params = valid_params.deep_merge(
+          event: { event_types_attributes: [ { name: "Fun run", position: 0 } ] }
+        )
+
+        post "/api/v1/events", params: params, headers: auth_headers(unverified), as: :json
+
+        expect(response).to have_http_status(:created)
+      end
+
+      it "allows a paid event from a verified organizer" do
+        post "/api/v1/events",
+             params: valid_params.deep_merge(event: { price_cents: 2500 }),
+             headers: auth_headers(user),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["event"]["price_cents"]).to eq(2500)
+      end
+    end
+
     it "emails the creator a confirmation once the event is created" do
       expect {
         perform_enqueued_jobs do
@@ -499,6 +570,78 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:unauthorized)
     end
 
+    # ── Paid events require an admin-verified organizer ──
+    context "paid-event verification gating" do
+      # The outer `user`/`event` pair is a verified organizer and their event
+      # (see the top of this file) — these specs need an unverified one, with
+      # a free event of their own to try to put a price on.
+      let(:unverified)  { create(:user) }
+      let!(:free_event) { create(:event, creator: unverified, price_cents: 0) }
+
+      it "blocks an unverified organizer turning a free event paid" do
+        # The obvious bypass if only #create were gated: create it free, then
+        # immediately edit a price onto it.
+        patch "/api/v1/events/#{free_event.id}",
+              params: { event: { price_cents: 2500 } },
+              headers: auth_headers(unverified),
+              as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("verification_required")
+        expect(free_event.reload.price_cents).to eq(0)
+      end
+
+      it "blocks an unverified organizer adding a paid event type to a free event" do
+        patch "/api/v1/events/#{free_event.id}",
+              params: {
+                event: { event_types_attributes: [ { name: "10K", price_cents: 1500, position: 0 } ] }
+              },
+              headers: auth_headers(unverified),
+              as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("verification_required")
+        expect(free_event.reload.event_types).to be_empty
+      end
+
+      it "allows an unverified organizer to keep editing a free event" do
+        patch "/api/v1/events/#{free_event.id}",
+              params: { event: { title: "Still Free" } },
+              headers: auth_headers(unverified),
+              as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(free_event.reload.title).to eq("Still Free")
+      end
+
+      it "allows a verified organizer to make an event paid" do
+        patch "/api/v1/events/#{event.id}",
+              params: { event: { price_cents: 2500 } },
+              headers: auth_headers(user),
+              as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(event.reload.price_cents).to eq(2500)
+      end
+
+      it "lets an organizer keep managing an already-paid event after verification is revoked" do
+        # Only the free → paid transition is gated. An event created while
+        # verified stays fully manageable — its participants already paid.
+        organizer = create(:user, :verified)
+        paid_event = create(:event, :paid, creator: organizer)
+        organizer.unverify!
+
+        patch "/api/v1/events/#{paid_event.id}",
+              params: { event: { title: "Renamed", price_cents: 3000 } },
+              headers: auth_headers(organizer),
+              as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(paid_event.reload.title).to eq("Renamed")
+        expect(paid_event.price_cents).to eq(3000)
+      end
+    end
+
     it "emails active registrants when the price changes" do
       registration = create(:registration, event: event)
 
@@ -557,6 +700,41 @@ RSpec.describe "Events API", type: :request do
                 as: :json
         end
       }.not_to change { ActionMailer::Base.deliveries.count }
+    end
+  end
+
+  # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
+  describe "GET /api/v1/events/:id/activity" do
+    let!(:event) { create(:event, creator: user) }
+
+    it "returns the event's activity, newest first" do
+      older = EventActivity.log!(
+        event: event, actor: user, action: "remove_participant",
+        metadata: { "participant_name" => "Dara Kim" }
+      )
+      older.update_column(:created_at, 1.day.ago)
+      newer = EventActivity.log!(
+        event: event, actor: user, action: "update_event_details",
+        metadata: { "price_cents" => { "from" => 0, "to" => 5000 } }
+      )
+
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      ids = json["activities"].map { |a| a["id"] }
+      expect(ids).to eq([ newer.id, older.id ])
+      expect(json["activities"].first["action"]).to eq("update_event_details")
+      expect(json["activities"].first["actor_name"]).to be_present
+    end
+
+    it "returns 404 for a non-organizer" do
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(other), as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 401 without a token" do
+      get "/api/v1/events/#{event.id}/activity", as: :json
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 

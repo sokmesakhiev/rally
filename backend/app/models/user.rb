@@ -30,6 +30,8 @@ class User < ApplicationRecord
   scope :admins, -> { where(admin: true) }
   scope :suspended, -> { where.not(suspended_at: nil) }
   scope :active, -> { where(suspended_at: nil) }
+  scope :verified, -> { where.not(verified_at: nil) }
+  scope :unverified, -> { where(verified_at: nil) }
 
   # Soft-delete — see #discard! below. Explicit scopes, not a default_scope
   # (same reasoning as Event/Registration/Survey/WaitlistEntry this
@@ -40,6 +42,35 @@ class User < ApplicationRecord
 
   def email_verified?
     email_verified_at.present?
+  end
+
+  # ── Organizer verification ──────────────────────────────────────────────────
+
+  # Deliberately NOT the same thing as #email_verified?. Email verification is
+  # self-service (click a link) and so carries no fraud signal — anyone with a
+  # working inbox passes it. This one is granted by an admin only
+  # (Admin::UsersController#verify) after a human has vetted the organizer, and
+  # is what gates creating paid events (Event#paid?, EventsController's
+  # #authorize_paid_event!). Keeping the two separate means loosening or
+  # automating email verification later can't accidentally open up payments.
+  def verified?
+    verified_at.present?
+  end
+
+  def verify!(by:)
+    update!(verified_at: Time.current, verified_by_id: by&.id)
+  end
+
+  # Revoking verification intentionally leaves the organizer's existing paid
+  # events alone — they stay published and keep taking registrations. Their
+  # participants already committed money on the strength of an event that was
+  # legitimately created, and silently unpublishing it would strand them. The
+  # revocation only bites on the *next* attempt to create or price a paid
+  # event. Taking a specific bad event down is a separate, deliberate
+  # moderation action (Admin::EventsController#unpublish), and suspending the
+  # organizer outright (User#suspend!) is the tool for "stop everything now".
+  def unverify!
+    update!(verified_at: nil, verified_by_id: nil)
   end
 
   # ── Moderation ──────────────────────────────────────────────────────────────

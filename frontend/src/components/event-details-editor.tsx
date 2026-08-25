@@ -18,8 +18,11 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { eventsApi, type ApiEvent } from "@/lib/api-client";
+import { eventsApi, type ApiEvent, type ApiEventTypeDraft } from "@/lib/api-client";
 import { eventCategoryOptions } from "@/lib/event-utils";
+import { useAuth } from "@/lib/use-auth";
+import { EventTypeBuilder, newEventType } from "@/components/event-type-builder";
+import { PaidEventGate } from "@/components/paid-event-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,6 +63,24 @@ function toCents(value: string): number {
   return Math.round(parsed * 100);
 }
 
+/** An existing event type carries its `id` (so a save can PATCH it in place
+ * rather than creating a duplicate); a freshly-added row (via
+ * EventTypeBuilder's own "Add type" button) has none yet — see
+ * EventUpdateRequestSchema's event_types_attributes, which treats a missing
+ * `id` as "create new". */
+type EditableEventType = ApiEventTypeDraft & { id?: string };
+
+function toEditableTypes(types: ApiEvent["event_types"]): EditableEventType[] {
+  return types.map((t, i) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description ?? undefined,
+    capacity: t.capacity,
+    price_cents: t.price_cents,
+    position: i,
+  }));
+}
+
 export function EventDetailsEditor({
   event,
   registeredCount = 0,
@@ -78,6 +99,13 @@ export function EventDetailsEditor({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // An event that's already paid stays editable even by an organizer who
+  // isn't (or is no longer) verified — the server only gates the free → paid
+  // transition, so locking the form here would strand them on their own live
+  // event. See PaidEventGate's `alreadyPaid` and User#unverify!.
+  const canPrice = Boolean(user?.verified) || event.price_cents > 0;
 
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description ?? "");
@@ -95,6 +123,29 @@ export function EventDetailsEditor({
     event.price_cents ? (event.price_cents / 100).toFixed(2) : "",
   );
 
+  // Event types (5K/10K-style sub-races) — same on/off toggle + builder as
+  // the create form (events.new.tsx), just seeded from the event's existing
+  // types instead of starting blank.
+  const [hasEventTypes, setHasEventTypes] = useState(event.event_types.length > 0);
+  const [types, setTypes] = useState<EditableEventType[]>(
+    event.event_types.length > 0 ? toEditableTypes(event.event_types) : [newEventType(0)],
+  );
+  // Ids the organizer removed this session — EventTypeBuilder's own "remove"
+  // button just drops a row from the array, which for a brand-new (id-less)
+  // row is enough, but an *existing* type has to be sent back as
+  // `{ id, _destroy: true }` or the backend has no way to know it should be
+  // deleted rather than simply left untouched (a partial-update PATCH never
+  // deletes a nested record it wasn't told about).
+  const [removedTypeIds, setRemovedTypeIds] = useState<string[]>([]);
+
+  function handleTypesChange(next: EditableEventType[]) {
+    if (next.length < types.length) {
+      const removed = types.find((t) => !next.includes(t));
+      if (removed?.id) setRemovedTypeIds((prev) => [...prev, removed.id!]);
+    }
+    setTypes(next);
+  }
+
   // Re-sync when the underlying event changes (e.g. after publishing, which
   // refetches the event). Without this the form would keep showing whatever
   // was in state when it first mounted.
@@ -108,6 +159,9 @@ export function EventDetailsEditor({
     setEndAt(toDateTimeLocal(event.end_at));
     setIsPaid(event.price_cents > 0);
     setPrice(event.price_cents ? (event.price_cents / 100).toFixed(2) : "");
+    setHasEventTypes(event.event_types.length > 0);
+    setTypes(event.event_types.length > 0 ? toEditableTypes(event.event_types) : [newEventType(0)]);
+    setRemovedTypeIds([]);
   }, [event]);
 
   // Client-side mirrors of the two model validations most likely to be hit, so
@@ -128,8 +182,19 @@ export function EventDetailsEditor({
   const canSave = !titleError && !dateError && Boolean(startAt);
 
   const save = useMutation({
-    mutationFn: () =>
-      eventsApi.update(event.id, {
+    mutationFn: () => {
+      // Turning the toggle off deletes every existing type outright (using
+      // event.event_types, the server's last-known set — not the possibly
+      // already-edited `types` state) — same "off means none" semantics as
+      // the paid/free toggle above deleting the price.
+      const eventTypesAttrs = hasEventTypes
+        ? [
+            ...types.filter((t) => t.name.trim()).map((t, i) => ({ ...t, position: i })),
+            ...removedTypeIds.map((id) => ({ id, _destroy: true as const })),
+          ]
+        : event.event_types.map((t) => ({ id: t.id, _destroy: true as const }));
+
+      return eventsApi.update(event.id, {
         title: trimmedTitle,
         description: description.trim() || null,
         category,
@@ -141,7 +206,9 @@ export function EventDetailsEditor({
         start_at: new Date(startAt).toISOString(),
         end_at: endAt ? new Date(endAt).toISOString() : null,
         price_cents: isPaid ? toCents(price) : 0,
-      }),
+        event_types_attributes: eventTypesAttrs,
+      });
+    },
     onSuccess: () => {
       // Both the organizer's view and the public event page show these fields.
       queryClient.invalidateQueries({ queryKey: ["event", event.id] });
@@ -249,13 +316,12 @@ export function EventDetailsEditor({
       </div>
       {dateError && <p className="text-sm text-destructive">{dateError}</p>}
 
-      <div className="flex items-center justify-between rounded-xl border border-border p-4">
-        <div>
-          <p className="font-medium">{t("eventForm.paidEvent")}</p>
-          <p className="text-sm text-muted-foreground">{t("eventForm.paidEventDesc")}</p>
-        </div>
-        <Switch checked={isPaid} onCheckedChange={setIsPaid} />
-      </div>
+      <PaidEventGate
+        verified={Boolean(user?.verified)}
+        isPaid={isPaid}
+        onIsPaidChange={setIsPaid}
+        alreadyPaid={event.price_cents > 0}
+      />
 
       {isPaid && (
         <div className="space-y-2">
@@ -276,6 +342,25 @@ export function EventDetailsEditor({
           </p>
         </div>
       )}
+
+      <div className="rounded-xl border border-border p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium">{t("eventForm.eventTypesTitle")}</p>
+            <p className="text-sm text-muted-foreground">{t("eventForm.eventTypesDesc")}</p>
+          </div>
+          <Switch checked={hasEventTypes} onCheckedChange={setHasEventTypes} />
+        </div>
+
+        {hasEventTypes && (
+          <EventTypeBuilder
+            types={types}
+            onTypesChange={handleTypesChange}
+            eventPriceCents={isPaid ? toCents(price) : 0}
+            allowPricing={canPrice}
+          />
+        )}
+      </div>
 
       <Button onClick={() => save.mutate()} disabled={!canSave || save.isPending} className="gap-2">
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

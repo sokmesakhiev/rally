@@ -134,6 +134,24 @@ class Event < ApplicationRecord
     capacity.present? && registrations.active.count >= capacity
   end
 
+  # Does registering for this event cost money? Checks BOTH the event's own
+  # price and each type's, because EventType#effective_price_cents falls back
+  # to the parent event's price — so an event with price_cents: 0 is still a
+  # paid event if any of its types carries its own nonzero price. Anything
+  # gating on "is this paid" (today: the organizer-verification requirement in
+  # Api::V1::EventsController) has to ask it this way or the per-type path is
+  # a trivial bypass.
+  # Safe to call on an unsaved record with nested attributes already assigned
+  # (which is exactly how EventsController checks a *pending* create/update
+  # before committing it) — hence skipping types marked for destruction, which
+  # are still in the association until save but won't survive it.
+  def paid?
+    return true if price_cents.to_i.positive?
+
+    event_types.reject(&:marked_for_destruction?)
+      .any? { |type| type.effective_price_cents.to_i.positive? }
+  end
+
   # An organizer has uploaded a certificate-of-participation template — see
   # Api::V1::UploadsController (type: "certificate_template") and
   # Certificates::RenderPdf, which merges participant/event data into it.

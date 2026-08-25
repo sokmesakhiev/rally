@@ -25,6 +25,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  BadgeCheck,
+  ShieldOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -140,6 +142,28 @@ function UsersPanel() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Organizer verification — what unlocks creating paid events. Separate from
+  // suspension: a user can be active-but-unverified (the default, free events
+  // only) or verified-and-suspended (verification survives, but they can't
+  // sign in at all). See User#verified?.
+  const verify = useMutation({
+    mutationFn: (id: string) => adminApi.verifyUser(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success(t("admin.toastVerified"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const unverify = useMutation({
+    mutationFn: (id: string) => adminApi.unverifyUser(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success(t("admin.toastUnverified"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
@@ -213,19 +237,51 @@ function UsersPanel() {
                         <span className="text-xs text-muted-foreground">
                           {t("admin.noActionsForAdmin")}
                         </span>
-                      ) : u.suspended ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          disabled={unsuspend.isPending}
-                          onClick={() => unsuspend.mutate(u.id)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          {t("admin.unsuspend")}
-                        </Button>
                       ) : (
-                        <SuspendUserDialog user={u} onDone={invalidate} />
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {/* Verification is orthogonal to suspension, so it
+                              stays available either way — vetting an
+                              organizer and letting them sign in are separate
+                              decisions. */}
+                          {u.verified ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              disabled={unverify.isPending}
+                              onClick={() => unverify.mutate(u.id)}
+                            >
+                              <ShieldOff className="h-3.5 w-3.5" />
+                              {t("admin.unverify")}
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              disabled={verify.isPending}
+                              onClick={() => verify.mutate(u.id)}
+                            >
+                              <BadgeCheck className="h-3.5 w-3.5" />
+                              {t("admin.verify")}
+                            </Button>
+                          )}
+
+                          {u.suspended ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              disabled={unsuspend.isPending}
+                              onClick={() => unsuspend.mutate(u.id)}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              {t("admin.unsuspend")}
+                            </Button>
+                          ) : (
+                            <SuspendUserDialog user={u} onDone={invalidate} />
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -261,6 +317,14 @@ function UserStatusBadges({ user }: { user: ApiAdminUser }) {
         </Badge>
       ) : (
         <Badge variant="secondary">{t("admin.badgeActive")}</Badge>
+      )}
+      {/* Organizer verification (admin-granted, gates paid events) — distinct
+          from the email badge below, which only reflects whether they clicked
+          the link in their signup email. */}
+      {user.verified && (
+        <Badge variant="default" className="gap-1">
+          <BadgeCheck className="h-3 w-3" /> {t("admin.badgeVerified")}
+        </Badge>
       )}
       {!user.email_verified && <Badge variant="outline">{t("admin.badgeUnverified")}</Badge>}
     </div>

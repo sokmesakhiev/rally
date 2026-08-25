@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/lib/use-auth";
 import { SurveyBuilder } from "@/components/survey-builder";
 import { EventTypeBuilder, newEventType } from "@/components/event-type-builder";
+import { PaidEventGate } from "@/components/paid-event-gate";
 import { SiteHeader } from "@/components/site-header";
 import { ImageUpload } from "@/components/image-upload";
 import { LocationPicker } from "@/components/location-picker";
@@ -233,13 +234,11 @@ function NewEvent() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-border p-4">
-            <div>
-              <p className="font-medium">{t("eventForm.paidEvent")}</p>
-              <p className="text-sm text-muted-foreground">{t("eventForm.paidEventDesc")}</p>
-            </div>
-            <Switch checked={isPaid} onCheckedChange={setIsPaid} />
-          </div>
+          <PaidEventGate
+            verified={Boolean(user?.verified)}
+            isPaid={isPaid}
+            onIsPaidChange={setIsPaid}
+          />
 
           {isPaid && (
             <div className="space-y-2">
@@ -339,6 +338,7 @@ function NewEvent() {
                 types={eventTypes}
                 onTypesChange={setEventTypes}
                 eventPriceCents={eventPriceCents}
+                allowPricing={Boolean(user?.verified)}
               />
             )}
           </div>

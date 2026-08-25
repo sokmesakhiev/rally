@@ -22,6 +22,7 @@ function TypeRow({
   type,
   index,
   eventPriceCents,
+  allowPricing,
   onChange,
   onRemove,
   removable,
@@ -29,6 +30,7 @@ function TypeRow({
   type: ApiEventTypeDraft;
   index: number;
   eventPriceCents: number;
+  allowPricing: boolean;
   onChange: (t: ApiEventTypeDraft) => void;
   onRemove: () => void;
   removable: boolean;
@@ -89,29 +91,35 @@ function TypeRow({
       </div>
 
       {/* Price + Capacity row */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("eventForm.price")}</Label>
-          <Input
-            type="number"
-            min="0"
-            step="1"
-            value={priceDisplay}
-            onChange={(e) => {
-              const val = e.target.value;
-              set("price_cents", val === "" ? null : Math.round(Number(val) * 100));
-            }}
-            placeholder={t("eventTypeBuilder.defaultPrice", {
-              price: (eventPriceCents / 100).toFixed(2),
-            })}
-            className="h-8 text-sm"
-          />
-          {type.price_cents == null && (
-            <p className="text-[11px] text-muted-foreground">
-              {t("eventTypeBuilder.usesEventPrice")}
-            </p>
-          )}
-        </div>
+      <div className={allowPricing ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}>
+        {/* Hidden entirely for unverified organizers — a per-type price is
+            just as much a "paid event" as an event-level one, and the server
+            rejects it identically (Event#paid? checks both). Showing the
+            field would only invite filling it in and getting bounced. */}
+        {allowPricing && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("eventForm.price")}</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={priceDisplay}
+              onChange={(e) => {
+                const val = e.target.value;
+                set("price_cents", val === "" ? null : Math.round(Number(val) * 100));
+              }}
+              placeholder={t("eventTypeBuilder.defaultPrice", {
+                price: (eventPriceCents / 100).toFixed(2),
+              })}
+              className="h-8 text-sm"
+            />
+            {type.price_cents == null && (
+              <p className="text-[11px] text-muted-foreground">
+                {t("eventTypeBuilder.usesEventPrice")}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label className="text-xs">{t("eventTypeBuilder.capacity")}</Label>
@@ -139,9 +147,22 @@ interface EventTypeBuilderProps {
   onTypesChange: (types: ApiEventTypeDraft[]) => void;
   /** Used to display the fallback price in the per-type price placeholder */
   eventPriceCents: number;
+  /**
+   * Whether to show the per-type price field at all. False for organizers
+   * who aren't verified to create paid events — see PaidEventGate and
+   * Api::V1::EventsController#reject_unverified_paid_event!, which rejects
+   * per-type prices exactly as it does event-level ones. UI affordance only;
+   * the server is the real check.
+   */
+  allowPricing?: boolean;
 }
 
-export function EventTypeBuilder({ types, onTypesChange, eventPriceCents }: EventTypeBuilderProps) {
+export function EventTypeBuilder({
+  types,
+  onTypesChange,
+  eventPriceCents,
+  allowPricing = true,
+}: EventTypeBuilderProps) {
   const { t } = useTranslation();
   function addType() {
     onTypesChange([...types, newEventType(types.length)]);
@@ -163,6 +184,7 @@ export function EventTypeBuilder({ types, onTypesChange, eventPriceCents }: Even
           index={i}
           type={t}
           eventPriceCents={eventPriceCents}
+          allowPricing={allowPricing}
           onChange={(updated) => updateType(i, updated)}
           onRemove={() => removeType(i)}
           removable={types.length > 1}

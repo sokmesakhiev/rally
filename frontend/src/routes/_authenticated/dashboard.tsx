@@ -194,7 +194,7 @@ function Dashboard() {
               />
             )}
             {created.data?.map((ev: any) => {
-              const count = ev.registrations?.[0]?.count ?? 0;
+              const count = ev.registrations_count ?? 0;
               return (
                 <div
                   key={ev.id}

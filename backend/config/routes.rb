@@ -104,6 +104,10 @@ Rails.application.routes.draw do
         get  "users",              to: "users#index"
         post "users/:id/suspend",   to: "users#suspend"
         post "users/:id/unsuspend", to: "users#unsuspend"
+        # Organizer verification — gates creating paid events. Distinct from
+        # the self-service email verification flow (see User#verified?).
+        post "users/:id/verify",    to: "users#verify"
+        post "users/:id/unverify",  to: "users#unverify"
 
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"

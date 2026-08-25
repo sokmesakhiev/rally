@@ -73,6 +73,35 @@ module Api
           render json: { error: "User not found" }, status: :not_found
         end
 
+        # POST /api/v1/admin/users/:id/verify
+        # Marks an organizer as vetted, which is what unlocks creating paid
+        # events (see User#verified? and EventsController's
+        # #reject_unverified_paid_event!). Granting this is a judgement call
+        # about a real person, so it's admin-only with no self-service path —
+        # the whole point is that it can't be earned by automation.
+        def verify
+          user = User.find(params[:id])
+          user.verify!(by: current_user)
+          log_admin_action("verify_user", user)
+
+          render json: { user: user_json(user.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "User not found" }, status: :not_found
+        end
+
+        # POST /api/v1/admin/users/:id/unverify
+        # Note this does NOT touch the organizer's existing paid events — see
+        # User#unverify! for why.
+        def unverify
+          user = User.find(params[:id])
+          user.unverify!
+          log_admin_action("unverify_user", user)
+
+          render json: { user: user_json(user.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "User not found" }, status: :not_found
+        end
+
         private
 
         def apply_search(scope, term)
@@ -103,6 +132,10 @@ module Api
             email: user.email,
             display_name: user.profile&.display_name,
             email_verified: user.email_verified?,
+            # Admin-granted organizer verification — unrelated to
+            # email_verified above. See User#verified?.
+            verified: user.verified?,
+            verified_at: user.verified_at,
             admin: user.admin?,
             suspended: user.suspended?,
             suspended_at: user.suspended_at,
