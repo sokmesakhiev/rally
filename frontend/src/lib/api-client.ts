@@ -476,7 +476,16 @@ export const eventsApi = {
   update(
     id: string,
     data: Partial<ApiEvent> & {
-      event_types_attributes?: (ApiEventTypeDraft & { id?: string; _destroy?: boolean })[];
+      // Two shapes: a full draft (create/update an event type — `id` present
+      // means update, absent means create) or a destroy-only entry (`{ id,
+      // _destroy: true }`, nothing else) for removing an existing one. Kept
+      // as a union rather than making every ApiEventTypeDraft field optional,
+      // so a destroy entry can't accidentally be typo'd into a half-filled
+      // update.
+      event_types_attributes?: (
+        | (ApiEventTypeDraft & { id?: string })
+        | { id: string; _destroy: true }
+      )[];
     },
   ) {
     return api.patch<{ event: ApiEvent }>(`/events/${id}`, { event: data });
