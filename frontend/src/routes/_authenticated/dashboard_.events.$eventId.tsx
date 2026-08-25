@@ -299,11 +299,20 @@ function ManageEvent() {
 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showChangePlan, setShowChangePlan] = useState(false);
+  // Only relevant once an event that already has a plan (ev.plan set) gets
+  // unpublished — gates showing PlanPaymentPanel behind one explicit click
+  // rather than auto-firing EventPlanPaymentsController#create the instant
+  // this section renders (PlanPaymentPanel starts its own mutation on
+  // mount). Reset on every fresh unpublish so re-publishing always requires
+  // that click again, rather than a stale `true` from an earlier
+  // unpublish/republish cycle in the same page session skipping it.
+  const [confirmRepublish, setConfirmRepublish] = useState(false);
 
   const unpublishEvent = useMutation({
     mutationFn: () => eventsApi.unpublish(eventId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setConfirmRepublish(false);
       toast.success(t("manageEvent.toastEventUnpublished"));
     },
     onError: (e: any) => toast.error(e.message),
@@ -446,80 +455,116 @@ function ManageEvent() {
                   <Rocket className="h-5 w-5 text-primary" />
                   <h2 className="font-semibold">{t("manageEvent.publishTitle")}</h2>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("manageEvent.publishDesc")}
-                  {ev.plan && (
-                    <>
-                      {" "}
-                      {t("manageEvent.previouslyPickedPrefix")}{" "}
-                      <strong>{ev.plan.replace("_", " ")}</strong>{" "}
-                      {t("manageEvent.previouslyPickedSuffix")}
-                    </>
-                  )}
-                </p>
-                {combinedTypeCapacity > 0 && (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {t("manageEvent.combinedCapacityPrefix")}{" "}
-                    <strong>{combinedTypeCapacity.toLocaleString()}</strong>{" "}
-                    {t("manageEvent.combinedCapacitySuffix")}
-                  </p>
-                )}
 
-                {selectedPlan ? (
-                  <div className="mt-5 rounded-xl border border-border bg-card p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium capitalize">
-                        {selectedPlan.replace("_", " ")} {t("manageEvent.planSuffix")}
-                      </p>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedPlan(null)}>
-                        {t("manageEvent.changePlan")}
-                      </Button>
-                    </div>
-                    <PlanPaymentPanel
-                      eventId={eventId}
-                      plan={selectedPlan}
-                      brandColor={activeBrandColor}
-                      onPublished={() => setSelectedPlan(null)}
-                    />
-                  </div>
-                ) : (
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    {plansQuery.isLoading && (
-                      <p className="text-sm text-muted-foreground">
-                        {t("manageEvent.loadingPlans")}
+                {ev.plan ? (
+                  // Already picked a plan before — this is an unpublish →
+                  // republish cycle, not a fresh draft, so don't make the
+                  // organizer choose again. Deliberately-switching plans is
+                  // its own "Change plan" flow (published events only,
+                  // below); this just restores the plan already on file.
+                  // EventPlanPaymentsController#create republishes for free
+                  // with no new charge when the plan matches the event's
+                  // existing one.
+                  <>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("manageEvent.republishDesc", { plan: ev.plan.replace("_", " ") })}
+                    </p>
+                    {combinedTypeCapacity > 0 && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t("manageEvent.combinedCapacityPrefix")}{" "}
+                        <strong>{combinedTypeCapacity.toLocaleString()}</strong>{" "}
+                        {t("manageEvent.combinedCapacitySuffix")}
                       </p>
                     )}
-                    {plansQuery.data?.map((plan) => {
-                      const tooSmall = plan.capacity < combinedTypeCapacity;
-                      return (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          disabled={tooSmall}
-                          onClick={() => setSelectedPlan(plan.id)}
-                          className={cn(
-                            "rounded-xl border border-border bg-card p-4 text-left transition-colors",
-                            tooSmall ? "cursor-not-allowed opacity-50" : "hover:border-primary",
-                          )}
-                        >
-                          <p className="text-sm font-semibold">{plan.label}</p>
-                          <p className="mt-1 text-lg font-bold">
-                            {plan.price_cents === 0
-                              ? t("common.free")
-                              : formatPrice(plan.price_cents, "usd")}
+
+                    {confirmRepublish ? (
+                      <div className="mt-5 rounded-xl border border-border bg-card p-5">
+                        <p className="text-sm font-medium capitalize">
+                          {ev.plan.replace("_", " ")} {t("manageEvent.planSuffix")}
+                        </p>
+                        <PlanPaymentPanel
+                          eventId={eventId}
+                          plan={ev.plan}
+                          brandColor={activeBrandColor}
+                          onPublished={() => setConfirmRepublish(false)}
+                        />
+                      </div>
+                    ) : (
+                      <Button className="mt-5 gap-2" onClick={() => setConfirmRepublish(true)}>
+                        <Rocket className="h-4 w-4" /> {t("manageEvent.republishButton")}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("manageEvent.publishDesc")}
+                    </p>
+                    {combinedTypeCapacity > 0 && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t("manageEvent.combinedCapacityPrefix")}{" "}
+                        <strong>{combinedTypeCapacity.toLocaleString()}</strong>{" "}
+                        {t("manageEvent.combinedCapacitySuffix")}
+                      </p>
+                    )}
+
+                    {selectedPlan ? (
+                      <div className="mt-5 rounded-xl border border-border bg-card p-5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium capitalize">
+                            {selectedPlan.replace("_", " ")} {t("manageEvent.planSuffix")}
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {t("manageEvent.upToPeople", { count: plan.capacity })}
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedPlan(null)}>
+                            {t("manageEvent.changePlan")}
+                          </Button>
+                        </div>
+                        <PlanPaymentPanel
+                          eventId={eventId}
+                          plan={selectedPlan}
+                          brandColor={activeBrandColor}
+                          onPublished={() => setSelectedPlan(null)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        {plansQuery.isLoading && (
+                          <p className="text-sm text-muted-foreground">
+                            {t("manageEvent.loadingPlans")}
                           </p>
-                          {tooSmall && (
-                            <p className="mt-1 text-xs text-destructive">
-                              {t("manageEvent.tooSmall")}
-                            </p>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        )}
+                        {plansQuery.data?.map((plan) => {
+                          const tooSmall = plan.capacity < combinedTypeCapacity;
+                          return (
+                            <button
+                              key={plan.id}
+                              type="button"
+                              disabled={tooSmall}
+                              onClick={() => setSelectedPlan(plan.id)}
+                              className={cn(
+                                "rounded-xl border border-border bg-card p-4 text-left transition-colors",
+                                tooSmall ? "cursor-not-allowed opacity-50" : "hover:border-primary",
+                              )}
+                            >
+                              <p className="text-sm font-semibold">{plan.label}</p>
+                              <p className="mt-1 text-lg font-bold">
+                                {plan.price_cents === 0
+                                  ? t("common.free")
+                                  : formatPrice(plan.price_cents, "usd")}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {t("manageEvent.upToPeople", { count: plan.capacity })}
+                              </p>
+                              {tooSmall && (
+                                <p className="mt-1 text-xs text-destructive">
+                                  {t("manageEvent.tooSmall")}
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
