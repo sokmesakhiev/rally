@@ -350,6 +350,18 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to be_present
     end
+
+    it "emails the creator a confirmation once the event is created" do
+      expect {
+        perform_enqueued_jobs do
+          post "/api/v1/events", params: valid_params, headers: auth_headers(user), as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ user.email ])
+      expect(mail.subject).to include("has been created")
+    end
   end
 
   # ── PATCH /api/v1/events/:id ─────────────────────────────────────────────────
@@ -416,6 +428,53 @@ RSpec.describe "Events API", type: :request do
       expect(EventType.exists?(to_remove.id)).to be(false)
     end
 
+    it "logs an EventActivity when price_cents changes" do
+      expect {
+        patch "/api/v1/events/#{event.id}",
+              params: { event: { price_cents: 5000 } },
+              headers: auth_headers(user),
+              as: :json
+      }.to change(EventActivity, :count).by(1)
+
+      activity = EventActivity.last
+      expect(activity.event).to eq(event)
+      expect(activity.actor).to eq(user)
+      expect(activity.action).to eq("update_event_details")
+      expect(activity.metadata["price_cents"]).to eq("from" => 0, "to" => 5000)
+    end
+
+    it "logs an EventActivity when start_at/end_at change, capturing both fields" do
+      new_start = 3.weeks.from_now
+      new_end = 4.weeks.from_now
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { start_at: new_start.iso8601, end_at: new_end.iso8601 } },
+            headers: auth_headers(user),
+            as: :json
+
+      activity = EventActivity.last
+      expect(activity.action).to eq("update_event_details")
+      expect(activity.metadata.keys).to contain_exactly("start_at", "end_at")
+    end
+
+    it "does not log an EventActivity when only unrelated fields change" do
+      expect {
+        patch "/api/v1/events/#{event.id}",
+              params: { event: { title: "New Title", location: "Siem Reap" } },
+              headers: auth_headers(user),
+              as: :json
+      }.not_to change(EventActivity, :count)
+    end
+
+    it "does not log an EventActivity when the submitted price/dates match the current values" do
+      expect {
+        patch "/api/v1/events/#{event.id}",
+              params: { event: { price_cents: event.price_cents } },
+              headers: auth_headers(user),
+              as: :json
+      }.not_to change(EventActivity, :count)
+    end
+
     it "returns 422 with a usable error message for an invalid schema shape" do
       patch "/api/v1/events/#{event.id}",
             params: { event: { latitude: 11.5 } },
@@ -437,6 +496,101 @@ RSpec.describe "Events API", type: :request do
 
     it "returns 401 without a token" do
       patch "/api/v1/events/#{event.id}", params: { event: { title: "X" } }, as: :json
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "emails active registrants when the price changes" do
+      registration = create(:registration, event: event)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { price_cents: 2500 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ registration.user.email ])
+      expect(mail.subject).to include("Details changed")
+    end
+
+    it "emails active registrants when start_at changes" do
+      registration = create(:registration, event: event)
+      new_start = event.start_at + 3.days
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { start_at: new_start.iso8601 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([ registration.user.email ])
+    end
+
+    it "does not email registrants when only unrelated fields change" do
+      create(:registration, event: event)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { title: "New Title" } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.not_to change { ActionMailer::Base.deliveries.count }
+    end
+
+    it "does not email a registrant who opted out of this notification" do
+      registration = create(:registration, event: event)
+      registration.user.profile.update!(notify_event_details_changed: false)
+
+      expect {
+        perform_enqueued_jobs do
+          patch "/api/v1/events/#{event.id}",
+                params: { event: { price_cents: 2500 } },
+                headers: auth_headers(user),
+                as: :json
+        end
+      }.not_to change { ActionMailer::Base.deliveries.count }
+    end
+  end
+
+  # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
+  describe "GET /api/v1/events/:id/activity" do
+    let!(:event) { create(:event, creator: user) }
+
+    it "returns the event's activity, newest first" do
+      older = EventActivity.log!(
+        event: event, actor: user, action: "remove_participant",
+        metadata: { "participant_name" => "Dara Kim" }
+      )
+      older.update_column(:created_at, 1.day.ago)
+      newer = EventActivity.log!(
+        event: event, actor: user, action: "update_event_details",
+        metadata: { "price_cents" => { "from" => 0, "to" => 5000 } }
+      )
+
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      ids = json["activities"].map { |a| a["id"] }
+      expect(ids).to eq([ newer.id, older.id ])
+      expect(json["activities"].first["action"]).to eq("update_event_details")
+      expect(json["activities"].first["actor_name"]).to be_present
+    end
+
+    it "returns 404 for a non-organizer" do
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(other), as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 401 without a token" do
+      get "/api/v1/events/#{event.id}/activity", as: :json
       expect(response).to have_http_status(:unauthorized)
     end
   end

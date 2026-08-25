@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_25_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -61,6 +61,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.uuid "registration_id", null: false
     t.datetime "updated_at", null: false
     t.index ["registration_id"], name: "index_certificates_on_registration_id", unique: true
+  end
+
+  create_table "event_activities", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "action", null: false
+    t.uuid "actor_id", null: false
+    t.datetime "created_at", null: false
+    t.uuid "event_id", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.index ["action"], name: "index_event_activities_on_action"
+    t.index ["actor_id"], name: "index_event_activities_on_actor_id"
+    t.index ["event_id"], name: "index_event_activities_on_event_id"
   end
 
   create_table "event_plan_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -154,6 +165,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.string "display_name"
+    t.boolean "notify_event_details_changed", default: true, null: false
     t.boolean "notify_payment_received", default: true, null: false
     t.boolean "notify_promoted_from_waitlist", default: true, null: false
     t.boolean "notify_refund_issued", default: true, null: false
@@ -298,6 +310,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "admin_actions", "users", column: "admin_id"
   add_foreign_key "certificates", "registrations"
+  add_foreign_key "event_activities", "events"
+  add_foreign_key "event_activities", "users", column: "actor_id"
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"
   add_foreign_key "event_types", "events"

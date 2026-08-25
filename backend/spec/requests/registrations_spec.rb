@@ -534,6 +534,31 @@ RSpec.describe "Registrations API", type: :request do
       expect(response).to have_http_status(:forbidden)
     end
 
+    it "logs an EventActivity with the organizer as actor and the participant's name/email snapshotted" do
+      reg.user.profile.update!(display_name: "Dara Kim")
+
+      expect {
+        delete "/api/v1/registrations/#{reg.id}", headers: auth_headers(organizer), as: :json
+      }.to change(EventActivity, :count).by(1)
+
+      activity = EventActivity.last
+      expect(activity.event).to eq(event)
+      expect(activity.actor).to eq(organizer)
+      expect(activity.action).to eq("remove_participant")
+      expect(activity.metadata["registration_id"]).to eq(reg.id)
+      expect(activity.metadata["participant_name"]).to eq("Dara Kim")
+      expect(activity.metadata["participant_email"]).to eq(reg.user.email)
+    end
+
+    it "omits participant_email for a phone-only guest's unreachable placeholder address" do
+      checkout = Registrations::GuestCheckout.call(email: nil, phone: "012345678", name: "Dara Kim")
+      guest_reg = create(:registration, event: event, user: checkout.user)
+
+      delete "/api/v1/registrations/#{guest_reg.id}", headers: auth_headers(organizer), as: :json
+
+      expect(EventActivity.last.metadata["participant_email"]).to be_nil
+    end
+
     it "promotes the longest-waiting waitlist entry when removing a participant frees a spot" do
       full_event = create(:event, :full, creator: organizer)
       full_reg   = full_event.registrations.first

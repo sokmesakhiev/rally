@@ -33,6 +33,7 @@ Rails.application.routes.draw do
       patch  "events/:id",           to: "events#update"
       delete "events/:id",           to: "events#destroy"
       post   "events/:id/unpublish", to: "events#unpublish"
+      get    "events/:id/activity",  to: "events#activity"
 
       # Pricing plans (organizer pays to publish — see Event::PLANS)
       get  "event_plans",                    to: "event_plans#index"

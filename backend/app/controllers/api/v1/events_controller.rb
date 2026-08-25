@@ -1,7 +1,7 @@
 module Api
   module V1
     class EventsController < BaseController
-      before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish ]
+      before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish, :activity ]
       before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
 
@@ -75,6 +75,7 @@ module Api
       def create
         validate_params_with_schema(EventRequestSchema) do |validated_params|
           event = current_user.events.create!(validated_params[:event])
+          EventMailer.created(event).deliver_later
 
           render json: { event: event_json(event, include_types: true) }, status: :created
         end
@@ -89,7 +90,11 @@ module Api
       # PATCH /api/v1/events/:id
       def update
         validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
+          changes = notifiable_changes(validated_params[:event])
+
           if @event.update(validated_params[:event])
+            log_event_details_changes
+            NotifyEventDetailsChangedJob.perform_later(@event, changes) if changes.any?
             render json: { event: event_json(@event, include_types: true) }
           else
             render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -105,6 +110,19 @@ module Api
         render json: { message: "Event deleted" }
       end
 
+      # GET /api/v1/events/:id/activity — organizer-only history of
+      # participant removals and price/date changes on this event. See
+      # EventActivity's class comment for why this is separate from the
+      # admin-only AdminAction log.
+      def activity
+        event = current_user.events.kept.find(params[:id])
+        activities = event.event_activities.recent.includes(:actor)
+
+        render json: { activities: activities.map { |a| event_activity_json(a) } }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
       # POST /api/v1/events/:id/unpublish
       # Takes an event down without affecting its paid plan — republishing
       # under the same plan later is free (see EventPlanPaymentsController).
@@ -115,6 +133,37 @@ module Api
 
       private
 
+      # Only these two are logged today — see EventActivity::ACTIONS'
+      # comment for why this stays narrow rather than tracking every field.
+      TRACKED_DETAIL_CHANGES = %w[price_cents start_at end_at].freeze
+
+      # Uses saved_changes (populated by AR right after a successful
+      # #update), not a diff against the request params — so this only
+      # fires when a tracked value actually changed, not just whenever the
+      # field happened to be present in the request body with its existing
+      # value.
+      def log_event_details_changes
+        changed = @event.saved_changes.slice(*TRACKED_DETAIL_CHANGES)
+        return if changed.empty?
+
+        EventActivity.log!(
+          event: @event,
+          actor: current_user,
+          action: "update_event_details",
+          metadata: changed.transform_values { |(from, to)| { "from" => from, "to" => to } }
+        )
+      end
+
+      def event_activity_json(activity)
+        {
+          id: activity.id,
+          action: activity.action,
+          actor_name: activity.actor.profile&.display_name.presence || activity.actor.email,
+          metadata: activity.metadata,
+          created_at: activity.created_at
+        }
+      end
+
       def set_event
         @event = Event.kept.find(params[:id])
       rescue ActiveRecord::RecordNotFound
@@ -124,6 +173,42 @@ module Api
       def authorize_creator!
         unless @event.creator_id == current_user.id
           render json: { error: "Forbidden" }, status: :forbidden
+        end
+      end
+
+      # Diffs just the fields participants actually care about — price and
+      # dates, not branding/description/location — captured *before*
+      # @event.update overwrites them, so we still have the old values to
+      # compare and to show in the notification email. Returns a hash keyed
+      # by field name, each value a { from:, to: } pair of already-cast
+      # values (see NotifyEventDetailsChangedJob/RegistrationMailer#details_changed,
+      # the sole consumers of this shape); a field absent from `attrs`
+      # (not submitted in this PATCH) or unchanged is simply not a key here.
+      #
+      # start_at/end_at arrive as raw strings (EventUpdateRequestSchema
+      # deliberately doesn't coerce them — see its class comment), so they're
+      # parsed and compared at second precision rather than as strings, to
+      # avoid a false-positive "change" from formatting/sub-second precision
+      # differences alone.
+      def notifiable_changes(attrs)
+        {}.tap do |changes|
+          if attrs.key?(:price_cents)
+            old_cents = @event.price_cents
+            new_cents = attrs[:price_cents]
+            changes[:price_cents] = { from: old_cents, to: new_cents } if old_cents != new_cents
+          end
+
+          %i[start_at end_at].each do |field|
+            next unless attrs.key?(field)
+
+            old_time = @event.public_send(field)
+            new_time = attrs[field].present? ? Time.zone.parse(attrs[field]) : nil
+
+            next if old_time.nil? && new_time.nil?
+            next if old_time && new_time && old_time.to_i == new_time.to_i
+
+            changes[field] = { from: old_time, to: new_time }
+          end
         end
       end
 

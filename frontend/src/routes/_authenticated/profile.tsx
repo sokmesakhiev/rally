@@ -159,6 +159,9 @@ function ProfilePage() {
   const [notifyPromotedFromWaitlist, setNotifyPromotedFromWaitlist] = useState<boolean | null>(
     null,
   );
+  const [notifyEventDetailsChanged, setNotifyEventDetailsChanged] = useState<boolean | null>(
+    null,
+  );
 
   if (profile && notifyPaymentReceived === null) {
     setNotifyPaymentReceived(profile.notify_payment_received);
@@ -167,6 +170,9 @@ function ProfilePage() {
   if (profile && notifyPromotedFromWaitlist === null) {
     setNotifyPromotedFromWaitlist(profile.notify_promoted_from_waitlist);
   }
+  if (profile && notifyEventDetailsChanged === null) {
+    setNotifyEventDetailsChanged(profile.notify_event_details_changed);
+  }
 
   const saveNotifications = useMutation({
     mutationFn: () =>
@@ -174,6 +180,7 @@ function ProfilePage() {
         notify_payment_received: notifyPaymentReceived ?? true,
         notify_refund_issued: notifyRefundIssued ?? true,
         notify_promoted_from_waitlist: notifyPromotedFromWaitlist ?? true,
+        notify_event_details_changed: notifyEventDetailsChanged ?? true,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
@@ -496,6 +503,20 @@ function ProfilePage() {
                   <Switch
                     checked={notifyPromotedFromWaitlist ?? true}
                     onCheckedChange={setNotifyPromotedFromWaitlist}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {t("profile.notifyEventDetailsChanged")}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("profile.notifyEventDetailsChangedDesc")}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={notifyEventDetailsChanged ?? true}
+                    onCheckedChange={setNotifyEventDetailsChanged}
                   />
                 </div>
               </CardContent>

@@ -26,6 +26,9 @@ import {
   Trophy,
   Search,
   Undo2,
+  History,
+  UserMinus,
+  PencilLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -36,6 +39,7 @@ import {
   surveyResponsesApi,
   eventPlansApi,
   type ApiSurveyResponse,
+  type ApiEventActivity,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
@@ -71,6 +75,7 @@ import {
 } from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 import { cn } from "@/lib/utils";
+import i18n from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/dashboard_/events/$eventId")({
   head: () => ({ meta: [{ title: "Manage event — Rally" }] }),
@@ -89,6 +94,48 @@ const PRESET_COLORS = [
   "#0ea5e9",
   "#64748b",
 ];
+
+/** One line per changed field for an `update_event_details` entry, or a
+ * single line for `remove_participant` — see EventActivity's metadata shape
+ * on the backend (Api::V1::EventsController#log_event_details_changes /
+ * #destroy). Pure function (no hooks), so it uses the i18n default export
+ * directly rather than useTranslation(), same pattern as event-utils.ts. */
+function describeEventActivity(activity: ApiEventActivity, currency: string): string[] {
+  if (activity.action === "remove_participant") {
+    const name = (activity.metadata.participant_name as string | null) || i18n.t("manageEvent.participantFallback");
+    return [ i18n.t("manageEvent.activityRemovedParticipant", { name }) ];
+  }
+
+  const lines: string[] = [];
+  const priceChange = activity.metadata.price_cents as { from: number; to: number } | undefined;
+  if (priceChange) {
+    lines.push(
+      i18n.t("manageEvent.activityPriceChanged", {
+        from: formatPrice(priceChange.from, currency),
+        to: formatPrice(priceChange.to, currency),
+      }),
+    );
+  }
+  const startChange = activity.metadata.start_at as { from: string; to: string } | undefined;
+  if (startChange) {
+    lines.push(
+      i18n.t("manageEvent.activityStartChanged", {
+        from: formatDateTime(startChange.from),
+        to: formatDateTime(startChange.to),
+      }),
+    );
+  }
+  const endChange = activity.metadata.end_at as { from: string; to: string } | undefined;
+  if (endChange) {
+    lines.push(
+      i18n.t("manageEvent.activityEndChanged", {
+        from: formatDateTime(endChange.from),
+        to: formatDateTime(endChange.to),
+      }),
+    );
+  }
+  return lines;
+}
 
 function ManageEvent() {
   const { eventId } = Route.useParams();
@@ -139,6 +186,13 @@ function ManageEvent() {
     queryFn: () => waitlistApi.forEvent(eventId).then((r) => r.waitlist_entries),
   });
 
+  // Organizer-only history of participant removals and price/date changes —
+  // see EventActivity on the backend.
+  const activityQuery = useQuery({
+    queryKey: ["event-activity", eventId],
+    queryFn: () => eventsApi.activity(eventId).then((r) => r.activities),
+  });
+
   const setPayment = useMutation({
     mutationFn: async ({ id, status, amount }: { id: string; status: string; amount: number }) => {
       await registrationsApi.updatePayment(id, status, status === "paid" ? amount : 0);
@@ -154,6 +208,7 @@ function ManageEvent() {
     mutationFn: (id: string) => registrationsApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-participants", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-activity", eventId] });
       toast.success(t("manageEvent.toastParticipantRemoved"));
     },
     onError: (e: any) => toast.error(e.message),
@@ -668,7 +723,7 @@ function ManageEvent() {
             {/* Tabs */}
             <Tabs defaultValue="branding" className="mt-10">
               <TabsList
-                className={`grid w-full ${ev?.survey_id ? "max-w-2xl grid-cols-6" : "max-w-xl grid-cols-4"}`}
+                className={`grid w-full ${ev?.survey_id ? "max-w-3xl grid-cols-7" : "max-w-2xl grid-cols-6"}`}
               >
                 <TabsTrigger value="branding">
                   <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
@@ -689,6 +744,9 @@ function ManageEvent() {
                 )}
                 <TabsTrigger value="certificate">
                   <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
+                </TabsTrigger>
+                <TabsTrigger value="activity">
+                  <History className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabActivity")}
                 </TabsTrigger>
               </TabsList>
 
@@ -1118,6 +1176,51 @@ function ManageEvent() {
                   )}
                 </TabsContent>
               )}
+
+              {/* ── Activity ── */}
+              <TabsContent value="activity" className="mt-6">
+                <div className="rounded-2xl border border-border bg-card">
+                  {activityQuery.isLoading && (
+                    <p className="p-8 text-center text-sm text-muted-foreground">
+                      {t("common.loading")}
+                    </p>
+                  )}
+                  {!activityQuery.isLoading && (activityQuery.data ?? []).length === 0 && (
+                    <p className="p-8 text-center text-sm text-muted-foreground">
+                      {t("manageEvent.noActivity")}
+                    </p>
+                  )}
+                  {(activityQuery.data ?? []).map((a, i) => (
+                    <div
+                      key={a.id}
+                      className={`flex items-start gap-3 p-4 ${
+                        i > 0 ? "border-t border-border" : ""
+                      }`}
+                    >
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                        {a.action === "remove_participant" ? (
+                          <UserMinus className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <PencilLine className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="space-y-0.5 text-sm">
+                          {describeEventActivity(a, ev.currency).map((line, idx) => (
+                            <p key={idx}>{line}</p>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t("manageEvent.activityBy", {
+                            name: a.actor_name,
+                            date: formatDateTime(a.created_at),
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
             </Tabs>
           </>
         )}

@@ -45,6 +45,7 @@ module Api
           notify_payment_received: profile&.notify_payment_received? != false,
           notify_refund_issued: profile&.notify_refund_issued? != false,
           notify_promoted_from_waitlist: profile&.notify_promoted_from_waitlist? != false,
+          notify_event_details_changed: profile&.notify_event_details_changed? != false,
           created_at: profile&.created_at,
           updated_at: profile&.updated_at
         }
