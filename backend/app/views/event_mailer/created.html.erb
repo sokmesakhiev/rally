@@ -1,0 +1,20 @@
+<p>Hi<%= @creator.profile&.display_name.present? ? " #{@creator.profile.display_name}" : "" %>,</p>
+
+<p>Your event <strong><%= @event.title %></strong> has been created.</p>
+
+<ul>
+  <li><strong>When:</strong> <%= @event.start_at.strftime("%A, %B %-d, %Y at %-I:%M %p") %></li>
+  <% if @event.location.present? %>
+    <li><strong>Where:</strong> <%= @event.location %></li>
+  <% end %>
+</ul>
+
+<% if @event.is_published %>
+  <p>It's live and open for registration.</p>
+<% else %>
+  <p>It's not published yet — finish the publishing steps (including plan payment, if applicable) from your dashboard to make it visible to participants.</p>
+<% end %>
+
+<p><a href="<%= @manage_url %>"><%= @manage_url %></a></p>
+
+<p>— The Rally team</p>

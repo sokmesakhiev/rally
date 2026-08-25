@@ -1,0 +1,20 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>The organizer of <strong><%= @event.title %></strong> just updated some details for your registration:</p>
+
+<ul>
+  <% if @changes[:price_cents] %>
+    <li><strong>Price:</strong> <%= format_money(@changes[:price_cents][:from]) %> &rarr; <%= format_money(@changes[:price_cents][:to]) %> <%= @event.currency.to_s.upcase %></li>
+  <% end %>
+  <% if @changes[:start_at] %>
+    <li><strong>Starts:</strong> <%= format_time(@changes[:start_at][:from]) %> &rarr; <%= format_time(@changes[:start_at][:to]) %></li>
+  <% end %>
+  <% if @changes[:end_at] %>
+    <li><strong>Ends:</strong> <%= @changes[:end_at][:from] ? format_time(@changes[:end_at][:from]) : "—" %> &rarr; <%= @changes[:end_at][:to] ? format_time(@changes[:end_at][:to]) : "—" %></li>
+  <% end %>
+</ul>
+
+<p>Please review your registration to make sure it still works for you:</p>
+<p><a href="<%= @event_url %>"><%= @event_url %></a></p>
+
+<p>— The Rally team</p>

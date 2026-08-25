@@ -19,6 +19,7 @@ class ProfileUpdateRequestSchema < ApplicationRequestSchema
       optional(:notify_payment_received).filled(:bool)
       optional(:notify_refund_issued).filled(:bool)
       optional(:notify_promoted_from_waitlist).filled(:bool)
+      optional(:notify_event_details_changed).filled(:bool)
     end
   end
 end

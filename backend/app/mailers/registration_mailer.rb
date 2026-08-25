@@ -55,4 +55,40 @@ class RegistrationMailer < ApplicationMailer
 
     mail(to: @user.email, subject: "A spot opened up for #{@event.title}!")
   end
+
+  # Sent by NotifyEventDetailsChangedJob, fanned out to every active
+  # registration once an organizer edits price/start_at/end_at from
+  # EventsController#update. `changes` is a hash keyed by field name
+  # (:price_cents, :start_at, :end_at — whichever actually changed), each
+  # value a { from:, to: } pair of *already-cast* values (integers for
+  # price_cents, Time/ActiveSupport::TimeWithZone for the dates) — see
+  # EventsController#notifiable_changes, the sole producer of this shape.
+  def details_changed(registration, changes)
+    @registration = registration
+    @event = registration.event
+    @user = registration.user
+    @changes = changes
+    @event_url = frontend_url("/events/#{@event.id}")
+
+    mail(to: @user.email, subject: "Details changed for #{@event.title}")
+  end
+
+  # Exposed to details_changed.html/text.erb — mirrors Payment#formatted_amount's
+  # KHR-vs-other-currency branch (see Payment/Refund/EventPlanPayment, each of
+  # which duplicates this same logic locally rather than sharing a concern;
+  # following that same house convention here since there's no Payment record
+  # to format against, just a raw price_cents diff).
+  def format_money(cents)
+    if @event.currency.to_s.casecmp("khr").zero?
+      (cents / 100.0).round.to_s
+    else
+      format("%.2f", cents / 100.0)
+    end
+  end
+  helper_method :format_money
+
+  def format_time(time)
+    time.strftime("%A, %B %-d, %Y at %-I:%M %p")
+  end
+  helper_method :format_time
 end

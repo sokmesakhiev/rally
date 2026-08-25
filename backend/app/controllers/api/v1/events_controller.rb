@@ -75,6 +75,7 @@ module Api
       def create
         validate_params_with_schema(EventRequestSchema) do |validated_params|
           event = current_user.events.create!(validated_params[:event])
+          EventMailer.created(event).deliver_later
 
           render json: { event: event_json(event, include_types: true) }, status: :created
         end
@@ -89,8 +90,11 @@ module Api
       # PATCH /api/v1/events/:id
       def update
         validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
+          changes = notifiable_changes(validated_params[:event])
+
           if @event.update(validated_params[:event])
             log_event_details_changes
+            NotifyEventDetailsChangedJob.perform_later(@event, changes) if changes.any?
             render json: { event: event_json(@event, include_types: true) }
           else
             render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -169,6 +173,42 @@ module Api
       def authorize_creator!
         unless @event.creator_id == current_user.id
           render json: { error: "Forbidden" }, status: :forbidden
+        end
+      end
+
+      # Diffs just the fields participants actually care about — price and
+      # dates, not branding/description/location — captured *before*
+      # @event.update overwrites them, so we still have the old values to
+      # compare and to show in the notification email. Returns a hash keyed
+      # by field name, each value a { from:, to: } pair of already-cast
+      # values (see NotifyEventDetailsChangedJob/RegistrationMailer#details_changed,
+      # the sole consumers of this shape); a field absent from `attrs`
+      # (not submitted in this PATCH) or unchanged is simply not a key here.
+      #
+      # start_at/end_at arrive as raw strings (EventUpdateRequestSchema
+      # deliberately doesn't coerce them — see its class comment), so they're
+      # parsed and compared at second precision rather than as strings, to
+      # avoid a false-positive "change" from formatting/sub-second precision
+      # differences alone.
+      def notifiable_changes(attrs)
+        {}.tap do |changes|
+          if attrs.key?(:price_cents)
+            old_cents = @event.price_cents
+            new_cents = attrs[:price_cents]
+            changes[:price_cents] = { from: old_cents, to: new_cents } if old_cents != new_cents
+          end
+
+          %i[start_at end_at].each do |field|
+            next unless attrs.key?(field)
+
+            old_time = @event.public_send(field)
+            new_time = attrs[field].present? ? Time.zone.parse(attrs[field]) : nil
+
+            next if old_time.nil? && new_time.nil?
+            next if old_time && new_time && old_time.to_i == new_time.to_i
+
+            changes[field] = { from: old_time, to: new_time }
+          end
         end
       end
 
