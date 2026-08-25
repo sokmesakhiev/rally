@@ -74,7 +74,14 @@ module Api
       # POST /api/v1/events
       def create
         validate_params_with_schema(EventRequestSchema) do |validated_params|
-          event = current_user.events.create!(validated_params[:event])
+          event = current_user.events.new(validated_params[:event])
+
+          # Built unsaved above so the paid-event check runs against what this
+          # request would actually produce (including per-type prices) before
+          # anything is persisted.
+          next if reject_unverified_paid_event!(event, was_paid: false)
+
+          event.save!
           EventMailer.created(event).deliver_later
 
           render json: { event: event_json(event, include_types: true) }, status: :created
@@ -92,10 +99,17 @@ module Api
         validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
           changes = notifiable_changes(validated_params[:event])
 
-          if @event.update(validated_params[:event])
+          # Captured before assignment below overwrites it — see
+          # #reject_unverified_paid_event! for why only the free → paid
+          # *transition* is gated, not every edit to an already-paid event.
+          was_paid = @event.paid?
+          @event.assign_attributes(validated_params[:event])
+          next if reject_unverified_paid_event!(@event, was_paid: was_paid)
+
+          if @event.save
             log_event_details_changes
             NotifyEventDetailsChangedJob.perform_later(@event, changes) if changes.any?
-            
+
             render json: { event: event_json(@event, include_types: true) }
           else
             render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -175,6 +189,36 @@ module Api
         unless @event.creator_id == current_user.id
           render json: { error: "Forbidden" }, status: :forbidden
         end
+      end
+
+      # Only admin-verified organizers may put a price on an event — paid
+      # events take real money from participants, so the account behind one
+      # has to be someone a human has actually vetted. See User#verified?
+      # (deliberately NOT User#email_verified?, which is self-service and so
+      # proves nothing) and Admin::UsersController#verify.
+      #
+      # Gates the free → paid *transition* only, not every edit to an event
+      # that's already paid. An organizer who was verified when they created a
+      # paid event keeps managing it normally even if their verification is
+      # later revoked — their participants have already paid, and breaking
+      # that event would punish them, not the organizer. Revocation instead
+      # bites on the next attempt to make something new paid. Taking a
+      # specific bad event down is Admin::EventsController#unpublish's job,
+      # and stopping an organizer outright is User#suspend!'s.
+      #
+      # Returns true (and renders) when the request must be rejected, so
+      # callers can `next if reject_unverified_paid_event!(...)`.
+      def reject_unverified_paid_event!(event, was_paid:)
+        return false if was_paid
+        return false unless event.paid?
+        return false if current_user.verified?
+
+        render json: {
+          error: "Your account needs to be verified before you can create a paid event. " \
+                 "You can publish free events in the meantime.",
+          code: "verification_required"
+        }, status: :unprocessable_entity
+        true
       end
 
       # Diffs just the fields participants actually care about — price and

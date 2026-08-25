@@ -264,6 +264,65 @@ RSpec.describe "Admin API", type: :request do
     end
   end
 
+  # ── POST /api/v1/admin/users/:id/verify ──────────────────────────────────────
+  describe "POST /api/v1/admin/users/:id/verify" do
+    it "marks the user verified and records which admin did it" do
+      post "/api/v1/admin/users/#{regular.id}/verify", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["verified"]).to be(true)
+      expect(regular.reload.verified_at).to be_present
+      expect(regular.verified_by_id).to eq(admin.id)
+    end
+
+    it "logs an AdminAction" do
+      expect {
+        post "/api/v1/admin/users/#{regular.id}/verify", headers: auth_headers(admin), as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      expect(AdminAction.last.action).to eq("verify_user")
+      expect(AdminAction.last.target).to eq(regular)
+    end
+
+    it "is not reachable by a non-admin" do
+      post "/api/v1/admin/users/#{regular.id}/verify", headers: auth_headers(regular), as: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(regular.reload.verified_at).to be_nil
+    end
+
+    it "returns 404 for an unknown user" do
+      post "/api/v1/admin/users/#{SecureRandom.uuid}/verify", headers: auth_headers(admin), as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  # ── POST /api/v1/admin/users/:id/unverify ────────────────────────────────────
+  describe "POST /api/v1/admin/users/:id/unverify" do
+    it "clears verification" do
+      regular.verify!(by: admin)
+
+      post "/api/v1/admin/users/#{regular.id}/unverify", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["verified"]).to be(false)
+      expect(regular.reload.verified_at).to be_nil
+      expect(regular.verified_by_id).to be_nil
+    end
+
+    it "leaves the organizer's existing paid events published and untouched" do
+      # Revoking verification is forward-looking only — participants who
+      # already paid shouldn't have their event yanked out from under them.
+      regular.verify!(by: admin)
+      paid_event = create(:event, :paid, creator: regular, is_published: true)
+
+      post "/api/v1/admin/users/#{regular.id}/unverify", headers: auth_headers(admin), as: :json
+
+      expect(paid_event.reload.is_published).to be(true)
+      expect(paid_event.price_cents).to be_positive
+    end
+  end
+
   # ── GET /api/v1/admin/events ─────────────────────────────────────────────────
   describe "GET /api/v1/admin/events" do
     it "includes drafts and past events, unlike the public listing" do

@@ -12,5 +12,11 @@ FactoryBot.define do
         user.profile.update!(display_name: Faker::Name.name)
       end
     end
+
+    # Admin-granted organizer verification (User#verified?) — what unlocks
+    # creating paid events. Unrelated to email verification.
+    trait :verified do
+      verified_at { Time.current }
+    end
   end
 end

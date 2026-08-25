@@ -173,25 +173,14 @@ module Api
 
       private
 
-      def user_payload(user, token)
-        profile = user.profile
-        payload = {
-          user: {
-            id: user.id,
-            email: user.email,
-            display_name: profile&.display_name,
-            avatar_url: profile&.avatar_url,
-            email_verified: user.email_verified?,
-            # Drives whether the frontend shows the admin nav link. Not a
-            # security boundary — every admin endpoint checks server-side via
-            # require_admin! regardless of what the client believes.
-            admin: user.admin?,
-            created_at: user.created_at
-          }
-        }
-        payload[:token] = token if token
-        payload
-      end
+      # NOTE: #user_payload deliberately lives only in the UserPayload concern
+      # (included above), not here. This controller used to redefine it
+      # privately, which silently shadowed the concern's version for every
+      # auth endpoint — and that copy was missing `email_auto_generated` and
+      # `phone`, so /auth/me returned neither even though the frontend's
+      # ApiUser has always declared both (which is why the account-settings
+      # page's phone-vs-email nudge never fired for signed-in users). Removed
+      # rather than kept in sync, so there's one shape to change.
     end
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_25_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -282,6 +282,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_120000) do
     t.datetime "suspended_at"
     t.string "suspension_reason"
     t.datetime "updated_at", null: false
+    t.datetime "verified_at"
+    t.uuid "verified_by_id"
     t.index ["admin"], name: "index_users_on_admin", where: "(admin = true)"
     t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NOT NULL)"
     t.index ["email"], name: "index_users_on_email", unique: true
@@ -289,6 +291,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_120000) do
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
     t.index ["password_reset_token"], name: "index_users_on_password_reset_token", unique: true
     t.index ["suspended_at"], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+    t.index ["verified_at"], name: "index_users_on_verified_at", where: "(verified_at IS NOT NULL)"
   end
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
