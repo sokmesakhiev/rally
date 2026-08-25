@@ -488,7 +488,28 @@ export const eventsApi = {
   unpublish(id: string) {
     return api.post<{ event: ApiEvent }>(`/events/${id}/unpublish`);
   },
+
+  /** Organizer-only history of participant removals and price/date changes
+   * on this event — see EventActivity on the backend. Deliberately narrower
+   * than the staff-only admin audit log (Api::V1::Admin::AdminActionsController);
+   * this only covers the organizer's own actions on their own event. */
+  activity(id: string) {
+    return api.get<{ activities: ApiEventActivity[] }>(`/events/${id}/activity`);
+  },
 };
+
+/** One entry from eventsApi.activity(). `metadata`'s shape depends on
+ * `action`: `remove_participant` carries `{ registration_id, participant_name,
+ * participant_email }`; `update_event_details` carries one key per changed
+ * field (currently only `price_cents`/`start_at`/`end_at`), each
+ * `{ from, to }`. */
+export interface ApiEventActivity {
+  id: string;
+  action: "remove_participant" | "update_event_details";
+  actor_name: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
 
 // ─── Pricing plans ──────────────────────────────────────────────────────────
 

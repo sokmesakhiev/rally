@@ -1,7 +1,7 @@
 module Api
   module V1
     class EventsController < BaseController
-      before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish ]
+      before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish, :activity ]
       before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
 
@@ -90,6 +90,7 @@ module Api
       def update
         validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
           if @event.update(validated_params[:event])
+            log_event_details_changes
             render json: { event: event_json(@event, include_types: true) }
           else
             render json: { error: @event.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -105,6 +106,19 @@ module Api
         render json: { message: "Event deleted" }
       end
 
+      # GET /api/v1/events/:id/activity — organizer-only history of
+      # participant removals and price/date changes on this event. See
+      # EventActivity's class comment for why this is separate from the
+      # admin-only AdminAction log.
+      def activity
+        event = current_user.events.kept.find(params[:id])
+        activities = event.event_activities.recent.includes(:actor)
+
+        render json: { activities: activities.map { |a| event_activity_json(a) } }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
       # POST /api/v1/events/:id/unpublish
       # Takes an event down without affecting its paid plan — republishing
       # under the same plan later is free (see EventPlanPaymentsController).
@@ -114,6 +128,37 @@ module Api
       end
 
       private
+
+      # Only these two are logged today — see EventActivity::ACTIONS'
+      # comment for why this stays narrow rather than tracking every field.
+      TRACKED_DETAIL_CHANGES = %w[price_cents start_at end_at].freeze
+
+      # Uses saved_changes (populated by AR right after a successful
+      # #update), not a diff against the request params — so this only
+      # fires when a tracked value actually changed, not just whenever the
+      # field happened to be present in the request body with its existing
+      # value.
+      def log_event_details_changes
+        changed = @event.saved_changes.slice(*TRACKED_DETAIL_CHANGES)
+        return if changed.empty?
+
+        EventActivity.log!(
+          event: @event,
+          actor: current_user,
+          action: "update_event_details",
+          metadata: changed.transform_values { |(from, to)| { "from" => from, "to" => to } }
+        )
+      end
+
+      def event_activity_json(activity)
+        {
+          id: activity.id,
+          action: activity.action,
+          actor_name: activity.actor.profile&.display_name.presence || activity.actor.email,
+          metadata: activity.metadata,
+          created_at: activity.created_at
+        }
+      end
 
       def set_event
         @event = Event.kept.find(params[:id])

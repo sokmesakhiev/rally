@@ -192,6 +192,21 @@ module Api
         end
 
         registration.discard!
+        # Snapshot name/email into metadata rather than relying on the
+        # association at read time — the participant's own profile can
+        # change (or, for a self-deleted account, get anonymized by
+        # User#discard!) after this row is written, and the log entry
+        # should still read sensibly years later regardless.
+        EventActivity.log!(
+          event: event,
+          actor: current_user,
+          action: "remove_participant",
+          metadata: {
+            registration_id: registration.id,
+            participant_name: registration.user.profile&.display_name,
+            participant_email: registration.user.email_auto_generated? ? nil : registration.user.email
+          }
+        )
         # Removing a participant may have freed a spot (event- or
         # type-level) — offer it to whoever's been waiting longest. See
         # Waitlists::PromoteNext; Refunds::IssueRefund calls this too.
