@@ -15,45 +15,58 @@
 # get the combination subtly wrong with no single place to read off the
 # answer.
 #
-# ── Deliberately NO behaviour change ────────────────────────────────────────
-# CAPABILITIES below grants every capability to :owner and nobody else, so
-# with role gating not yet switched on, every endpoint answers exactly as it
-# did before. #event_role_for already resolves EventMembership rows, so
-# turning membership on later (issue #278) is a change to the CAPABILITIES
-# data and nothing else.
+# ── Role gating is live (issue #278) ────────────────────────────────────────
+# #277 introduced this concern with CAPABILITIES granting everything to
+# :owner and nobody else, so the refactor itself changed no behaviour.
+# #278 (this state) fills in CAPABILITIES per the matrix in
+# event-membership-tickets.md — #event_role_for already resolved
+# EventMembership rows from day one, so this was purely a data change plus
+# `events#my_events` learning to list member events too (see
+# Api::V1::EventsController#my_events — without that, an invited member has
+# no way to reach the event they just joined).
 #
-# The existing 404-vs-403 inconsistency is also preserved on purpose, endpoint
-# by endpoint, via the two entry points below. Unifying it would be a real
-# behaviour change — the thing this refactor promises not to do — so it's
-# deferred to #278, where the affected request specs are being touched anyway.
-# The rule to apply then: 404 when the caller has no relationship with the
-# event at all (don't confirm its existence to a stranger — matches
-# ApplicationController#require_admin!'s philosophy), 403 when they're on the
-# team but their role doesn't cover this action.
+# The 404-vs-403 split predates membership and is preserved as-is here: 404
+# when the caller has no relationship with the event at all (don't confirm
+# its existence to a stranger — matches ApplicationController#require_admin!'s
+# philosophy), 403 when they're on the team but their role doesn't cover this
+# action. Every call site already picked the right one of the two entry
+# points below for its own reasons; role gating doesn't change which endpoints
+# use which.
 module EventAuthorization
   extend ActiveSupport::Concern
 
   # The permission matrix, as data. Each capability lists the roles that may
   # perform it; :owner is the event's creator (Event#creator_id), the others
-  # are EventMembership::ROLES.
+  # are EventMembership::ROLES. See event-membership-tickets.md for the full
+  # reasoning table this mirrors.
   #
-  # Everything is :owner-only today. See event-membership-tickets.md for the
-  # matrix #278 will replace this with, and why plan payments, delete/unpublish
-  # and member management stay owner-only even then (they either spend the
-  # owner's money or change who controls the event).
+  # Three capabilities are deliberately owner-only even for Manager — the
+  # role that otherwise covers almost everything else — because they either
+  # spend the owner's money or change who controls the event:
+  #   * manage_plan   — plan payments charge the owner's own card.
+  #   * unpublish_event / delete_event — hide or destroy work that isn't the
+  #     manager's to take down.
+  #   * manage_members — letting a Manager add/remove Managers would let the
+  #     owner get diluted out of their own event with no audit trail they'd
+  #     notice.
+  #
+  # CSV export (export_participants) is Manager-only, not Viewer, even though
+  # a Viewer can already page through the same participants in the UI — bulk
+  # export is a different risk (one click, the whole attendee list, off
+  # platform), and Viewer is the role handed to a sponsor or a board member.
   CAPABILITIES = {
-    view_event: [ :owner ],
-    view_participants: [ :owner ],
-    export_participants: [ :owner ],
-    check_in: [ :owner ],
-    update_registration: [ :owner ],
-    remove_participant: [ :owner ],
-    issue_refund: [ :owner ],
-    view_waitlist: [ :owner ],
-    manage_results: [ :owner ],
-    view_survey_responses: [ :owner ],
-    view_activity: [ :owner ],
-    update_event: [ :owner ],
+    view_event: [ :owner, :manager, :check_in, :viewer ],
+    view_participants: [ :owner, :manager, :check_in, :viewer ],
+    export_participants: [ :owner, :manager ],
+    check_in: [ :owner, :manager, :check_in ],
+    update_registration: [ :owner, :manager ],
+    remove_participant: [ :owner, :manager ],
+    issue_refund: [ :owner, :manager ],
+    view_waitlist: [ :owner, :manager, :viewer ],
+    manage_results: [ :owner, :manager ],
+    view_survey_responses: [ :owner, :manager, :viewer ],
+    view_activity: [ :owner, :manager, :viewer ],
+    update_event: [ :owner, :manager ],
     manage_plan: [ :owner ],
     unpublish_event: [ :owner ],
     delete_event: [ :owner ],

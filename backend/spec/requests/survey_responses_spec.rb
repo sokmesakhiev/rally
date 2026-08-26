@@ -114,5 +114,26 @@ RSpec.describe "Survey Responses API", type: :request do
 
       expect(response).to have_http_status(:unauthorized)
     end
+
+    # Issue #278 — Viewer may read survey responses; Check-in may not (and,
+    # per the 404-vs-403 split this endpoint uses find_authorized_event! —
+    # untouched by #278 — gets the same 404 a stranger would, not a 403).
+    it "allows a Viewer member to view survey responses" do
+      viewer = create(:user)
+      create(:event_membership, event: event, user: viewer, role: "viewer")
+
+      get "/api/v1/events/#{event.id}/survey_responses", headers: auth_headers(viewer), as: :json
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 404 for a Check-in member" do
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+      get "/api/v1/events/#{event.id}/survey_responses", headers: auth_headers(check_in_staff), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
   end
 end

@@ -49,22 +49,43 @@ module Api
         end
       end
 
-      # GET /api/v1/events/my — current user's created events.
+      # GET /api/v1/events/my — events the current user helps run: the ones
+      # they created, plus (issue #278) the ones they've joined as a member.
+      # Without the latter, an invited member accepts and then has no way to
+      # reach the event at all. This is a listing scope, not a gate — there's
+      # no "may I?" decision to centralize, so it stays outside
+      # EventAuthorization's #authorize_event!/#find_authorized_event!.
       #
-      # Deliberately untouched by the EventAuthorization refactor: this is a
-      # listing scope, not a gate — there's no "may I?" decision to
-      # centralize. It does need extending to include events the caller is a
-      # *member* of (issue #278); without that an invited member has no way
-      # to reach the event at all.
+      # Each event is tagged with the caller's `role` so the dashboard can
+      # render "Owner"/"Manager"/etc. and hide actions the role lacks (see
+      # event-membership-tickets.md, Ticket G). Creator status wins if
+      # somehow both apply (mirrors EventAuthorization#event_role_for
+      # preferring :owner over any membership row the creator might also
+      # hold) — an event can only be tagged once per response.
       def my_events
-        events = current_user.events.kept.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
+        eager_load = [ :registrations, event_types: { registration_event_types: :registration } ]
+
+        owned = current_user.events.kept.includes(*eager_load)
+        member_rows = current_user.event_memberships
+          .joins(:event).merge(Event.kept)
+          .includes(event: eager_load)
+
+        events_by_id = {}
+        owned.each { |e| events_by_id[e.id] = [ e, "owner" ] }
+        member_rows.each do |membership|
+          next if events_by_id.key?(membership.event_id)
+          events_by_id[membership.event_id] = [ membership.event, membership.role ]
+        end
+
+        events = events_by_id.values.sort_by { |(e, _role)| e.start_at }
+
         render json: {
-          events: events.map { |e|
+          events: events.map { |e, role|
             # Ruby-side filter, not e.registrations.active.size — .active is a
             # `where`, which would force a fresh query per event instead of
             # using the already-preloaded array above.
             active_count = e.registrations.count { |r| r.status != "cancelled" }
-            event_json(e, include_types: true).merge(registrations_count: active_count)
+            event_json(e, include_types: true).merge(registrations_count: active_count, role: role)
           }
         }
       end

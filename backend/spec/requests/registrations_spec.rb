@@ -677,4 +677,99 @@ RSpec.describe "Registrations API", type: :request do
       expect(reg_json["finish_time_seconds"]).to eq(5025)
     end
   end
+
+  # ── Role-based membership access (issue #278) ────────────────────────────────
+  # The full role x capability matrix is exercised at the concern level
+  # (spec/concerns/event_authorization_spec.rb); these confirm the real
+  # endpoints are actually wired to it, and pin the specific acceptance
+  # criterion that a Check-in member can check someone in but is forbidden
+  # from events#update, refunds#create, and registrations#export.
+  describe "role-based membership access" do
+    let!(:event) { create(:event, creator: organizer) }
+    let!(:reg)   { create(:registration, event: event) }
+
+    context "as a Manager member" do
+      let(:manager) { create(:user) }
+      before { create(:event_membership, event: event, user: manager, role: "manager") }
+
+      it "may view the participant list, export, update payment status, and remove a participant" do
+        get "/api/v1/events/#{event.id}/registrations", headers: auth_headers(manager), as: :json
+        expect(response).to have_http_status(:ok)
+
+        get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(manager)
+        expect(response).to have_http_status(:ok)
+
+        patch "/api/v1/registrations/#{reg.id}",
+              params: { registration: { payment_status: "paid", amount_paid_cents: 0 } },
+              headers: auth_headers(manager), as: :json
+        expect(response).to have_http_status(:ok)
+
+        delete "/api/v1/registrations/#{reg.id}", headers: auth_headers(manager), as: :json
+        expect(response).to have_http_status(:ok)
+      end
+    end
+
+    context "as a Check-in member" do
+      let(:check_in_staff) { create(:user) }
+      before { create(:event_membership, event: event, user: check_in_staff, role: "check_in") }
+
+      it "may check a participant in and undo it" do
+        post "/api/v1/registrations/#{reg.id}/check_in", headers: auth_headers(check_in_staff), as: :json
+        expect(response).to have_http_status(:ok)
+
+        delete "/api/v1/registrations/#{reg.id}/check_in", headers: auth_headers(check_in_staff), as: :json
+        expect(response).to have_http_status(:ok)
+      end
+
+      # #export uses find_authorized_event! (the 404-style entry point, same
+      # as event_registrations/export always have — see EventAuthorization's
+      # class comment), not authorize_event!, so a denied Check-in member
+      # gets the same 404 a stranger would, not a 403.
+      it "is forbidden from exporting the participant list (404, not 403 — find_authorized_event!'s style)" do
+        get "/api/v1/events/#{event.id}/registrations/export", headers: auth_headers(check_in_staff)
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "is forbidden from updating payment status" do
+        patch "/api/v1/registrations/#{reg.id}",
+              params: { registration: { payment_status: "paid", amount_paid_cents: 0 } },
+              headers: auth_headers(check_in_staff), as: :json
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "is forbidden from removing a participant" do
+        delete "/api/v1/registrations/#{reg.id}", headers: auth_headers(check_in_staff), as: :json
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    context "as a Viewer member" do
+      let(:viewer) { create(:user) }
+      before { create(:event_membership, event: event, user: viewer, role: "viewer") }
+
+      it "may view the participant list" do
+        get "/api/v1/events/#{event.id}/registrations", headers: auth_headers(viewer), as: :json
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "is forbidden from checking a participant in" do
+        post "/api/v1/registrations/#{reg.id}/check_in", headers: auth_headers(viewer), as: :json
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    it "immediately revokes access once a membership is destroyed — no stale caching" do
+      manager = create(:user)
+      membership = create(:event_membership, event: event, user: manager, role: "manager")
+
+      delete "/api/v1/registrations/#{reg.id}", headers: auth_headers(manager), as: :json
+      expect(response).to have_http_status(:ok)
+
+      other_reg = create(:registration, event: event)
+      membership.destroy!
+
+      delete "/api/v1/registrations/#{other_reg.id}", headers: auth_headers(manager), as: :json
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
 end
