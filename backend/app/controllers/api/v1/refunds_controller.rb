@@ -34,7 +34,7 @@ module Api
             reason: refund_params[:reason]
           ).call
 
-          if current_user.admin? && !organizer?(payment)
+          if current_user.admin? && !event_staff?(payment)
             AdminAction.log!(admin: current_user, action: "issue_refund", target: payment)
           end
 
@@ -55,20 +55,28 @@ module Api
 
       private
 
-      # Organizer (the event's creator) or a Rally admin — mirrors
-      # RegistrationsController's `event.creator_id == current_user.id`
-      # checks, plus an admin override. Renders and returns nil (not a
-      # boolean) on failure so callers can `return unless payment`.
+      # Whoever may refund this payment: someone with :issue_refund on the
+      # payment's event (see EventAuthorization::CAPABILITIES), or a Rally
+      # admin. The admin arm is deliberately outside the capability system —
+      # it's platform moderation, not a role on this particular event.
+      #
+      # Renders and returns nil (not a boolean) on failure so callers can
+      # `return unless payment`.
       def find_authorized_payment
         payment = Payment.includes(registration: :event).find(params[:payment_id])
-        return payment if organizer?(payment) || current_user.admin?
+        return payment if event_staff?(payment) || current_user.admin?
 
         render json: { error: "Forbidden" }, status: :forbidden
         nil
       end
 
-      def organizer?(payment)
-        payment.registration.event.creator_id == current_user.id
+      # True when the caller may refund this payment by virtue of their
+      # standing on the event itself, as opposed to platform admin rights.
+      # #create uses the distinction to decide whether the refund is a
+      # moderation action worth writing to AdminAction — an admin refunding
+      # an event they run themselves isn't moderating anything.
+      def event_staff?(payment)
+        event_permits?(payment.registration.event, :issue_refund)
       end
 
       def refund_json(refund)

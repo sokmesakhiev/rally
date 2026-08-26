@@ -10,7 +10,7 @@ module Api
       # #amount_already_paid_cents below) changing plan on an already-
       # published event.
       def create
-        event = current_user.events.includes(:event_types).find(params[:event_id])
+        event = find_authorized_event!(params[:event_id], :manage_plan, scope: Event.includes(:event_types))
 
         plan = params[:plan].to_s
         details = Event::PLANS[plan]
@@ -124,7 +124,12 @@ module Api
 
       # GET /api/v1/plan_payments/:id — poll payment status.
       def show
-        plan_payment = EventPlanPayment.joins(:event).where(events: { creator_id: current_user.id }).find(params[:id])
+        plan_payment = EventPlanPayment.includes(:event).find(params[:id])
+        # Raising rather than rendering keeps the existing "Payment not
+        # found" 404 below — this used to be expressed as a creator_id scope
+        # on the query itself, which conflated "doesn't exist" with "not
+        # yours" in exactly the same way.
+        raise ActiveRecord::RecordNotFound unless event_permits?(plan_payment.event, :manage_plan)
 
         refresh_if_stale!(plan_payment)
 

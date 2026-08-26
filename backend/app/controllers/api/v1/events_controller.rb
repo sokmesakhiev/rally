@@ -49,7 +49,13 @@ module Api
         end
       end
 
-      # GET /api/v1/events/my — current user's created events
+      # GET /api/v1/events/my — current user's created events.
+      #
+      # Deliberately untouched by the EventAuthorization refactor: this is a
+      # listing scope, not a gate — there's no "may I?" decision to
+      # centralize. It does need extending to include events the caller is a
+      # *member* of (issue #278); without that an invited member has no way
+      # to reach the event at all.
       def my_events
         events = current_user.events.kept.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
         render json: {
@@ -130,7 +136,7 @@ module Api
       # EventActivity's class comment for why this is separate from the
       # admin-only AdminAction log.
       def activity
-        event = current_user.events.kept.find(params[:id])
+        event = find_authorized_event!(params[:id], :view_activity, scope: Event.kept)
         activities = event.event_activities.recent.includes(:actor)
 
         render json: { activities: activities.map { |a| event_activity_json(a) } }
@@ -185,10 +191,20 @@ module Api
         render json: { error: "Event not found" }, status: :not_found
       end
 
+      # One before_action covering three actions with three different
+      # capabilities — see EventAuthorization::CAPABILITIES. All three are
+      # owner-only today and stay that way even once roles land (they either
+      # destroy work that isn't the actor's or spend the owner's money), but
+      # naming them separately means that's a stated decision rather than an
+      # accident of them sharing a filter.
+      ACTION_CAPABILITIES = {
+        "update" => :update_event,
+        "destroy" => :delete_event,
+        "unpublish" => :unpublish_event
+      }.freeze
+
       def authorize_creator!
-        unless @event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-        end
+        authorize_event!(@event, ACTION_CAPABILITIES.fetch(action_name))
       end
 
       # Only admin-verified organizers may put a price on an event — paid
