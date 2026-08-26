@@ -130,6 +130,52 @@ RSpec.describe "Rate limiting", type: :request, rack_attack: true do
     end
   end
 
+  describe "invitations throttling" do
+    let!(:event) { create(:event) }
+
+    it "throttles by inviting account even when target emails and IPs differ, " \
+       "once the per-user limit is exceeded" do
+      headers = auth_headers(event.creator)
+
+      # 20 per 10 minutes keyed on the inviter's user id. Vary both the
+      # target email and the IP each time so neither the per-email nor the
+      # per-IP throttle can be what's tripping — this isolates
+      # "invitations/user".
+      21.times do |i|
+        post "/api/v1/events/#{event.id}/invitations",
+             params: { email: "team-member-#{i}@example.com", role: "viewer" },
+             headers: headers.merge("REMOTE_ADDR" => "203.0.113.#{i + 1}"), as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(json["code"]).to eq("rate_limited")
+    end
+
+    it "throttles invites to the same target email even when the inviting IP differs" do
+      headers = auth_headers(event.creator)
+
+      # 5 per hour keyed on the target email — well under the per-user
+      # limit of 20, so this proves "invitations/email" on its own. Vary the
+      # IP each time, same reasoning as the signin/email spec above.
+      6.times do |i|
+        post "/api/v1/events/#{event.id}/invitations",
+             params: { email: "persistent-invitee@example.com", role: "viewer" },
+             headers: headers.merge("REMOTE_ADDR" => "198.51.100.#{i + 1}"), as: :json
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
+    it "lets a normal invitation through untouched" do
+      post "/api/v1/events/#{event.id}/invitations",
+           params: { email: "new-teammate@example.com", role: "viewer" },
+           headers: auth_headers(event.creator), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["invitation"]["email"]).to eq("new-teammate@example.com")
+    end
+  end
+
   describe "payments throttling" do
     it "returns 429 after 30 payment requests from one IP in 10 minutes" do
       # Covers both the POST .../payments and GET /payments/:id shapes under

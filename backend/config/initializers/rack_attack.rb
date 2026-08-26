@@ -110,6 +110,36 @@ class Rack::Attack
     req.ip if req.post? && req.path == "/api/v1/email_verifications"
   end
 
+  # Event team invitations (Api::V1::EventInvitationsController#create) are
+  # the same shape as the email-sending endpoints above — each call sends a
+  # real message to an address the requester (the event's owner/manager)
+  # chooses — but were missed when that endpoint originally shipped. Three
+  # limits, same reasoning as elsewhere in this file: per IP as a backstop,
+  # per inviting account (keyed on the JWT, same as "uploads/user" below —
+  # an authenticated attacker has exactly one identity, so IP alone is
+  # trivially dodged with a VPN), and per *target* email so one address
+  # can't be mail-bombed by inviting/revoking/reinviting on one event, or by
+  # being invited to several events the same owner controls (same reasoning
+  # as "password_reset/email" above). The looser 20/10min limits (vs.
+  # password reset's 5/hour) leave room for an organizer legitimately
+  # building out a large team in one sitting; the per-email limit stays
+  # tight since no real recipient needs more than a couple of invites an hour.
+  throttle("invitations/ip", limit: 20, period: 10.minutes) do |req|
+    req.ip if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+  end
+
+  throttle("invitations/user", limit: 20, period: 10.minutes) do |req|
+    if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+      user_id_from(req)
+    end
+  end
+
+  throttle("invitations/email", limit: 5, period: 1.hour) do |req|
+    if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+      email_from(req)
+    end
+  end
+
   # ── Write-heavy authenticated endpoints ──
   #
   # Registration creation and uploads both cost us storage/DB work. Keyed on
