@@ -517,10 +517,22 @@ export const eventsApi = {
  * `action`: `remove_participant` carries `{ registration_id, participant_name,
  * participant_email }`; `update_event_details` carries one key per changed
  * field (currently only `price_cents`/`start_at`/`end_at`), each
- * `{ from, to }`. */
+ * `{ from, to }`; `invite_member`/`revoke_invitation` carry `{ email, role }`;
+ * `member_joined` (the recipient accepting their own invite — actor IS the
+ * member, so no name/email snapshot needed) carries `{ role }`;
+ * `remove_member` carries `{ user_id, member_name, member_email,
+ * self_removal }`; `change_member_role` carries `{ user_id, member_name,
+ * member_email, from, to }`. */
 export interface ApiEventActivity {
   id: string;
-  action: "remove_participant" | "update_event_details";
+  action:
+    | "remove_participant"
+    | "update_event_details"
+    | "invite_member"
+    | "revoke_invitation"
+    | "member_joined"
+    | "remove_member"
+    | "change_member_role";
   actor_name: string;
   metadata: Record<string, unknown>;
   created_at: string;
