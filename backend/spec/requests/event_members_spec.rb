@@ -78,6 +78,7 @@ RSpec.describe "Event Members API", type: :request do
 
     it "logs an EventActivity when the role actually changes" do
       member = create(:user)
+      member.profile.update!(display_name: "Dara Kim")
       membership = create(:event_membership, event: event, user: member, role: "viewer")
 
       expect {
@@ -90,6 +91,8 @@ RSpec.describe "Event Members API", type: :request do
       expect(activity.action).to eq("change_member_role")
       expect(activity.actor).to eq(owner)
       expect(activity.metadata["user_id"]).to eq(member.id)
+      expect(activity.metadata["member_name"]).to eq("Dara Kim")
+      expect(activity.metadata["member_email"]).to eq(member.email)
       expect(activity.metadata["from"]).to eq("viewer")
       expect(activity.metadata["to"]).to eq("manager")
     end
@@ -174,6 +177,7 @@ RSpec.describe "Event Members API", type: :request do
 
     it "logs an EventActivity for remove_member, marking it as not a self-removal" do
       member = create(:user)
+      member.profile.update!(display_name: "Dara Kim")
       membership = create(:event_membership, event: event, user: member, role: "manager")
 
       expect {
@@ -184,6 +188,8 @@ RSpec.describe "Event Members API", type: :request do
       expect(activity.action).to eq("remove_member")
       expect(activity.actor).to eq(owner)
       expect(activity.metadata["user_id"]).to eq(member.id)
+      expect(activity.metadata["member_name"]).to eq("Dara Kim")
+      expect(activity.metadata["member_email"]).to eq(member.email)
       expect(activity.metadata["self_removal"]).to be(false)
     end
 

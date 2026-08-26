@@ -55,6 +55,30 @@ export function categoryLabel(value: string): string {
   return i18n.t("eventCategories.event");
 }
 
+/** Event team roles — mirrors the backend's EventMembership::ROLES. The
+ * owner is never one of these (it's synthesized, not a membership row —
+ * see EventMembersController#members_json), so it's not included here. */
+export const EVENT_MEMBER_ROLE_VALUES = ["manager", "check_in", "viewer"] as const;
+
+export type EventMemberRoleValue = (typeof EVENT_MEMBER_ROLE_VALUES)[number];
+
+const MEMBER_ROLE_I18N_KEYS: Record<EventMemberRoleValue, string> = {
+  manager: "manageEvent.roleManager",
+  check_in: "manageEvent.roleCheckIn",
+  viewer: "manageEvent.roleViewer",
+};
+
+/** Translated label for an event team role (manager/check_in/viewer), for
+ * use in activity log lines and the (future) members tab. Falls back to the
+ * raw value for anything unrecognized rather than throwing, same defensive
+ * style as categoryLabel(). */
+export function memberRoleLabel(value: string): string {
+  if ((EVENT_MEMBER_ROLE_VALUES as readonly string[]).includes(value)) {
+    return i18n.t(MEMBER_ROLE_I18N_KEYS[value as EventMemberRoleValue]);
+  }
+  return value;
+}
+
 /** A plain "View on map" link — works with no Google Maps API key, since
  * it just opens Google Maps in a new tab rather than embedding anything. */
 export function googleMapsViewUrl(latitude: number, longitude: number): string {
