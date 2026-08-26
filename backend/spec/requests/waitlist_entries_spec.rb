@@ -126,6 +126,28 @@ RSpec.describe "Waitlist Entries API", type: :request do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    # Issue #278 — Viewer gets read-only access to the waitlist; Check-in
+    # does not (it's not part of their job at the door).
+    it "allows a Viewer member to view the waitlist" do
+      event = create(:event, :full, creator: organizer)
+      viewer = create(:user)
+      create(:event_membership, event: event, user: viewer, role: "viewer")
+
+      get "/api/v1/events/#{event.id}/waitlist_entries", headers: auth_headers(viewer), as: :json
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 403 for a Check-in member" do
+      event = create(:event, :full, creator: organizer)
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+      get "/api/v1/events/#{event.id}/waitlist_entries", headers: auth_headers(check_in_staff), as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
   end
 
   # ── DELETE /api/v1/waitlist_entries/:id ──────────────────────────────────────

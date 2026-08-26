@@ -217,5 +217,24 @@ RSpec.describe "Event plan payments API", type: :request do
         expect(response).to have_http_status(:created)
       end
     end
+
+    # Issue #278 — plan payments stay owner-only even for Manager: they
+    # charge the owner's own card, so a Manager (who runs the event day to
+    # day but doesn't hold the purse) may not initiate one.
+    context "when the caller is a Manager member, not the owner" do
+      let!(:event) { create(:event, :draft, creator: organizer) }
+
+      it "returns 404, the same as any other non-owner" do
+        manager = create(:user)
+        create(:event_membership, event: event, user: manager, role: "manager")
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "free" },
+             headers: auth_headers(manager),
+             as: :json
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 end
