@@ -40,7 +40,12 @@ module Api
             if previous_role != new_role
               EventActivity.log!(
                 event: @event, actor: current_user, action: "change_member_role",
-                metadata: { user_id: membership.user_id, from: previous_role, to: new_role }
+                metadata: {
+                  user_id: membership.user_id,
+                  member_name: membership.user.profile&.display_name,
+                  member_email: membership.user.email,
+                  from: previous_role, to: new_role
+                }
               )
             end
 
@@ -65,11 +70,18 @@ module Api
         return unless self_removal || authorize_event!(@event, :manage_members)
 
         removed_user_id = membership.user_id
+        removed_user_name = membership.user.profile&.display_name
+        removed_user_email = membership.user.email
         membership.destroy!
 
         EventActivity.log!(
           event: @event, actor: current_user, action: "remove_member",
-          metadata: { user_id: removed_user_id, self_removal: self_removal }
+          metadata: {
+            user_id: removed_user_id,
+            member_name: removed_user_name,
+            member_email: removed_user_email,
+            self_removal: self_removal
+          }
         )
 
         render json: { message: self_removal ? "You have left the event" : "Member removed" }

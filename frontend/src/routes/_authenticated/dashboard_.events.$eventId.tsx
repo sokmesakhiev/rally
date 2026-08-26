@@ -29,6 +29,11 @@ import {
   History,
   UserMinus,
   PencilLine,
+  UserPlus,
+  Ban,
+  UserCheck,
+  Shield,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -72,6 +77,7 @@ import {
   formatPrice,
   categoryLabel,
   googleMapsViewUrl,
+  memberRoleLabel,
 } from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 import { cn } from "@/lib/utils";
@@ -106,6 +112,42 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
     return [ i18n.t("manageEvent.activityRemovedParticipant", { name }) ];
   }
 
+  if (activity.action === "invite_member") {
+    const email = activity.metadata.email as string;
+    const role = memberRoleLabel(activity.metadata.role as string);
+    return [ i18n.t("manageEvent.activityInvitedMember", { email, role }) ];
+  }
+
+  if (activity.action === "revoke_invitation") {
+    const email = activity.metadata.email as string;
+    return [ i18n.t("manageEvent.activityRevokedInvitation", { email }) ];
+  }
+
+  if (activity.action === "member_joined") {
+    const role = memberRoleLabel(activity.metadata.role as string);
+    return [ i18n.t("manageEvent.activityMemberJoined", { role }) ];
+  }
+
+  if (activity.action === "remove_member") {
+    const name =
+      (activity.metadata.member_name as string | null) ||
+      (activity.metadata.member_email as string | null) ||
+      i18n.t("manageEvent.memberFallback");
+    return activity.metadata.self_removal
+      ? [ i18n.t("manageEvent.activityLeftTeam") ]
+      : [ i18n.t("manageEvent.activityRemovedMember", { name }) ];
+  }
+
+  if (activity.action === "change_member_role") {
+    const name =
+      (activity.metadata.member_name as string | null) ||
+      (activity.metadata.member_email as string | null) ||
+      i18n.t("manageEvent.memberFallback");
+    const from = memberRoleLabel(activity.metadata.from as string);
+    const to = memberRoleLabel(activity.metadata.to as string);
+    return [ i18n.t("manageEvent.activityChangedMemberRole", { name, from, to }) ];
+  }
+
   const lines: string[] = [];
   const priceChange = activity.metadata.price_cents as { from: number; to: number } | undefined;
   if (priceChange) {
@@ -135,6 +177,34 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
     );
   }
   return lines;
+}
+
+/** Icon per EventActivity action — a small lookup rather than a growing
+ * ternary chain, now that there are 7 action types. `remove_member` gets its
+ * own icon for a self-removal ("left the team") vs. being removed by the
+ * owner, since those read very differently even though it's one action. */
+function ActivityIcon({ activity }: { activity: ApiEventActivity }) {
+  const cls = "h-4 w-4 text-muted-foreground";
+  switch (activity.action) {
+    case "invite_member":
+      return <UserPlus className={cls} />;
+    case "revoke_invitation":
+      return <Ban className={cls} />;
+    case "member_joined":
+      return <UserCheck className={cls} />;
+    case "change_member_role":
+      return <Shield className={cls} />;
+    case "remove_member":
+      return activity.metadata.self_removal ? (
+        <LogOut className={cls} />
+      ) : (
+        <UserMinus className={cls} />
+      );
+    case "remove_participant":
+      return <UserMinus className={cls} />;
+    default:
+      return <PencilLine className={cls} />;
+  }
 }
 
 function ManageEvent() {
@@ -1243,11 +1313,7 @@ function ManageEvent() {
                       }`}
                     >
                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        {a.action === "remove_participant" ? (
-                          <UserMinus className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <PencilLine className="h-4 w-4 text-muted-foreground" />
-                        )}
+                        <ActivityIcon activity={a} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="space-y-0.5 text-sm">
