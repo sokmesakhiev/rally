@@ -177,10 +177,7 @@ RSpec.describe "Event Members API", type: :request do
 
     it "logs an EventActivity for remove_member, marking it as not a self-removal" do
       member = create(:user)
-<<<<<<< HEAD
       member.profile.update!(display_name: "Dara Kim")
-=======
->>>>>>> 01be9ba (Manage existing event members (#280) (#293))
       membership = create(:event_membership, event: event, user: member, role: "manager")
 
       expect {
@@ -191,12 +188,9 @@ RSpec.describe "Event Members API", type: :request do
       expect(activity.action).to eq("remove_member")
       expect(activity.actor).to eq(owner)
       expect(activity.metadata["user_id"]).to eq(member.id)
-<<<<<<< HEAD
       expect(activity.metadata["member_name"]).to eq("Dara Kim")
       expect(activity.metadata["member_email"]).to eq(member.email)
-=======
->>>>>>> 01be9ba (Manage existing event members (#280) (#293))
-      expect(activity.metadata["self_removal"]).to be(false)
+     expect(activity.metadata["self_removal"]).to be(false)
     end
 
     it "lets a member remove themselves (leave)" do

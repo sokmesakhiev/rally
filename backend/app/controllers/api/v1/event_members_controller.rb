@@ -70,25 +70,20 @@ module Api
         return unless self_removal || authorize_event!(@event, :manage_members)
 
         removed_user_id = membership.user_id
-<<<<<<< HEAD
         removed_user_name = membership.user.profile&.display_name
         removed_user_email = membership.user.email
-=======
->>>>>>> 01be9ba (Manage existing event members (#280) (#293))
+
         membership.destroy!
 
         EventActivity.log!(
           event: @event, actor: current_user, action: "remove_member",
-<<<<<<< HEAD
+
           metadata: {
             user_id: removed_user_id,
             member_name: removed_user_name,
             member_email: removed_user_email,
             self_removal: self_removal
           }
-=======
-          metadata: { user_id: removed_user_id, self_removal: self_removal }
->>>>>>> 01be9ba (Manage existing event members (#280) (#293))
         )
 
         render json: { message: self_removal ? "You have left the event" : "Member removed" }
