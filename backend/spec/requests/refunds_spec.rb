@@ -147,6 +147,42 @@ RSpec.describe "Refunds API", type: :request do
       end
     end
 
+    # Issue #278: find_authorized_payment's organizer arm now goes through
+    # EventAuthorization, so extending :issue_refund to Manager in
+    # CAPABILITIES is what makes this work — no controller change needed.
+    context "as a Manager member of the event" do
+      it "is allowed" do
+        manager = create(:user)
+        create(:event_membership, event: event, user: manager, role: "manager")
+        allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_return(gateway_success_response)
+
+        post "/api/v1/payments/#{payment.id}/refunds", headers: auth_headers(manager), as: :json
+
+        expect(response).to have_http_status(:created)
+      end
+
+      it "is not logged as an AdminAction (it's their own event's team, not platform moderation)" do
+        manager = create(:user, admin: true)
+        create(:event_membership, event: event, user: manager, role: "manager")
+        allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_return(gateway_success_response)
+
+        expect {
+          post "/api/v1/payments/#{payment.id}/refunds", headers: auth_headers(manager), as: :json
+        }.not_to change(AdminAction, :count)
+      end
+    end
+
+    context "as a Check-in member of the event" do
+      it "is forbidden — refunds are Manager-and-above only" do
+        check_in_staff = create(:user)
+        create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+        post "/api/v1/payments/#{payment.id}/refunds", headers: auth_headers(check_in_staff), as: :json
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
     it "requires authentication" do
       post "/api/v1/payments/#{payment.id}/refunds", as: :json
       expect(response).to have_http_status(:unauthorized)
