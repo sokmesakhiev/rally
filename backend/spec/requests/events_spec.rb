@@ -311,6 +311,29 @@ RSpec.describe "Events API", type: :request do
       get "/api/v1/events/#{SecureRandom.uuid}", as: :json
       expect(response).to have_http_status(:not_found)
     end
+
+    it "returns role: nil for an anonymous viewer" do
+      get "/api/v1/events/#{event.id}", as: :json
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "returns role: nil for a signed-in stranger" do
+      get "/api/v1/events/#{event.id}", headers: auth_headers(create(:user)), as: :json
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "returns role: owner for the event's creator" do
+      get "/api/v1/events/#{event.id}", headers: auth_headers(event.creator), as: :json
+      expect(json["event"]["role"]).to eq("owner")
+    end
+
+    it "returns the caller's membership role for a team member" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+
+      get "/api/v1/events/#{event.id}", headers: auth_headers(manager), as: :json
+      expect(json["event"]["role"]).to eq("manager")
+    end
   end
 
   # ── POST /api/v1/events ──────────────────────────────────────────────────────
