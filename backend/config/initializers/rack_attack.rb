@@ -123,6 +123,18 @@ class Rack::Attack
     req.ip if req.post? && req.path == "/api/v1/uploads"
   end
 
+  # Also throttle uploads per account, not just per IP (see issue #282) —
+  # unlike the anonymous auth endpoints above, a signed-in attacker already
+  # has exactly one identity that's cheaper to keep than to burn, so an
+  # IP-only limit is trivially dodged with a VPN/proxy while reusing the same
+  # token. Keyed on the JWT's user_id rather than a live User lookup: a
+  # forged id is impossible without SECRET_KEY (see JsonWebToken), so it's
+  # trustworthy enough for a rate-limit counter even though it's never used
+  # here for actual authorization.
+  throttle("uploads/user", limit: 30, period: 10.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/uploads"
+  end
+
   # ── Payments (now reachable without a session) ──
   #
   # Api::V1::PaymentsController accepts an anonymous request authorized by a
@@ -179,6 +191,22 @@ class Rack::Attack
 
     email.to_s.downcase.strip.presence
   rescue JSON::ParserError
+    nil
+  end
+
+  # Decodes the same Bearer JWT ApplicationController#extract_token reads,
+  # for the "uploads/user" throttle above. Deliberately doesn't hit the
+  # database (no User.find, no suspended/discarded checks) — those only
+  # matter for authorization, and this is purely a rate-limit key. A
+  # missing/garbage/expired token just means no per-user key, which is fine:
+  # the request still falls under the per-IP throttle above, and an
+  # unauthenticated request gets 401'd by the controller regardless.
+  def self.user_id_from(req)
+    token = req.env["HTTP_AUTHORIZATION"]&.split(" ")&.last
+    return nil unless token
+
+    JsonWebToken.decode(token)[:user_id]
+  rescue JWT::DecodeError
     nil
   end
 end
