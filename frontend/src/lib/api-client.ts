@@ -254,6 +254,15 @@ export interface ApiEvent {
   created_at: string;
   updated_at: string;
   registrations_count?: number;
+  /** The caller's relationship to this event: "owner" (the creator), one of
+   * EventMembership::ROLES ("manager"/"check_in"/"viewer"), or null if the
+   * caller has none (an anonymous viewer, or a signed-in stranger). Present
+   * on both eventsApi.get() (GET /events/:id) and eventsApi.myEvents() (GET
+   * /events/my) — see Api::V1::EventsController#show/#my_events. Purely a
+   * UI affordance for role-aware chrome (see event-membership-tickets.md,
+   * Ticket G) — same caveat as PaidEventGate: the server re-checks
+   * everything on every actual write. */
+  role?: "owner" | "manager" | "check_in" | "viewer" | null;
 }
 
 export interface ApiWaitlistEntry {
@@ -537,6 +546,78 @@ export interface ApiEventActivity {
   metadata: Record<string, unknown>;
   created_at: string;
 }
+
+// ─── Event membership (team roles) ─────────────────────────────────────────
+// See Api::V1::EventMembersController / EventInvitationsController on the
+// backend. Listing (both members and invitations) is reachable by anyone on
+// the team (see Api::V1::EventMembersController#index's own comment) —
+// invite/revoke/role-change/remove are owner-only, enforced server-side via
+// EventAuthorization::CAPABILITIES' :manage_members entry. This file exposes
+// all of it; frontend/src/routes/_authenticated/dashboard_.events.$eventId.tsx
+// decides what to actually render for the caller's role (Ticket G).
+
+/** One row from eventMembersApi.list() — either a real EventMembership, or
+ * the synthesized "owner" entry (id: null, since there's nothing to PATCH/
+ * DELETE against — see EventMembersController#members_json). */
+export interface ApiEventMember {
+  id: string | null;
+  user_id: string;
+  role: "owner" | "manager" | "check_in" | "viewer";
+  display_name: string | null;
+  avatar_url: string | null;
+  /** For the synthesized owner row, this is the event's own created_at
+   * (creating the event *is* how the owner joined it). */
+  joined_at: string;
+}
+
+export const eventMembersApi = {
+  list(eventId: string) {
+    return api.get<{ members: ApiEventMember[] }>(`/events/${eventId}/members`);
+  },
+
+  updateRole(eventId: string, membershipId: string, role: string) {
+    return api.patch<{ member: ApiEventMember }>(`/events/${eventId}/members/${membershipId}`, {
+      membership: { role },
+    });
+  },
+
+  /** Removes a member, or leaves the team if `membershipId` is the caller's
+   * own membership — same endpoint either way (see
+   * EventMembersController#destroy's self_removal branch). */
+  remove(eventId: string, membershipId: string) {
+    return api.delete<{ message: string }>(`/events/${eventId}/members/${membershipId}`);
+  },
+};
+
+/** One row from eventInvitationsApi.list() — a still-pending invite (the
+ * endpoint only ever returns EventInvitation.pending rows, see
+ * EventInvitationsController#index). */
+export interface ApiEventInvitation {
+  id: string;
+  event_id: string;
+  email: string;
+  role: "manager" | "check_in" | "viewer";
+  invited_by_id: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export const eventInvitationsApi = {
+  list(eventId: string) {
+    return api.get<{ invitations: ApiEventInvitation[] }>(`/events/${eventId}/invitations`);
+  },
+
+  create(eventId: string, email: string, role: string) {
+    return api.post<{ invitation: ApiEventInvitation }>(`/events/${eventId}/invitations`, {
+      email,
+      role,
+    });
+  },
+
+  revoke(eventId: string, invitationId: string) {
+    return api.delete<{ message: string }>(`/events/${eventId}/invitations/${invitationId}`);
+  },
+};
 
 // ─── Pricing plans ──────────────────────────────────────────────────────────
 
