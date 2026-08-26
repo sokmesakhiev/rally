@@ -72,6 +72,31 @@ RSpec.describe "Results API", type: :request do
 
       expect(response).to have_http_status(:unauthorized)
     end
+
+    # Issue #278 — Manager may set results; Check-in and Viewer may not.
+    it "allows a Manager member to set a result" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+
+      patch "/api/v1/registrations/#{reg.id}/result",
+            params: { result: { finish_time_seconds: 5025 } },
+            headers: auth_headers(manager),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 403 when a Check-in member tries to set a result" do
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+      patch "/api/v1/registrations/#{reg.id}/result",
+            params: { result: { finish_time_seconds: 5025 } },
+            headers: auth_headers(check_in_staff),
+            as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
   end
 
   # ── POST /api/v1/events/:event_id/results/import ─────────────────────────────

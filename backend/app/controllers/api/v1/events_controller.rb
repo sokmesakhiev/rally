@@ -2,6 +2,20 @@ module Api
   module V1
     class EventsController < BaseController
       before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish, :activity ]
+      # #show stays public (no bare authenticate_user!) — anyone can view a
+      # published event page without an account. This just populates
+      # current_user *when* a valid, live token is present, so event_role_for
+      # can tell the frontend "owner"/"manager"/etc. for the manage-event
+      # page's role-aware chrome (see event-membership-tickets.md, Ticket G)
+      # without gating the endpoint itself. Uses identify_current_user!, not
+      # authenticate_user_optional! — the latter deliberately still errors
+      # for a suspended/deleted account's token (right for guest checkout,
+      # where that's a real action being blocked), which would wrongly turn
+      # "browsing a public event page" into a 403/401 for anyone whose
+      # account status changed after their browser last got a fresh token.
+      # current_user simply stays nil for an anonymous viewer or a
+      # suspended/deleted one, same as before this field existed.
+      before_action :identify_current_user!, only: [ :show ]
       before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
 
@@ -49,16 +63,43 @@ module Api
         end
       end
 
-      # GET /api/v1/events/my — current user's created events
+      # GET /api/v1/events/my — events the current user helps run: the ones
+      # they created, plus (issue #278) the ones they've joined as a member.
+      # Without the latter, an invited member accepts and then has no way to
+      # reach the event at all. This is a listing scope, not a gate — there's
+      # no "may I?" decision to centralize, so it stays outside
+      # EventAuthorization's #authorize_event!/#find_authorized_event!.
+      #
+      # Each event is tagged with the caller's `role` so the dashboard can
+      # render "Owner"/"Manager"/etc. and hide actions the role lacks (see
+      # event-membership-tickets.md, Ticket G). Creator status wins if
+      # somehow both apply (mirrors EventAuthorization#event_role_for
+      # preferring :owner over any membership row the creator might also
+      # hold) — an event can only be tagged once per response.
       def my_events
-        events = current_user.events.kept.includes(:registrations, event_types: { registration_event_types: :registration }).order(start_at: :asc)
+        eager_load = [ :registrations, event_types: { registration_event_types: :registration } ]
+
+        owned = current_user.events.kept.includes(*eager_load)
+        member_rows = current_user.event_memberships
+          .joins(:event).merge(Event.kept)
+          .includes(event: eager_load)
+
+        events_by_id = {}
+        owned.each { |e| events_by_id[e.id] = [ e, "owner" ] }
+        member_rows.each do |membership|
+          next if events_by_id.key?(membership.event_id)
+          events_by_id[membership.event_id] = [ membership.event, membership.role ]
+        end
+
+        events = events_by_id.values.sort_by { |(e, _role)| e.start_at }
+
         render json: {
-          events: events.map { |e|
+          events: events.map { |e, role|
             # Ruby-side filter, not e.registrations.active.size — .active is a
             # `where`, which would force a fresh query per event instead of
             # using the already-preloaded array above.
             active_count = e.registrations.count { |r| r.status != "cancelled" }
-            event_json(e, include_types: true).merge(registrations_count: active_count)
+            event_json(e, include_types: true).merge(registrations_count: active_count, role: role)
           }
         }
       end
@@ -68,7 +109,13 @@ module Api
         @event = Event.includes(:registrations, survey: :survey_questions,
                                  event_types: { registration_event_types: :registration })
           .find(params[:id])
-        render json: { event: event_json(@event, include_count: true, include_survey: true, include_types: true) }
+        json = event_json(@event, include_count: true, include_survey: true, include_types: true)
+        # Same "owner"/EventMembership::ROLES/nil shape as events#my_events'
+        # per-event `role` tag — nil here just means "no relationship with
+        # this event" (an anonymous viewer, or a signed-in stranger), not an
+        # error. See EventAuthorization#event_role_for.
+        json[:role] = event_role_for(@event)
+        render json: { event: json }
       end
 
       # POST /api/v1/events
@@ -130,7 +177,7 @@ module Api
       # EventActivity's class comment for why this is separate from the
       # admin-only AdminAction log.
       def activity
-        event = current_user.events.kept.find(params[:id])
+        event = find_authorized_event!(params[:id], :view_activity, scope: Event.kept)
         activities = event.event_activities.recent.includes(:actor)
 
         render json: { activities: activities.map { |a| event_activity_json(a) } }
@@ -185,10 +232,20 @@ module Api
         render json: { error: "Event not found" }, status: :not_found
       end
 
+      # One before_action covering three actions with three different
+      # capabilities — see EventAuthorization::CAPABILITIES. All three are
+      # owner-only today and stay that way even once roles land (they either
+      # destroy work that isn't the actor's or spend the owner's money), but
+      # naming them separately means that's a stated decision rather than an
+      # accident of them sharing a filter.
+      ACTION_CAPABILITIES = {
+        "update" => :update_event,
+        "destroy" => :delete_event,
+        "unpublish" => :unpublish_event
+      }.freeze
+
       def authorize_creator!
-        unless @event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-        end
+        authorize_event!(@event, ACTION_CAPABILITIES.fetch(action_name))
       end
 
       # Only admin-verified organizers may put a price on an event — paid

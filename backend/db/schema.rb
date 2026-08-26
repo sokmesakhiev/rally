@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_26_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -72,6 +72,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_130000) do
     t.index ["action"], name: "index_event_activities_on_action"
     t.index ["actor_id"], name: "index_event_activities_on_actor_id"
     t.index ["event_id"], name: "index_event_activities_on_event_id"
+  end
+
+  create_table "event_invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.uuid "event_id", null: false
+    t.datetime "expires_at", null: false
+    t.uuid "invited_by_id", null: false
+    t.datetime "revoked_at"
+    t.string "role", null: false
+    t.string "token", null: false
+    t.datetime "updated_at", null: false
+    t.index ["email"], name: "index_event_invitations_on_email"
+    t.index ["event_id", "email"], name: "index_event_invitations_on_event_and_email_pending", unique: true, where: "((accepted_at IS NULL) AND (revoked_at IS NULL))"
+    t.index ["event_id"], name: "index_event_invitations_on_event_id"
+    t.index ["token"], name: "index_event_invitations_on_token", unique: true
+  end
+
+  create_table "event_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "accepted_at", null: false
+    t.datetime "created_at", null: false
+    t.uuid "event_id", null: false
+    t.uuid "invited_by_id"
+    t.string "role", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["event_id", "user_id"], name: "index_event_memberships_on_event_id_and_user_id", unique: true
+    t.index ["role"], name: "index_event_memberships_on_role"
+    t.index ["user_id"], name: "index_event_memberships_on_user_id"
   end
 
   create_table "event_plan_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -315,6 +345,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_130000) do
   add_foreign_key "certificates", "registrations"
   add_foreign_key "event_activities", "events"
   add_foreign_key "event_activities", "users", column: "actor_id"
+  add_foreign_key "event_invitations", "events"
+  add_foreign_key "event_invitations", "users", column: "invited_by_id"
+  add_foreign_key "event_memberships", "events"
+  add_foreign_key "event_memberships", "users"
+  add_foreign_key "event_memberships", "users", column: "invited_by_id"
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"
   add_foreign_key "event_types", "events"

@@ -251,6 +251,48 @@ RSpec.describe "Events API", type: :request do
       get "/api/v1/events/my", as: :json
       expect(response).to have_http_status(:unauthorized)
     end
+
+    it "tags the caller's own events with role: owner" do
+      get "/api/v1/events/my", headers: auth_headers(user), as: :json
+
+      returned = json["events"].find { |e| e["id"] == my_event.id }
+      expect(returned["role"]).to eq("owner")
+    end
+
+    # Issue #278 — without this, an invited member accepts an invitation and
+    # then has no way to reach the event at all.
+    context "when the caller is a member of someone else's event, not its creator" do
+      let!(:member_event) { create(:event, creator: other) }
+
+      it "includes the event, tagged with the caller's role" do
+        create(:event_membership, event: member_event, user: user, role: "manager")
+
+        get "/api/v1/events/my", headers: auth_headers(user), as: :json
+
+        returned = json["events"].find { |e| e["id"] == member_event.id }
+        expect(returned).to be_present
+        expect(returned["role"]).to eq("manager")
+      end
+
+      it "does not include an event from a discarded (soft-deleted) membership's event" do
+        create(:event_membership, event: member_event, user: user, role: "viewer")
+        member_event.discard!
+
+        get "/api/v1/events/my", headers: auth_headers(user), as: :json
+
+        ids = json["events"].map { |e| e["id"] }
+        expect(ids).not_to include(member_event.id)
+      end
+
+      it "tags the event as owner, not the membership role, if the caller somehow holds both" do
+        create(:event_membership, event: my_event, user: user, role: "viewer")
+
+        get "/api/v1/events/my", headers: auth_headers(user), as: :json
+
+        returned = json["events"].find { |e| e["id"] == my_event.id }
+        expect(returned["role"]).to eq("owner")
+      end
+    end
   end
 
   # ── GET /api/v1/events/:id ───────────────────────────────────────────────────
@@ -268,6 +310,62 @@ RSpec.describe "Events API", type: :request do
     it "returns 404 for an unknown id" do
       get "/api/v1/events/#{SecureRandom.uuid}", as: :json
       expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns role: nil for an anonymous viewer" do
+      get "/api/v1/events/#{event.id}", as: :json
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "returns role: nil for a signed-in stranger" do
+      get "/api/v1/events/#{event.id}", headers: auth_headers(create(:user)), as: :json
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    # Regression test: a suspended/deleted account's browser still holds its
+    # old JWT and sends it on every request, including this public one (see
+    # api-client.ts). #show must never turn that into a block — it isn't
+    # gated on sign-in status at all, unlike the guest-checkout endpoints
+    # authenticate_user_optional! exists for. See
+    # ApplicationController#identify_current_user!.
+    it "still returns the event (as if anonymous) for a suspended user's stale token" do
+      # Suspension is checked per-request (authenticate_user!/
+      # authenticate_user_optional!'s own comments), not at sign-in — so
+      # signing in after suspending still hands back a token, exactly
+      # mirroring the real sequence of "token issued while active, account
+      # suspended later, browser still holds the old token".
+      suspended = create(:user)
+      suspended.suspend!
+      headers = auth_headers(suspended)
+
+      get "/api/v1/events/#{event.id}", headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "still returns the event (as if anonymous) for a deleted account's stale token" do
+      deleted = create(:user)
+      headers = auth_headers(deleted)
+      deleted.discard!
+
+      get "/api/v1/events/#{event.id}", headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "returns role: owner for the event's creator" do
+      get "/api/v1/events/#{event.id}", headers: auth_headers(event.creator), as: :json
+      expect(json["event"]["role"]).to eq("owner")
+    end
+
+    it "returns the caller's membership role for a team member" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+
+      get "/api/v1/events/#{event.id}", headers: auth_headers(manager), as: :json
+      expect(json["event"]["role"]).to eq("manager")
     end
   end
 
@@ -570,6 +668,32 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:unauthorized)
     end
 
+    # Issue #278 — Manager may edit event details; Check-in and Viewer may not.
+    it "allows a Manager member to update" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { title: "Updated by manager" } },
+            headers: auth_headers(manager),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["title"]).to eq("Updated by manager")
+    end
+
+    it "returns 403 when a Check-in member tries to update event details" do
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { title: "Hijacked" } },
+            headers: auth_headers(check_in_staff),
+            as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
     # ── Paid events require an admin-verified organizer ──
     context "paid-event verification gating" do
       # The outer `user`/`event` pair is a verified organizer and their event
@@ -704,6 +828,9 @@ RSpec.describe "Events API", type: :request do
   end
 
   # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
+  # (Was accidentally duplicated as two identical describe blocks — collapsed
+  # to one while touching this section for issue #278's role-gating specs;
+  # no coverage lost, the two blocks ran the exact same examples twice.)
   describe "GET /api/v1/events/:id/activity" do
     let!(:event) { create(:event, creator: user) }
 
@@ -736,40 +863,24 @@ RSpec.describe "Events API", type: :request do
       get "/api/v1/events/#{event.id}/activity", as: :json
       expect(response).to have_http_status(:unauthorized)
     end
-  end
 
-  # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
-  describe "GET /api/v1/events/:id/activity" do
-    let!(:event) { create(:event, creator: user) }
+    # Issue #278 — Viewer may read the activity log; Check-in may not.
+    it "allows a Viewer member to view the activity log" do
+      viewer = create(:user)
+      create(:event_membership, event: event, user: viewer, role: "viewer")
 
-    it "returns the event's activity, newest first" do
-      older = EventActivity.log!(
-        event: event, actor: user, action: "remove_participant",
-        metadata: { "participant_name" => "Dara Kim" }
-      )
-      older.update_column(:created_at, 1.day.ago)
-      newer = EventActivity.log!(
-        event: event, actor: user, action: "update_event_details",
-        metadata: { "price_cents" => { "from" => 0, "to" => 5000 } }
-      )
-
-      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(user), as: :json
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(viewer), as: :json
 
       expect(response).to have_http_status(:ok)
-      ids = json["activities"].map { |a| a["id"] }
-      expect(ids).to eq([ newer.id, older.id ])
-      expect(json["activities"].first["action"]).to eq("update_event_details")
-      expect(json["activities"].first["actor_name"]).to be_present
     end
 
-    it "returns 404 for a non-organizer" do
-      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(other), as: :json
+    it "returns 404 for a Check-in member" do
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+
+      get "/api/v1/events/#{event.id}/activity", headers: auth_headers(check_in_staff), as: :json
+
       expect(response).to have_http_status(:not_found)
-    end
-
-    it "returns 401 without a token" do
-      get "/api/v1/events/#{event.id}/activity", as: :json
-      expect(response).to have_http_status(:unauthorized)
     end
   end
 
@@ -791,6 +902,18 @@ RSpec.describe "Events API", type: :request do
     it "returns 403 when a different user tries to delete" do
       delete "/api/v1/events/#{event.id}", headers: auth_headers(other), as: :json
       expect(response).to have_http_status(:forbidden)
+    end
+
+    # Issue #278 — delete stays owner-only even for Manager: it destroys work
+    # that isn't theirs to take down.
+    it "returns 403 when a Manager member tries to delete" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+
+      delete "/api/v1/events/#{event.id}", headers: auth_headers(manager), as: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(Event.kept.find_by(id: event.id)).to be_present
     end
   end
 end

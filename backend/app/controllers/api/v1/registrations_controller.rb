@@ -27,7 +27,7 @@ module Api
 
       # GET /api/v1/events/:event_id/registrations — organizer view of participants
       def event_registrations
-        event = current_user.events.find(params[:event_id])
+        event = find_authorized_event!(params[:event_id], :view_participants)
         regs = event.registrations.kept
           .includes({ user: :profile }, :event_types, :certificate, :result)
           .order(created_at: :asc)
@@ -46,7 +46,7 @@ module Api
       # in this controller) — see Registrations::ExportCsv for column
       # details.
       def export
-        event = current_user.events.find(params[:event_id])
+        event = find_authorized_event!(params[:event_id], :export_participants)
         csv = Registrations::ExportCsv.call(event: event)
 
         send_data csv,
@@ -162,11 +162,7 @@ module Api
       def update
         registration = Registration.find(params[:id])
         event = registration.event
-
-        unless event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(event, :update_registration)
 
         validate_params_with_schema(RegistrationUpdateRequestSchema) do |validated_params|
           if registration.update(validated_params[:registration])
@@ -185,11 +181,7 @@ module Api
       def destroy
         registration = Registration.find(params[:id])
         event = registration.event
-
-        unless event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(event, :remove_participant)
 
         registration.discard!
         # Snapshot name/email into metadata rather than relying on the
@@ -225,11 +217,7 @@ module Api
       def check_in
         registration = Registration.find(params[:id])
         event = registration.event
-
-        unless event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(event, :check_in)
 
         already_checked_in = registration.checked_in?
         registration.update!(checked_in_at: Time.current) unless already_checked_in
@@ -246,11 +234,7 @@ module Api
       def undo_check_in
         registration = Registration.find(params[:id])
         event = registration.event
-
-        unless event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(event, :check_in)
 
         registration.update!(checked_in_at: nil)
         render json: { registration: registration_json(registration, include_profile: true, include_types: true) }

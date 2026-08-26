@@ -23,10 +23,7 @@ module Api
 
       # GET /api/v1/events/:event_id/waitlist_entries — organizer view
       def event_waitlist
-        unless @event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(@event, :view_waitlist)
 
         entries = @event.waitlist_entries.waiting.includes(user: :profile).order(created_at: :asc)
         render json: {

@@ -110,6 +110,36 @@ class Rack::Attack
     req.ip if req.post? && req.path == "/api/v1/email_verifications"
   end
 
+  # Event team invitations (Api::V1::EventInvitationsController#create) are
+  # the same shape as the email-sending endpoints above — each call sends a
+  # real message to an address the requester (the event's owner/manager)
+  # chooses — but were missed when that endpoint originally shipped. Three
+  # limits, same reasoning as elsewhere in this file: per IP as a backstop,
+  # per inviting account (keyed on the JWT, same as "uploads/user" below —
+  # an authenticated attacker has exactly one identity, so IP alone is
+  # trivially dodged with a VPN), and per *target* email so one address
+  # can't be mail-bombed by inviting/revoking/reinviting on one event, or by
+  # being invited to several events the same owner controls (same reasoning
+  # as "password_reset/email" above). The looser 20/10min limits (vs.
+  # password reset's 5/hour) leave room for an organizer legitimately
+  # building out a large team in one sitting; the per-email limit stays
+  # tight since no real recipient needs more than a couple of invites an hour.
+  throttle("invitations/ip", limit: 20, period: 10.minutes) do |req|
+    req.ip if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+  end
+
+  throttle("invitations/user", limit: 20, period: 10.minutes) do |req|
+    if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+      user_id_from(req)
+    end
+  end
+
+  throttle("invitations/email", limit: 5, period: 1.hour) do |req|
+    if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
+      email_from(req)
+    end
+  end
+
   # ── Write-heavy authenticated endpoints ──
   #
   # Registration creation and uploads both cost us storage/DB work. Keyed on
@@ -121,6 +151,18 @@ class Rack::Attack
 
   throttle("uploads/ip", limit: 30, period: 10.minutes) do |req|
     req.ip if req.post? && req.path == "/api/v1/uploads"
+  end
+
+  # Also throttle uploads per account, not just per IP (see issue #282) —
+  # unlike the anonymous auth endpoints above, a signed-in attacker already
+  # has exactly one identity that's cheaper to keep than to burn, so an
+  # IP-only limit is trivially dodged with a VPN/proxy while reusing the same
+  # token. Keyed on the JWT's user_id rather than a live User lookup: a
+  # forged id is impossible without SECRET_KEY (see JsonWebToken), so it's
+  # trustworthy enough for a rate-limit counter even though it's never used
+  # here for actual authorization.
+  throttle("uploads/user", limit: 30, period: 10.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/uploads"
   end
 
   # ── Payments (now reachable without a session) ──
@@ -179,6 +221,22 @@ class Rack::Attack
 
     email.to_s.downcase.strip.presence
   rescue JSON::ParserError
+    nil
+  end
+
+  # Decodes the same Bearer JWT ApplicationController#extract_token reads,
+  # for the "uploads/user" throttle above. Deliberately doesn't hit the
+  # database (no User.find, no suspended/discarded checks) — those only
+  # matter for authorization, and this is purely a rate-limit key. A
+  # missing/garbage/expired token just means no per-user key, which is fine:
+  # the request still falls under the per-IP throttle above, and an
+  # unauthenticated request gets 401'd by the controller regardless.
+  def self.user_id_from(req)
+    token = req.env["HTTP_AUTHORIZATION"]&.split(" ")&.last
+    return nil unless token
+
+    JsonWebToken.decode(token)[:user_id]
+  rescue JWT::DecodeError
     nil
   end
 end

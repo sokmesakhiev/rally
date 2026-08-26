@@ -29,6 +29,12 @@ import {
   History,
   UserMinus,
   PencilLine,
+  UserPlus,
+  Ban,
+  UserCheck,
+  Shield,
+  LogOut,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -50,6 +56,7 @@ import { CertificateTemplateUpload } from "@/components/certificate-template-upl
 import { PlanPaymentPanel } from "@/components/plan-payment-panel";
 import { CheckInScanner } from "@/components/check-in-scanner";
 import { ResultsManager } from "@/components/results-manager";
+import { MembersTab } from "@/components/members-tab";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -72,6 +79,7 @@ import {
   formatPrice,
   categoryLabel,
   googleMapsViewUrl,
+  memberRoleLabel,
 } from "@/lib/event-utils";
 import { downloadICS } from "@/lib/ics";
 import { cn } from "@/lib/utils";
@@ -106,6 +114,42 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
     return [ i18n.t("manageEvent.activityRemovedParticipant", { name }) ];
   }
 
+  if (activity.action === "invite_member") {
+    const email = activity.metadata.email as string;
+    const role = memberRoleLabel(activity.metadata.role as string);
+    return [ i18n.t("manageEvent.activityInvitedMember", { email, role }) ];
+  }
+
+  if (activity.action === "revoke_invitation") {
+    const email = activity.metadata.email as string;
+    return [ i18n.t("manageEvent.activityRevokedInvitation", { email }) ];
+  }
+
+  if (activity.action === "member_joined") {
+    const role = memberRoleLabel(activity.metadata.role as string);
+    return [ i18n.t("manageEvent.activityMemberJoined", { role }) ];
+  }
+
+  if (activity.action === "remove_member") {
+    const name =
+      (activity.metadata.member_name as string | null) ||
+      (activity.metadata.member_email as string | null) ||
+      i18n.t("manageEvent.memberFallback");
+    return activity.metadata.self_removal
+      ? [ i18n.t("manageEvent.activityLeftTeam") ]
+      : [ i18n.t("manageEvent.activityRemovedMember", { name }) ];
+  }
+
+  if (activity.action === "change_member_role") {
+    const name =
+      (activity.metadata.member_name as string | null) ||
+      (activity.metadata.member_email as string | null) ||
+      i18n.t("manageEvent.memberFallback");
+    const from = memberRoleLabel(activity.metadata.from as string);
+    const to = memberRoleLabel(activity.metadata.to as string);
+    return [ i18n.t("manageEvent.activityChangedMemberRole", { name, from, to }) ];
+  }
+
   const lines: string[] = [];
   const priceChange = activity.metadata.price_cents as { from: number; to: number } | undefined;
   if (priceChange) {
@@ -135,6 +179,34 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
     );
   }
   return lines;
+}
+
+/** Icon per EventActivity action — a small lookup rather than a growing
+ * ternary chain, now that there are 7 action types. `remove_member` gets its
+ * own icon for a self-removal ("left the team") vs. being removed by the
+ * owner, since those read very differently even though it's one action. */
+function ActivityIcon({ activity }: { activity: ApiEventActivity }) {
+  const cls = "h-4 w-4 text-muted-foreground";
+  switch (activity.action) {
+    case "invite_member":
+      return <UserPlus className={cls} />;
+    case "revoke_invitation":
+      return <Ban className={cls} />;
+    case "member_joined":
+      return <UserCheck className={cls} />;
+    case "change_member_role":
+      return <Shield className={cls} />;
+    case "remove_member":
+      return activity.metadata.self_removal ? (
+        <LogOut className={cls} />
+      ) : (
+        <UserMinus className={cls} />
+      );
+    case "remove_participant":
+      return <UserMinus className={cls} />;
+    default:
+      return <PencilLine className={cls} />;
+  }
 }
 
 function ManageEvent() {
@@ -335,6 +407,70 @@ function ManageEvent() {
   // capacity of their own (unlimited) don't add anything here.
   const combinedTypeCapacity = ev?.event_types?.reduce((sum, t) => sum + (t.capacity ?? 0), 0) ?? 0;
 
+  // ── Role-aware chrome (Ticket G) ──
+  //
+  // Mirrors the backend's EventAuthorization::CAPABILITIES matrix, keyed off
+  // `ev.role` (set by Api::V1::EventsController#show — see api-client.ts's
+  // ApiEvent.role doc comment). Purely a UI affordance, same caveat as
+  // PaidEventGate: hiding a tab or button here doesn't grant or deny
+  // anything — every mutation below is re-checked server-side regardless of
+  // what this object says. A null/undefined role (a stranger with no
+  // relationship to the event at all) sees nothing gated here, which simply
+  // never happens in normal use — this page is only ever reached via the
+  // owner's own dashboard or an accepted invitation's `my_events` listing.
+  const role = ev?.role ?? null;
+  const can = {
+    updateEvent: role === "owner" || role === "manager",
+    manageResults: role === "owner" || role === "manager",
+    checkIn: role === "owner" || role === "manager" || role === "check_in",
+    exportParticipants: role === "owner" || role === "manager",
+    updateRegistration: role === "owner" || role === "manager",
+    removeParticipant: role === "owner" || role === "manager",
+    viewSurveyResponses: role === "owner" || role === "manager" || role === "viewer",
+    viewActivity: role === "owner" || role === "manager" || role === "viewer",
+    managePlan: role === "owner",
+    unpublishEvent: role === "owner",
+    deleteEvent: role === "owner",
+    // Not a direct CAPABILITIES mirror: the Members tab's own read endpoint
+    // (EventMembersController#index) permits every role incl. Check-in, but
+    // Check-in's whole point is a narrow, single-purpose surface — see this
+    // ticket's acceptance criteria ("Check-in member shows the Check-in and
+    // Participants tabs and nothing else"). manage_members itself stays
+    // owner-only either way (enforced inside MembersTab via `canManage`).
+    viewMembers: role === "owner" || role === "manager" || role === "viewer",
+  };
+
+  const hasSurvey = !!ev?.survey_id;
+  const tabVisibility = {
+    branding: can.updateEvent,
+    participants: true,
+    checkin: can.checkIn,
+    results: can.manageResults,
+    responses: hasSurvey && can.viewSurveyResponses,
+    certificate: can.updateEvent,
+    activity: can.viewActivity,
+    members: can.viewMembers,
+  };
+  const visibleTabKeys = (Object.keys(tabVisibility) as (keyof typeof tabVisibility)[]).filter(
+    (k) => tabVisibility[k],
+  );
+  const defaultTab = visibleTabKeys[0] ?? "participants";
+  // Tailwind needs complete, literal class strings to find at build time —
+  // a template-interpolated `grid-cols-${n}` wouldn't get generated. Every
+  // count from 1 (Viewer, no survey, somehow only "members" visible) to 8
+  // (Owner/Manager with a survey) is covered.
+  const TAB_GRID_CLASSES: Record<number, string> = {
+    1: "max-w-xs grid-cols-1",
+    2: "max-w-sm grid-cols-2",
+    3: "max-w-lg grid-cols-3",
+    4: "max-w-xl grid-cols-4",
+    5: "max-w-2xl grid-cols-5",
+    6: "max-w-2xl grid-cols-6",
+    7: "max-w-3xl grid-cols-7",
+    8: "max-w-4xl grid-cols-8",
+  };
+  const tabGridClass = TAB_GRID_CLASSES[visibleTabKeys.length] ?? TAB_GRID_CLASSES[8];
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -409,7 +545,7 @@ function ManageEvent() {
                 <Button variant="outline" size="sm" onClick={() => downloadICS(ev)}>
                   <Download className="h-4 w-4" /> .ics
                 </Button>
-                {ev.is_published && (
+                {ev.is_published && can.unpublishEvent && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -424,32 +560,36 @@ function ManageEvent() {
                     {t("manageEvent.unpublish")}
                   </Button>
                 )}
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Trash2 className="h-4 w-4" /> {t("common.delete")}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{t("manageEvent.deleteDialogTitle")}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t("manageEvent.deleteDialogDesc")}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => deleteEvent.mutate()}>
-                        {t("common.delete")}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                {can.deleteEvent && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Trash2 className="h-4 w-4" /> {t("common.delete")}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{t("manageEvent.deleteDialogTitle")}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t("manageEvent.deleteDialogDesc")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteEvent.mutate()}>
+                          {t("common.delete")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </div>
 
-            {/* Publish (pricing plan) */}
-            {!ev.is_published && (
+            {/* Publish (pricing plan) — manage_plan is owner-only (plan
+                payments charge the owner's own card, see
+                EventAuthorization::CAPABILITIES) */}
+            {!ev.is_published && can.managePlan && (
               <div className="mt-8 rounded-2xl border border-primary/30 bg-primary/5 p-6">
                 <div className="flex items-center gap-2">
                   <Rocket className="h-5 w-5 text-primary" />
@@ -569,8 +709,9 @@ function ManageEvent() {
               </div>
             )}
 
-            {/* Change plan (published events only) */}
-            {ev.is_published && (
+            {/* Change plan (published events only) — owner-only, same
+                manage_plan reasoning as the Publish section above */}
+            {ev.is_published && can.managePlan && (
               <div className="mt-8 rounded-2xl border border-border bg-card p-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
@@ -766,52 +907,69 @@ function ManageEvent() {
             )}
 
             {/* Tabs */}
-            <Tabs defaultValue="branding" className="mt-10">
-              <TabsList
-                className={`grid w-full ${ev?.survey_id ? "max-w-3xl grid-cols-7" : "max-w-2xl grid-cols-6"}`}
-              >
-                <TabsTrigger value="branding">
-                  <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
-                </TabsTrigger>
-                <TabsTrigger value="participants">
-                  <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
-                </TabsTrigger>
-                <TabsTrigger value="checkin">
-                  <ScanLine className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCheckIn")}
-                </TabsTrigger>
-                <TabsTrigger value="results">
-                  <Trophy className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResults")}
-                </TabsTrigger>
-                {ev?.survey_id && (
+            <Tabs defaultValue={defaultTab} className="mt-10">
+              <TabsList className={`grid w-full ${tabGridClass}`}>
+                {tabVisibility.branding && (
+                  <TabsTrigger value="branding">
+                    <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.participants && (
+                  <TabsTrigger value="participants">
+                    <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.checkin && (
+                  <TabsTrigger value="checkin">
+                    <ScanLine className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCheckIn")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.results && (
+                  <TabsTrigger value="results">
+                    <Trophy className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResults")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.responses && (
                   <TabsTrigger value="responses">
                     <ClipboardList className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResponses")}
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="certificate">
-                  <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
-                </TabsTrigger>
-                <TabsTrigger value="activity">
-                  <History className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabActivity")}
-                </TabsTrigger>
+                {tabVisibility.certificate && (
+                  <TabsTrigger value="certificate">
+                    <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.activity && (
+                  <TabsTrigger value="activity">
+                    <History className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabActivity")}
+                  </TabsTrigger>
+                )}
+                {tabVisibility.members && (
+                  <TabsTrigger value="members">
+                    <UsersRound className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabMembers")}
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               {/* ── Participants ── */}
               <TabsContent value="participants" className="mt-6">
-                <div className="mb-3 flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportCsv}
-                    disabled={exportingCsv || participants.length === 0}
-                  >
-                    {exportingCsv ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                    {t("manageEvent.exportCsv")}
-                  </Button>
-                </div>
+                {can.exportParticipants && (
+                  <div className="mb-3 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportCsv}
+                      disabled={exportingCsv || participants.length === 0}
+                    >
+                      {exportingCsv ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {t("manageEvent.exportCsv")}
+                    </Button>
+                  </div>
+                )}
                 <div className="overflow-hidden rounded-2xl border border-border">
                   {participantsQuery.isLoading && (
                     <p className="p-5 text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -854,6 +1012,7 @@ function ManageEvent() {
                           </Badge>
                         )}
                         {ev.price_cents > 0 &&
+                          can.updateRegistration &&
                           (p.payment_status === "paid" ? (
                             <Button
                               variant="ghost"
@@ -879,34 +1038,36 @@ function ManageEvent() {
                               <Check className="h-4 w-4" /> {t("manageEvent.markPaid")}
                             </Button>
                           ))}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                {t("manageEvent.removeParticipantDialogTitle")}
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {t("manageEvent.removeParticipantDialogDesc", {
-                                  name: p.profile?.display_name ?? t("manageEvent.participantFallback"),
-                                })}
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                              <AlertDialogAction
-                                disabled={removeParticipant.isPending}
-                                onClick={() => removeParticipant.mutate(p.id)}
-                              >
-                                {t("common.remove")}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        {can.removeParticipant && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  {t("manageEvent.removeParticipantDialogTitle")}
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {t("manageEvent.removeParticipantDialogDesc", {
+                                    name: p.profile?.display_name ?? t("manageEvent.participantFallback"),
+                                  })}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                                <AlertDialogAction
+                                  disabled={removeParticipant.isPending}
+                                  onClick={() => removeParticipant.mutate(p.id)}
+                                >
+                                  {t("common.remove")}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -914,6 +1075,7 @@ function ManageEvent() {
               </TabsContent>
 
               {/* ── Check-in ── */}
+              {tabVisibility.checkin && (
               <TabsContent value="checkin" className="mt-6 space-y-6">
                 <CheckInScanner onCheckedIn={invalidateParticipants} />
 
@@ -981,8 +1143,10 @@ function ManageEvent() {
                   )}
                 </div>
               </TabsContent>
+              )}
 
               {/* ── Results ── */}
+              {tabVisibility.results && (
               <TabsContent value="results" className="mt-6">
                 <ResultsManager
                   eventId={eventId}
@@ -990,8 +1154,10 @@ function ManageEvent() {
                   onChanged={invalidateParticipants}
                 />
               </TabsContent>
+              )}
 
               {/* ── QR & Branding ── */}
+              {tabVisibility.branding && (
               <TabsContent value="branding" className="mt-6 space-y-6">
                 {/* QR code card */}
                 <div className="rounded-2xl border border-border bg-card p-6">
@@ -1081,8 +1247,10 @@ function ManageEvent() {
                   </Button>
                 </div>
               </TabsContent>
+              )}
 
               {/* ── Certificate of participation ── */}
+              {tabVisibility.certificate && (
               <TabsContent value="certificate" className="mt-6">
                 <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
                   <div className="flex items-center gap-2">
@@ -1110,9 +1278,10 @@ function ManageEvent() {
                   </Button>
                 </div>
               </TabsContent>
+              )}
 
               {/* ── Survey Responses ── */}
-              {ev?.survey_id && (
+              {tabVisibility.responses && (
                 <TabsContent value="responses" className="mt-6">
                   {surveyResponsesQuery.isLoading && (
                     <p className="text-sm text-muted-foreground">
@@ -1223,6 +1392,7 @@ function ManageEvent() {
               )}
 
               {/* ── Activity ── */}
+              {tabVisibility.activity && (
               <TabsContent value="activity" className="mt-6">
                 <div className="rounded-2xl border border-border bg-card">
                   {activityQuery.isLoading && (
@@ -1243,11 +1413,7 @@ function ManageEvent() {
                       }`}
                     >
                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        {a.action === "remove_participant" ? (
-                          <UserMinus className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <PencilLine className="h-4 w-4 text-muted-foreground" />
-                        )}
+                        <ActivityIcon activity={a} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="space-y-0.5 text-sm">
@@ -1266,6 +1432,18 @@ function ManageEvent() {
                   ))}
                 </div>
               </TabsContent>
+              )}
+
+              {/* ── Members ── */}
+              {tabVisibility.members && (
+                <TabsContent value="members" className="mt-6">
+                  <MembersTab
+                    eventId={eventId}
+                    canManage={role === "owner"}
+                    currentUserId={user?.id ?? ""}
+                  />
+                </TabsContent>
+              )}
             </Tabs>
           </>
         )}

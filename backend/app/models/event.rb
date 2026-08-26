@@ -6,6 +6,13 @@ class Event < ApplicationRecord
   has_many :event_plan_payments, dependent: :destroy
   has_many :waitlist_entries, -> { order(created_at: :asc) }, dependent: :destroy
   has_many :event_activities, dependent: :destroy
+  # The event's team — people other than #creator who help run it. See
+  # EventMembership. `dependent: :destroy` here only fires on a real
+  # `destroy` (which nothing in the app calls on Event); the soft-delete
+  # path, #discard!, deliberately leaves memberships alone — see there.
+  has_many :event_memberships, dependent: :destroy
+  has_many :members, through: :event_memberships, source: :user
+  has_many :event_invitations, dependent: :destroy
 
   accepts_nested_attributes_for :event_types,
     allow_destroy: true,
@@ -101,6 +108,14 @@ class Event < ApplicationRecord
   # that should still fire if something ever legitimately calls #destroy!
   # directly (e.g. a future admin console cleanup script); silently
   # redefining what #destroy! means would be its own footgun.
+  # Memberships and invitations are deliberately left untouched here (see
+  # event-membership-tickets.md's "Ticket A"). A discarded event is hidden,
+  # not gone, and if it's ever restored the organizer shouldn't have to
+  # rebuild their team and re-send every invitation. Nothing reads a
+  # membership without going through the event anyway, so a team attached
+  # to a hidden event grants no access to anything. Contrast the two lines
+  # below, which discard for a different reason entirely — capacity and
+  # "my registrations" listings, not concealment.
   def discard!
     transaction do
       registrations.kept.find_each(&:discard!)
