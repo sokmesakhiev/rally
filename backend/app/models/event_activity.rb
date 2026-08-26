@@ -12,10 +12,16 @@ class EventActivity < ApplicationRecord
   # participant, the price/date fields organizers most often change after
   # publishing — see Event#price_cents/#start_at/#end_at and
   # change-event-plan-tickets.md's "Ticket B" — and, as of event membership's
-  # Tickets D/E, sending/revoking a team invitation and a recipient
-  # accepting one). remove_member/change_member_role are Tickets F/H's
-  # concern, added when those land, not here.
-  ACTIONS = %w[remove_participant update_event_details invite_member revoke_invitation member_joined].freeze
+  # Tickets D/E/F, sending/revoking a team invitation, a recipient accepting
+  # one, and the owner (or a member themselves) changing a role or leaving
+  # the team). Ticket H, despite being "activity logging for membership
+  # changes", adds no new action names of its own — every one of them landed
+  # alongside the ticket that introduced the behaviour, per that ticket's own
+  # "cheap, do it alongside D–F rather than after" note.
+  ACTIONS = %w[
+    remove_participant update_event_details
+    invite_member revoke_invitation member_joined remove_member change_member_role
+  ].freeze
 
   belongs_to :event
   belongs_to :actor, class_name: "User"

@@ -103,6 +103,14 @@ Rails.application.routes.draw do
       get  "invitations/:token",        to: "invitations#show"
       post "invitations/:token/accept", to: "invitations#accept"
 
+      # Managing an event's already-accepted team (issue #280) — see
+      # EventMembership. Listing is open to any member; role changes and
+      # removing someone else are owner-only, but any member may remove
+      # themselves (leave).
+      get    "events/:event_id/members",     to: "event_members#index"
+      patch  "events/:event_id/members/:id", to: "event_members#update"
+      delete "events/:event_id/members/:id", to: "event_members#destroy"
+
       # File uploads
       post "uploads", to: "uploads#create"
 
