@@ -89,6 +89,47 @@ RSpec.describe "Rate limiting", type: :request, rack_attack: true do
     end
   end
 
+  describe "uploads throttling" do
+    let(:tiny_png) do
+      # 1x1 transparent PNG — small enough to embed inline rather than
+      # needing a spec/fixtures file (see rack_attack.rb's "uploads/user"
+      # throttle, added for issue #282).
+      bytes = Base64.decode64(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      )
+      file = Tempfile.new(["tiny", ".png"], binmode: true)
+      file.write(bytes)
+      file.rewind
+      Rack::Test::UploadedFile.new(file.path, "image/png")
+    end
+
+    it "throttles by account even when the request IPs differ, once the per-user limit is exceeded" do
+      user = create(:user)
+      headers = auth_headers(user)
+
+      # 30 per 10 minutes keyed on user id. Vary the IP each time so the
+      # per-IP throttle can't be what's tripping — same reasoning as the
+      # signin/email spec above, applied to "uploads/user".
+      31.times do |i|
+        post "/api/v1/uploads",
+             params: { file: tiny_png, type: "avatar" },
+             headers: headers.merge("REMOTE_ADDR" => "203.0.113.#{i + 1}")
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(json["code"]).to eq("rate_limited")
+    end
+
+    it "lets a normal number of uploads through untouched" do
+      user = create(:user)
+
+      post "/api/v1/uploads", params: { file: tiny_png, type: "avatar" }, headers: auth_headers(user)
+
+      expect(response).to have_http_status(:created)
+      expect(json["url"]).to be_present
+    end
+  end
+
   describe "payments throttling" do
     it "returns 429 after 30 payment requests from one IP in 10 minutes" do
       # Covers both the POST .../payments and GET /payments/:id shapes under
