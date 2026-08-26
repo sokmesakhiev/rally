@@ -12,10 +12,10 @@ class EventActivity < ApplicationRecord
   # participant, the price/date fields organizers most often change after
   # publishing — see Event#price_cents/#start_at/#end_at and
   # change-event-plan-tickets.md's "Ticket B" — and, as of event membership's
-  # Ticket D, sending/revoking a team invitation). member_joined/
-  # remove_member/change_member_role are Tickets E/F/H's concern, added when
-  # those land, not here.
-  ACTIONS = %w[remove_participant update_event_details invite_member revoke_invitation].freeze
+  # Tickets D/E, sending/revoking a team invitation and a recipient
+  # accepting one). remove_member/change_member_role are Tickets F/H's
+  # concern, added when those land, not here.
+  ACTIONS = %w[remove_participant update_event_details invite_member revoke_invitation member_joined].freeze
 
   belongs_to :event
   belongs_to :actor, class_name: "User"
