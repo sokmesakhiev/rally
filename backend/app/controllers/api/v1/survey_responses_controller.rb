@@ -6,7 +6,7 @@ module Api
       # GET /api/v1/events/:event_id/survey_responses
       # Organizer sees all answers, grouped by registration
       def index
-        event = current_user.events.find(params[:event_id])
+        event = find_authorized_event!(params[:event_id], :view_survey_responses)
         survey = event.survey
 
         unless survey

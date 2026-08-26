@@ -26,11 +26,7 @@ module Api
       def update
         registration = Registration.find(params[:id])
         event = registration.event
-
-        unless event.creator_id == current_user.id
-          render json: { error: "Forbidden" }, status: :forbidden
-          return
-        end
+        return unless authorize_event!(event, :manage_results)
 
         validate_params_with_schema(ResultUpdateRequestSchema) do |validated_params|
           result = Result.find_or_initialize_by(registration: registration)
@@ -48,7 +44,7 @@ module Api
       # from a CSV (email,finish_time). See Results::ImportCsv for the
       # per-row parsing/matching and why a bad row doesn't abort the rest.
       def import
-        event = current_user.events.find(params[:event_id])
+        event = find_authorized_event!(params[:event_id], :manage_results)
         file = params[:file]
 
         unless file.is_a?(ActionDispatch::Http::UploadedFile)
