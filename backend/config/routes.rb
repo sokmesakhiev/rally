@@ -92,6 +92,13 @@ Rails.application.routes.draw do
       # Survey responses (organizer reads participant answers)
       get "events/:event_id/survey_responses", to: "survey_responses#index"
 
+      # Event membership invitations (owner-only send/list/revoke — see
+      # EventInvitation/EventMembership). Accepting a token is a separate,
+      # public route (issue #276), not added here yet.
+      get    "events/:event_id/invitations",     to: "event_invitations#index"
+      post   "events/:event_id/invitations",     to: "event_invitations#create"
+      delete "events/:event_id/invitations/:id", to: "event_invitations#destroy"
+
       # File uploads
       post "uploads", to: "uploads#create"
 

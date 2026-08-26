@@ -1,0 +1,17 @@
+<p>Hi,</p>
+
+<p><strong><%= @inviter.profile&.display_name.presence || @inviter.email %></strong> has invited you to help run
+<strong><%= @event.title %></strong> on Rally as a <strong><%= @role_label %></strong>.</p>
+
+<% if @event.start_at.present? %>
+  <p><strong>When:</strong> <%= @event.start_at.strftime("%A, %B %-d, %Y at %-I:%M %p") %></p>
+<% end %>
+
+<p><a href="<%= @accept_url %>"><%= @accept_url %></a></p>
+
+<p>If you don't have a Rally account yet, you'll be able to create one from that link. This invitation expires on
+<%= @invitation.expires_at.strftime("%A, %B %-d, %Y") %>.</p>
+
+<p>If you weren't expecting this, you can safely ignore this email.</p>
+
+<p>— The Rally team</p>
