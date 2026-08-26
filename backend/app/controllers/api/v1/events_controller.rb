@@ -4,12 +4,18 @@ module Api
       before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish, :activity ]
       # #show stays public (no bare authenticate_user!) — anyone can view a
       # published event page without an account. This just populates
-      # current_user *when* a valid token is present, so event_role_for can
-      # tell the frontend "owner"/"manager"/etc. for the manage-event page's
-      # role-aware chrome (see event-membership-tickets.md, Ticket G) without
-      # gating the endpoint itself. current_user simply stays nil for an
-      # anonymous viewer, same as before this existed.
-      before_action :authenticate_user_optional!, only: [ :show ]
+      # current_user *when* a valid, live token is present, so event_role_for
+      # can tell the frontend "owner"/"manager"/etc. for the manage-event
+      # page's role-aware chrome (see event-membership-tickets.md, Ticket G)
+      # without gating the endpoint itself. Uses identify_current_user!, not
+      # authenticate_user_optional! — the latter deliberately still errors
+      # for a suspended/deleted account's token (right for guest checkout,
+      # where that's a real action being blocked), which would wrongly turn
+      # "browsing a public event page" into a 403/401 for anyone whose
+      # account status changed after their browser last got a fresh token.
+      # current_user simply stays nil for an anonymous viewer or a
+      # suspended/deleted one, same as before this field existed.
+      before_action :identify_current_user!, only: [ :show ]
       before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
       before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
 

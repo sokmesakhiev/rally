@@ -322,6 +322,39 @@ RSpec.describe "Events API", type: :request do
       expect(json["event"]["role"]).to be_nil
     end
 
+    # Regression test: a suspended/deleted account's browser still holds its
+    # old JWT and sends it on every request, including this public one (see
+    # api-client.ts). #show must never turn that into a block — it isn't
+    # gated on sign-in status at all, unlike the guest-checkout endpoints
+    # authenticate_user_optional! exists for. See
+    # ApplicationController#identify_current_user!.
+    it "still returns the event (as if anonymous) for a suspended user's stale token" do
+      # Suspension is checked per-request (authenticate_user!/
+      # authenticate_user_optional!'s own comments), not at sign-in — so
+      # signing in after suspending still hands back a token, exactly
+      # mirroring the real sequence of "token issued while active, account
+      # suspended later, browser still holds the old token".
+      suspended = create(:user)
+      suspended.suspend!
+      headers = auth_headers(suspended)
+
+      get "/api/v1/events/#{event.id}", headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["role"]).to be_nil
+    end
+
+    it "still returns the event (as if anonymous) for a deleted account's stale token" do
+      deleted = create(:user)
+      headers = auth_headers(deleted)
+      deleted.discard!
+
+      get "/api/v1/events/#{event.id}", headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["role"]).to be_nil
+    end
+
     it "returns role: owner for the event's creator" do
       get "/api/v1/events/#{event.id}", headers: auth_headers(event.creator), as: :json
       expect(json["event"]["role"]).to eq("owner")

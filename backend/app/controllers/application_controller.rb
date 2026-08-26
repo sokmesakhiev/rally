@@ -83,6 +83,35 @@ class ApplicationController < ActionController::API
     end
   end
 
+  # For genuinely public endpoints (no sign-in required at all, e.g.
+  # Api::V1::EventsController#show) that still want to know *who's asking*
+  # when a token happens to be present — so they can tag a response with
+  # "your role on this event", say — without that ever turning into a block.
+  #
+  # This is deliberately NOT authenticate_user_optional! with the error
+  # branches removed by accident — it's a different contract. That method
+  # exists for guest checkout, where "signed in but suspended" is a real,
+  # intentional account-status block on an action (registering). A public
+  # page was never gated on sign-in status in the first place, so a
+  # suspended/deleted account's stale token should produce exactly what an
+  # anonymous visitor gets, not a 403/401 for a page they never had to be
+  # logged in to see. current_user simply stays nil in every failure case —
+  # missing token, garbage token, or a valid token for an account that can
+  # no longer act — with nothing ever rendered here.
+  def identify_current_user!
+    token = extract_token
+    return unless token
+
+    payload = JsonWebToken.decode(token)
+    user = User.find(payload[:user_id])
+    return if user.suspended? || user.discarded?
+
+    @current_user = user
+    set_sentry_user
+  rescue JWT::DecodeError, ActiveRecord::RecordNotFound
+    nil # garbage/stale/expired token on a page that was never gated on auth
+  end
+
   # For Api::V1::Admin controllers — see Api::V1::Admin::BaseController.
   def require_admin!
     return if current_user&.admin?
