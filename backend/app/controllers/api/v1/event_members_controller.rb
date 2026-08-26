@@ -72,12 +72,10 @@ module Api
         removed_user_id = membership.user_id
         removed_user_name = membership.user.profile&.display_name
         removed_user_email = membership.user.email
-
         membership.destroy!
 
         EventActivity.log!(
           event: @event, actor: current_user, action: "remove_member",
-
           metadata: {
             user_id: removed_user_id,
             member_name: removed_user_name,
