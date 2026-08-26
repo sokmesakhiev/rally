@@ -11,6 +11,12 @@ class User < ApplicationRecord
   has_many :registrations, dependent: :destroy
   has_many :surveys, foreign_key: :creator_id, dependent: :destroy
   has_many :waitlist_entries, dependent: :destroy
+  # Events this user helps run but did NOT create — see EventMembership.
+  # Distinct from `events` above (which is creator_id): an organizer's own
+  # events and the ones they've been invited onto are different lists, and
+  # conflating them would let a member's dashboard imply ownership.
+  has_many :event_memberships, dependent: :destroy
+  has_many :member_events, through: :event_memberships, source: :event
 
   # Tokens are single-use, random, and time-boxed — plain-text storage is fine
   # here (unlike passwords) since they're low-value, short-lived, and unique.
