@@ -1,10 +1,11 @@
 require "rails_helper"
 
-# Unit spec for the concern itself. The per-endpoint behaviour it replaced is
-# already covered by the request specs (events_spec, registrations_spec,
-# refunds_spec, results_spec, waitlist_entries_spec, survey_responses_spec,
-# event_plan_payments_spec) — those passing unchanged is the real proof that
-# this refactor changed nothing.
+# Unit spec for the concern itself. The exhaustive role x capability matrix
+# lives here rather than duplicated per-controller; the request specs
+# (events_spec, registrations_spec, refunds_spec, results_spec,
+# waitlist_entries_spec, survey_responses_spec, event_plan_payments_spec) only
+# need to prove each endpoint actually calls through to this concern with the
+# right capability — not re-derive the whole matrix themselves.
 RSpec.describe EventAuthorization do
   # Minimal host that satisfies the concern's contract: it needs
   # #current_user and #render. Deliberately not a real controller — this is
@@ -90,20 +91,83 @@ RSpec.describe EventAuthorization do
       end
     end
 
-    # This is the assertion that pins "no behaviour change". Roles exist and
-    # resolve, but grant nothing until #278 edits CAPABILITIES — so every
-    # endpoint still answers exactly as it did before this refactor.
-    it "grants a member nothing yet, whatever their role" do
+    # The full role x capability matrix, both allow and deny, driven off the
+    # real CAPABILITIES data rather than a second hardcoded copy of it — this
+    # is what actually exercises "every capability, every role" per issue
+    # #278's acceptance criteria; the more specific examples below pin the
+    # policy calls (which capabilities each role does/doesn't get) that this
+    # data-driven pass alone wouldn't make legible on its own.
+    it "grants each member exactly the capabilities their role has in CAPABILITIES" do
       EventMembership::ROLES.each do |role|
         member = create(:user)
         create(:event_membership, event: event, user: member, role: role)
         host.current_user = member
 
-        described_class::CAPABILITIES.each_key do |capability|
-          expect(host.event_permits?(event, capability)).to be(false),
-            "expected #{role} to be denied :#{capability} until role gating lands"
+        described_class::CAPABILITIES.each do |capability, allowed_roles|
+          expected = allowed_roles.include?(role.to_sym)
+          expect(host.event_permits?(event, capability)).to be(expected),
+            "expected #{role} to be #{expected ? 'allowed' : 'denied'} :#{capability}"
         end
       end
+    end
+
+    it "grants Manager everything except plan payments, unpublish, delete, and member management" do
+      manager = create(:user)
+      create(:event_membership, event: event, user: manager, role: "manager")
+      host.current_user = manager
+
+      owner_only = %i[manage_plan unpublish_event delete_event manage_members]
+      (described_class::CAPABILITIES.keys - owner_only).each do |capability|
+        expect(host.event_permits?(event, capability)).to be(true),
+          "expected manager to be allowed :#{capability}"
+      end
+      owner_only.each do |capability|
+        expect(host.event_permits?(event, capability)).to be(false),
+          "expected manager to be denied :#{capability}"
+      end
+    end
+
+    it "grants Check-in only viewing plus check-in, not write actions or exports" do
+      check_in_staff = create(:user)
+      create(:event_membership, event: event, user: check_in_staff, role: "check_in")
+      host.current_user = check_in_staff
+
+      allowed = %i[view_event view_participants check_in]
+      allowed.each do |capability|
+        expect(host.event_permits?(event, capability)).to be(true),
+          "expected check_in to be allowed :#{capability}"
+      end
+      (described_class::CAPABILITIES.keys - allowed).each do |capability|
+        expect(host.event_permits?(event, capability)).to be(false),
+          "expected check_in to be denied :#{capability}"
+      end
+    end
+
+    it "grants Viewer only read capabilities, never check-in or any write action" do
+      viewer = create(:user)
+      create(:event_membership, event: event, user: viewer, role: "viewer")
+      host.current_user = viewer
+
+      allowed = %i[view_event view_participants view_waitlist view_survey_responses view_activity]
+      allowed.each do |capability|
+        expect(host.event_permits?(event, capability)).to be(true),
+          "expected viewer to be allowed :#{capability}"
+      end
+      (described_class::CAPABILITIES.keys - allowed).each do |capability|
+        expect(host.event_permits?(event, capability)).to be(false),
+          "expected viewer to be denied :#{capability}"
+      end
+    end
+
+    it "immediately denies access once a membership is revoked (destroyed), no caching" do
+      member = create(:user)
+      membership = create(:event_membership, event: event, user: member, role: "manager")
+      host.current_user = member
+      expect(host.event_permits?(event, :update_event)).to be(true)
+
+      membership.destroy!
+
+      expect(host.event_permits?(event, :update_event)).to be(false)
     end
 
     it "raises on an unknown capability rather than silently denying" do
@@ -162,8 +226,16 @@ RSpec.describe EventAuthorization do
   end
 
   describe "CAPABILITIES" do
-    it "is owner-only across the board while role gating is pending" do
-      expect(described_class::CAPABILITIES.values.flatten.uniq).to eq([ :owner ])
+    it "grants :owner every capability — the owner can always do everything" do
+      described_class::CAPABILITIES.each do |capability, allowed_roles|
+        expect(allowed_roles).to include(:owner), "expected :owner to be allowed :#{capability}"
+      end
+    end
+
+    it "keeps plan payments, unpublish, delete, and member management owner-only" do
+      %i[manage_plan unpublish_event delete_event manage_members].each do |capability|
+        expect(described_class::CAPABILITIES.fetch(capability)).to eq([ :owner ])
+      end
     end
 
     it "only ever references :owner or a real EventMembership role" do
