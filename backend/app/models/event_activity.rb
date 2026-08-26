@@ -8,13 +8,14 @@
 # (nothing should ever mutate a past entry), no model-level destroy guard
 # since nothing in the app calls #destroy on it.
 class EventActivity < ApplicationRecord
-  # Kept intentionally narrow — only the two gaps actually asked for
-  # (removing a participant, and the price/date fields organizers most
-  # often change after publishing — see Event#price_cents/#start_at/#end_at
-  # and change-event-plan-tickets.md's "Ticket B" for why those two in
-  # particular matter once people may already be registered). Add more
-  # here if broader event-activity coverage is wanted later.
-  ACTIONS = %w[remove_participant update_event_details].freeze
+  # Kept intentionally narrow — only the gaps actually asked for (removing a
+  # participant, the price/date fields organizers most often change after
+  # publishing — see Event#price_cents/#start_at/#end_at and
+  # change-event-plan-tickets.md's "Ticket B" — and, as of event membership's
+  # Ticket D, sending/revoking a team invitation). member_joined/
+  # remove_member/change_member_role are Tickets E/F/H's concern, added when
+  # those land, not here.
+  ACTIONS = %w[remove_participant update_event_details invite_member revoke_invitation].freeze
 
   belongs_to :event
   belongs_to :actor, class_name: "User"
