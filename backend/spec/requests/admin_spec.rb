@@ -36,6 +36,13 @@ RSpec.describe "Admin API", type: :request do
       post "/api/v1/admin/events/#{event.id}/unpublish", headers: auth_headers(regular), as: :json
       expect(response).to have_http_status(:not_found)
 
+      post "/api/v1/admin/events/#{event.id}/freeze",
+           params: { reason: "Reported" }, headers: auth_headers(regular), as: :json
+      expect(response).to have_http_status(:not_found)
+
+      post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(regular), as: :json
+      expect(response).to have_http_status(:not_found)
+
       delete "/api/v1/admin/events/#{event.id}",           headers: auth_headers(regular), as: :json
       expect(response).to have_http_status(:not_found)
     end
@@ -394,6 +401,142 @@ RSpec.describe "Admin API", type: :request do
       post "/api/v1/admin/events/#{SecureRandom.uuid}/unpublish", headers: auth_headers(admin), as: :json
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  # ── POST /api/v1/admin/events/:id/freeze ─────────────────────────────────────
+  # See event-freeze-and-terms-tickets.md's Ticket B — the moderation lever
+  # stronger than #unpublish above: not reversible by the organizer at all.
+  describe "POST /api/v1/admin/events/:id/freeze" do
+    it "freezes the event, unpublishes it, and stores the reason" do
+      event = create(:event, is_published: true)
+
+      post "/api/v1/admin/events/#{event.id}/freeze",
+           params: { reason: "Reported as a scam" },
+           headers: auth_headers(admin),
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["frozen"]).to be(true)
+      expect(json["event"]["freeze_reason"]).to eq("Reported as a scam")
+      expect(json["event"]["is_published"]).to be(false)
+    end
+
+    it "requires a reason — rejects a blank one before touching the event" do
+      event = create(:event, is_published: true)
+
+      post "/api/v1/admin/events/#{event.id}/freeze",
+           params: { reason: "" },
+           headers: auth_headers(admin),
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(event.reload.frozen?).to be(false)
+    end
+
+    it "requires a reason — rejects a missing one" do
+      event = create(:event)
+
+      post "/api/v1/admin/events/#{event.id}/freeze", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(event.reload.frozen?).to be(false)
+    end
+
+    it "returns 404 for an unknown event" do
+      post "/api/v1/admin/events/#{SecureRandom.uuid}/freeze",
+           params: { reason: "Reported" },
+           headers: auth_headers(admin),
+           as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "freezing an already-frozen event overwrites the reason rather than erroring" do
+      event = create(:event)
+      event.freeze!(reason: "Original reason")
+
+      post "/api/v1/admin/events/#{event.id}/freeze",
+           params: { reason: "Updated reason" },
+           headers: auth_headers(admin),
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload.freeze_reason).to eq("Updated reason")
+    end
+
+    it "records a queryable AdminAction for the freeze" do
+      event = create(:event)
+
+      expect {
+        post "/api/v1/admin/events/#{event.id}/freeze",
+             params: { reason: "Reported as a scam" },
+             headers: auth_headers(admin),
+             as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      action = AdminAction.last
+      expect(action.admin_id).to eq(admin.id)
+      expect(action.action).to eq("freeze_event")
+      expect(action.target).to eq(event)
+    end
+  end
+
+  # ── POST /api/v1/admin/events/:id/unfreeze ───────────────────────────────────
+  describe "POST /api/v1/admin/events/:id/unfreeze" do
+    it "clears the freeze without re-publishing the event" do
+      event = create(:event, is_published: true)
+      event.freeze!(reason: "Reported as a scam")
+
+      post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["frozen"]).to be(false)
+      expect(json["event"]["freeze_reason"]).to be_nil
+      expect(json["event"]["is_published"]).to be(false)
+    end
+
+    it "is a harmless no-op on an event that was never frozen" do
+      event = create(:event)
+
+      post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["frozen"]).to be(false)
+    end
+
+    it "returns 404 for an unknown event" do
+      post "/api/v1/admin/events/#{SecureRandom.uuid}/unfreeze", headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "records a queryable AdminAction for the unfreeze" do
+      event = create(:event)
+      event.freeze!(reason: "Reported")
+
+      expect {
+        post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(admin), as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      action = AdminAction.last
+      expect(action.action).to eq("unfreeze_event")
+      expect(action.target).to eq(event)
+    end
+
+    it "restores normal authorization once unfrozen — the owner can update again" do
+      owner = create(:user)
+      event = create(:event, creator: owner)
+      event.freeze!(reason: "Reported")
+
+      post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(admin), as: :json
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { title: "New Title" } },
+            headers: auth_headers(owner),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
     end
   end
 
