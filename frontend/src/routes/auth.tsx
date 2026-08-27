@@ -36,7 +36,7 @@ const passwordSchema = z.string().min(8).max(72);
 function AuthPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { user, loading: authLoading, refresh } = useAuth();
+  const { user, loading: authLoading, refresh, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,12 +44,24 @@ function AuthPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // See event-freeze-and-terms-tickets.md's Ticket H. A brand-new Google
+  // account never sees the sign-up form's checkbox, so its
+  // terms_accepted_at comes back null — this gate is shown once, right
+  // after that credential exchange, before navigating into the dashboard.
+  // A returning Google user (terms_accepted_at already set) never sees it.
+  const [showTermsGate, setShowTermsGate] = useState(false);
+  const [termsGateAccepted, setTermsGateAccepted] = useState(false);
+  const [termsGateLoading, setTermsGateLoading] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && user) {
+    // `!showTermsGate` matters here: right after a brand-new Google sign-in,
+    // `refresh()` already makes `user` truthy, which would otherwise fire
+    // this redirect and blow straight past the acceptance gate below before
+    // its own navigate call ever runs.
+    if (!authLoading && user && !showTermsGate) {
       navigate({ to: "/dashboard", replace: true });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, showTermsGate]);
 
   const validate = () => {
     const e = emailSchema.safeParse(email);
@@ -125,8 +137,14 @@ function AuthPage() {
   const handleGoogleCredential = async (idToken: string) => {
     setGoogleLoading(true);
     try {
-      await authApi.google(idToken);
+      const res = await authApi.google(idToken);
       await refresh();
+      if (!res.user.terms_accepted_at) {
+        // Brand-new Google account — hold off on navigating until they've
+        // seen the gate below and accepted.
+        setShowTermsGate(true);
+        return;
+      }
       toast.success(t("auth.welcomeBack"));
       navigate({ to: "/dashboard", replace: true });
     } catch (e: any) {
@@ -134,6 +152,32 @@ function AuthPage() {
     } finally {
       setGoogleLoading(false);
     }
+  };
+
+  const handleAcceptTermsGate = async () => {
+    if (!termsGateAccepted) return;
+    setTermsGateLoading(true);
+    try {
+      await authApi.acceptTerms();
+      await refresh();
+      setShowTermsGate(false);
+      toast.success(t("auth.welcomeBack"));
+      navigate({ to: "/dashboard", replace: true });
+    } catch (e: any) {
+      toast.error(e.message ?? t("common.genericError"));
+    } finally {
+      setTermsGateLoading(false);
+    }
+  };
+
+  // Escape hatch for someone who doesn't want to accept right now — signs
+  // them back out rather than trapping them on this screen. Their account
+  // still exists with terms_accepted_at nil; they'll see this gate again
+  // next time they sign in with Google.
+  const handleDeclineTermsGate = () => {
+    signOut();
+    setShowTermsGate(false);
+    setTermsGateAccepted(false);
   };
 
   return (
@@ -321,6 +365,57 @@ function AuthPage() {
           </p>
         </div>
       </div>
+
+      {/* Terms of Service acceptance gate for a brand-new Google sign-in —
+          see event-freeze-and-terms-tickets.md's Ticket H. Not a Dialog
+          primitive (no such shadcn component exists in this repo yet) — a
+          plain overlay is enough for one non-dismissable prompt, and this
+          deliberately has no close/outside-click dismissal, only "Accept"
+          or "Sign out instead". */}
+      {showTermsGate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <h2 className="font-display text-lg font-bold">{t("auth.termsGate.title")}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.termsGate.body")}</p>
+
+            <div className="mt-4 flex items-start gap-2">
+              <Checkbox
+                id="terms-gate"
+                checked={termsGateAccepted}
+                onCheckedChange={(checked) => setTermsGateAccepted(checked === true)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="terms-gate" className="text-sm font-normal leading-snug">
+                {t("auth.fields.termsPrefix")}{" "}
+                <Link to="/terms" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                  {t("auth.fields.termsLink")}
+                </Link>{" "}
+                {t("auth.fields.termsAnd")}{" "}
+                <Link to="/privacy" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                  {t("auth.fields.privacyLink")}
+                </Link>
+              </Label>
+            </div>
+
+            <Button
+              variant="hero"
+              className="mt-4 w-full"
+              disabled={!termsGateAccepted || termsGateLoading}
+              onClick={handleAcceptTermsGate}
+            >
+              {termsGateLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("auth.termsGate.accept")}
+            </Button>
+            <button
+              type="button"
+              onClick={handleDeclineTermsGate}
+              className="mt-3 w-full text-center text-xs text-muted-foreground hover:text-foreground"
+            >
+              {t("auth.termsGate.decline")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

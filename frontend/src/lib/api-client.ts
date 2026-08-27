@@ -157,6 +157,13 @@ export interface ApiUser {
   /** Drives whether the admin nav link renders. NOT a security boundary —
    * every admin endpoint re-checks server-side. */
   admin?: boolean;
+  /** Null means this account has never accepted the Terms of Service — true
+   * for a brand-new Google sign-in (that flow never shows a checkbox, unlike
+   * email/password signup). Drives the one-time acceptance interstitial in
+   * auth.tsx's handleGoogleCredential — see
+   * event-freeze-and-terms-tickets.md's Ticket H. Not a security boundary;
+   * nothing server-side is blocked on it. */
+  terms_accepted_at: string | null;
   created_at: string;
 }
 
@@ -388,6 +395,12 @@ export const authApi = {
 
   async me() {
     return api.get<{ user: ApiUser }>("/auth/me");
+  },
+
+  /** See ApiUser.terms_accepted_at's doc comment — the Google sign-in
+   * counterpart to signup's terms checkbox. Idempotent server-side. */
+  async acceptTerms() {
+    return api.post<{ user: ApiUser }>("/auth/accept_terms");
   },
 
   /** idToken is the credential JWT from Google Identity Services' sign-in
