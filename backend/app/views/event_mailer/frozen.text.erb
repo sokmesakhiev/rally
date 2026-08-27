@@ -1,0 +1,11 @@
+Hi<%= @creator.profile&.display_name.present? ? " #{@creator.profile.display_name}" : "" %>,
+
+Your event <%= @event.title %> has been frozen by the Rally team and is no longer visible to the public.
+
+Reason: <%= @reason %>
+
+This is different from unpublishing an event yourself — a freeze can only be reversed by the Rally team, so please don't attempt to publish, edit, or otherwise change this event in the meantime.
+
+If you believe this decision was made in error, please reply to this email so we can look into it.
+
+— The Rally team
