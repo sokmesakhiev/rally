@@ -73,14 +73,16 @@ module EventAuthorization
     manage_members: [ :owner ]
   }.freeze
 
-  # Capabilities that stay usable on a frozen event (event-freeze-and-terms-tickets.md's
-  # Ticket A) — everything else is denied to every role, including :owner,
-  # the moment event.frozen? is true. The point of a freeze is that it isn't
-  # the owner's call to reverse or work around; letting them keep editing,
-  # unpublishing (to "clean up" before anyone notices), or managing the team
-  # would defeat that. Read access is preserved so the owner can still see
-  # the event and the reason it was frozen.
-  FROZEN_ALLOWED_CAPABILITIES = %i[
+  # Capabilities that stay usable on a suspended event (event-freeze-and-terms-tickets.md's
+  # Ticket A — the columns/methods behind this are named to match
+  # User#suspend!, see Event#suspend!'s comment) — everything else is denied
+  # to every role, including :owner, the moment event.suspended? is true. The
+  # point of a suspension is that it isn't the owner's call to reverse or
+  # work around; letting them keep editing, unpublishing (to "clean up"
+  # before anyone notices), or managing the team would defeat that. Read
+  # access is preserved so the owner can still see the event and the reason
+  # it was suspended.
+  SUSPENDED_ALLOWED_CAPABILITIES = %i[
     view_event view_participants view_waitlist view_survey_responses view_activity
   ].freeze
 
@@ -106,7 +108,7 @@ module EventAuthorization
     return false if role.nil?
     return false unless allowed.include?(role)
 
-    !event.frozen? || FROZEN_ALLOWED_CAPABILITIES.include?(capability)
+    !event.suspended? || SUSPENDED_ALLOWED_CAPABILITIES.include?(capability)
   end
 
   # 403-style gate, for endpoints that already have the event in hand

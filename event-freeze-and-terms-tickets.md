@@ -2,6 +2,14 @@
 
 Scoped 2026-08-27 after auditing the request against the current codebase.
 
+> **Addendum (2026-08-29):** "freeze"/"frozen" terminology throughout this doc, the tickets
+> it describes, and all shipped code has since been renamed to "suspend"/"suspended" — chosen
+> to mirror the pre-existing `User#suspend!`/`#unsuspend!` naming for the same
+> admin-only-reversible lock concept, and to avoid two different words for the same idea across
+> the app. This doc's body is left as originally written (a point-in-time planning record); the
+> ticket lettering/numbering and file citations below still refer to "freeze" by name where they
+> cite this file, but the actual columns, methods, routes, and UI copy are all "suspend" now.
+
 **The ask, in two parts:**
 
 1. Today, `Admin::EventsController#unpublish` is the only moderation lever stronger than
