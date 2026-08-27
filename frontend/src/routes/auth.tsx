@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { authApi } from "@/lib/api-client";
@@ -40,6 +41,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -63,11 +65,19 @@ function AuthPage() {
     return true;
   };
 
-  // Sign-up only — sign-in has no confirm-password field to check.
+  // Sign-up only — sign-in has no confirm-password field or terms checkbox
+  // to check. The backend rejects signup without terms_accepted: true
+  // regardless (see event-freeze-and-terms-tickets.md's Ticket F) — this is
+  // just the same "catch the obvious case before a round-trip" pattern the
+  // rest of this function already uses for email/password.
   const validateSignUp = () => {
     if (!validate()) return false;
     if (password !== confirmPassword) {
       toast.error(t("auth.errors.passwordMismatch"));
+      return false;
+    }
+    if (!termsAccepted) {
+      toast.error(t("auth.errors.termsNotAccepted"));
       return false;
     }
     return true;
@@ -101,7 +111,7 @@ function AuthPage() {
       // — the backend only enforces verification once RECAPTCHA_SECRET_KEY
       // is also set, so signup still works either way.
       const recaptchaToken = await getRecaptchaToken("signup");
-      await authApi.signup(email, password, displayName.trim() || undefined, recaptchaToken);
+      await authApi.signup(email, password, termsAccepted, displayName.trim() || undefined, recaptchaToken);
       await refresh();
       toast.success(t("auth.accountCreated"));
       navigate({ to: "/dashboard", replace: true });
@@ -277,6 +287,24 @@ function AuthPage() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder={t("auth.fields.passwordPlaceholder")}
                   />
+                </div>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="terms-up"
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="terms-up" className="text-sm font-normal leading-snug">
+                    {t("auth.fields.termsPrefix")}{" "}
+                    <Link to="/terms" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                      {t("auth.fields.termsLink")}
+                    </Link>{" "}
+                    {t("auth.fields.termsAnd")}{" "}
+                    <Link to="/privacy" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                      {t("auth.fields.privacyLink")}
+                    </Link>
+                  </Label>
                 </div>
                 <Button type="submit" variant="hero" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
