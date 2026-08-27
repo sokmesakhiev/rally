@@ -38,6 +38,13 @@ module UserPayload
         # security boundary — every admin endpoint checks server-side via
         # require_admin! regardless of what the client believes.
         admin: user.admin?,
+        # Null means this account has never accepted the Terms of Service —
+        # true for a brand-new Google sign-in (see
+        # User.find_or_create_from_google!) since that flow never shows a
+        # checkbox. Drives the frontend's one-time acceptance interstitial
+        # (see event-freeze-and-terms-tickets.md's Ticket H) — not a security
+        # boundary, just a UX prompt; nothing server-side is blocked on it.
+        terms_accepted_at: user.terms_accepted_at,
         created_at: user.created_at
       }
     }

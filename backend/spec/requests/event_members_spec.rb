@@ -190,7 +190,7 @@ RSpec.describe "Event Members API", type: :request do
       expect(activity.metadata["user_id"]).to eq(member.id)
       expect(activity.metadata["member_name"]).to eq("Dara Kim")
       expect(activity.metadata["member_email"]).to eq(member.email)
-      expect(activity.metadata["self_removal"]).to be(false)
+     expect(activity.metadata["self_removal"]).to be(false)
     end
 
     it "lets a member remove themselves (leave)" do

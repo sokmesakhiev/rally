@@ -52,6 +52,47 @@ module Api
           render json: { error: "Event not found" }, status: :not_found
         end
 
+        # POST /api/v1/admin/events/:id/freeze
+        # The stronger moderation lever — see event-freeze-and-terms-tickets.md's
+        # Ticket A/B. Unlike #unpublish, this is NOT reversible by the
+        # organizer: EventAuthorization#event_permits? denies every mutating
+        # capability (including the owner's own unpublish/update/republish)
+        # while frozen_at is set, so only #unfreeze below can undo it. Freezing
+        # an already-frozen event is allowed and simply overwrites the reason
+        # — an admin refining their note shouldn't have to unfreeze first.
+        #
+        # Emails the owner once frozen (EventMailer#frozen, unconditional —
+        # see its own comment for why this isn't gated behind a notify_*
+        # opt-out) so they find out why, not just that their event vanished
+        # from public listings.
+        def freeze
+          event = Event.find(params[:id])
+
+          validate_params_with_schema(AdminFreezeEventRequestSchema) do |validated_params|
+            event.freeze!(reason: validated_params[:reason])
+            log_admin_action("freeze_event", event)
+            EventMailer.frozen(event).deliver_later
+
+            render json: { event: event_json(event.reload) }
+          end
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Event not found" }, status: :not_found
+        end
+
+        # POST /api/v1/admin/events/:id/unfreeze
+        # Does not re-publish — same reasoning as Event#unfreeze! itself.
+        # Harmless no-op on an event that was never frozen, rather than an
+        # error, since there's nothing unsafe about calling it twice.
+        def unfreeze
+          event = Event.find(params[:id])
+          event.unfreeze!
+          log_admin_action("unfreeze_event", event)
+
+          render json: { event: event_json(event.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Event not found" }, status: :not_found
+        end
+
         # DELETE /api/v1/admin/events/:id
         # Soft-delete (see Event#discard!) — hides the event, its
         # registrations, and its waitlist entries rather than destroying
@@ -98,6 +139,9 @@ module Api
             location: event.location,
             start_at: event.start_at,
             is_published: event.is_published,
+            frozen: event.frozen?,
+            freeze_reason: event.freeze_reason,
+            frozen_at: event.frozen_at,
             plan: event.plan,
             capacity: event.capacity,
             price_cents: event.price_cents,

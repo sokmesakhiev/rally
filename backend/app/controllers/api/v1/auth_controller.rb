@@ -3,7 +3,8 @@ module Api
     class AuthController < BaseController
       include UserPayload
 
-      before_action :authenticate_user!, only: [ :me, :change_password, :change_email, :delete_account ]
+      before_action :authenticate_user!,
+        only: [ :me, :change_password, :change_email, :delete_account, :accept_terms ]
 
       # POST /api/v1/auth/signup
       def signup
@@ -19,10 +20,23 @@ module Api
             return
           end
 
+          # See event-freeze-and-terms-tickets.md's Ticket F. Rejected before
+          # anything is persisted, same as the recaptcha check above — "missing"
+          # and "false" are treated identically (ActiveModel::Type::Boolean casts
+          # a missing/nil value to false), so there's no way to sign up without
+          # explicitly checking the box.
+          unless ActiveModel::Type::Boolean.new.cast(validated_params[:terms_accepted])
+            render json: { error: "You must accept the Terms of Service to sign up.", code: "terms_not_accepted" },
+                   status: :unprocessable_entity
+            return
+          end
+
           user = User.new(
             email: validated_params[:email],
             password: validated_params[:password],
-            password_confirmation: validated_params[:password]
+            password_confirmation: validated_params[:password],
+            terms_accepted_at: Time.current,
+            terms_version: TermsOfService::CURRENT_VERSION
           )
 
           if validated_params[:display_name].present?
@@ -87,6 +101,21 @@ module Api
 
       # GET /api/v1/auth/me
       def me
+        render json: user_payload(current_user, nil).except(:token)
+      end
+
+      # POST /api/v1/auth/accept_terms — the Google sign-in counterpart to
+      # signup's terms_accepted check. A brand-new Google account is created
+      # with terms_accepted_at nil (see User.find_or_create_from_google!'s
+      # comment); the frontend shows that account a one-time acceptance
+      # interstitial (gated on user.terms_accepted_at being null in the
+      # payload) and calls this once they check the box. Idempotent —
+      # calling it again (or on an account that accepted at signup) just
+      # re-stamps the current version rather than erroring, since there's
+      # nothing unsafe about that. See event-freeze-and-terms-tickets.md's
+      # Ticket H.
+      def accept_terms
+        current_user.update!(terms_accepted_at: Time.current, terms_version: TermsOfService::CURRENT_VERSION)
         render json: user_payload(current_user, nil).except(:token)
       end
 

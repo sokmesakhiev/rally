@@ -16,5 +16,12 @@ class AuthSignupRequestSchema < ApplicationRequestSchema
     # a missing token is acceptable (it is, when RECAPTCHA_SECRET_KEY isn't
     # configured) or a rejection (it isn't, once the feature is turned on).
     optional(:recaptcha_token).maybe(:string)
+    # Optional at the schema level (just a type check when present) so that
+    # "missing" and "false" can be treated identically by one boolean-cast
+    # check in the controller — same reasoning, and the same
+    # ActiveModel::Type::Boolean.new.cast pattern, as
+    # Admin::EventsController#destroy's `confirm` flag. See
+    # event-freeze-and-terms-tickets.md's Ticket F.
+    optional(:terms_accepted).maybe(:bool)
   end
 end

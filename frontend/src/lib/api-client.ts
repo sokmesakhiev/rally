@@ -157,6 +157,13 @@ export interface ApiUser {
   /** Drives whether the admin nav link renders. NOT a security boundary —
    * every admin endpoint re-checks server-side. */
   admin?: boolean;
+  /** Null means this account has never accepted the Terms of Service — true
+   * for a brand-new Google sign-in (that flow never shows a checkbox, unlike
+   * email/password signup). Drives the one-time acceptance interstitial in
+   * auth.tsx's handleGoogleCredential — see
+   * event-freeze-and-terms-tickets.md's Ticket H. Not a security boundary;
+   * nothing server-side is blocked on it. */
+  terms_accepted_at: string | null;
   created_at: string;
 }
 
@@ -245,6 +252,13 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** True once an admin has frozen this event (event-freeze-and-terms-tickets.md,
+   * Ticket A) — stronger than is_published: false, since the owner cannot
+   * reverse it themselves (every mutating action 404s server-side while
+   * frozen). `freeze_reason`/`frozen_at` are only meaningful when this is true. */
+  frozen: boolean;
+  freeze_reason: string | null;
+  frozen_at: string | null;
   brand_color: string;
   banner_url: string | null;
   logo_url: string | null;
@@ -344,10 +358,25 @@ export interface ProfileUpdatePayload {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  async signup(email: string, password: string, displayName?: string, recaptchaToken?: string) {
+  /**
+   * `termsAccepted` is required, not optional — the backend rejects signup
+   * with 422 code: "terms_not_accepted" unless it's `true` (see
+   * event-freeze-and-terms-tickets.md's Ticket F). Making it a required
+   * param here rather than optional-and-defaulted means a future call site
+   * can't forget to wire up the checkbox and silently rely on the server's
+   * rejection as the only guard.
+   */
+  async signup(
+    email: string,
+    password: string,
+    termsAccepted: boolean,
+    displayName?: string,
+    recaptchaToken?: string,
+  ) {
     const res = await api.post<{ token: string; user: ApiUser }>("/auth/signup", {
       email,
       password,
+      terms_accepted: termsAccepted,
       display_name: displayName,
       recaptcha_token: recaptchaToken,
     });
@@ -366,6 +395,12 @@ export const authApi = {
 
   async me() {
     return api.get<{ user: ApiUser }>("/auth/me");
+  },
+
+  /** See ApiUser.terms_accepted_at's doc comment — the Google sign-in
+   * counterpart to signup's terms checkbox. Idempotent server-side. */
+  async acceptTerms() {
+    return api.post<{ user: ApiUser }>("/auth/accept_terms");
   },
 
   /** idToken is the credential JWT from Google Identity Services' sign-in
@@ -988,6 +1023,10 @@ export interface ApiAdminEvent {
   location: string | null;
   start_at: string;
   is_published: boolean;
+  /** Admin-only-reversible moderation lock — see ApiEvent.frozen's comment. */
+  frozen: boolean;
+  freeze_reason: string | null;
+  frozen_at: string | null;
   plan: string | null;
   capacity: number | null;
   price_cents: number;
@@ -1100,6 +1139,21 @@ export const adminApi = {
   /** Reversible: leaves registrations and the paid plan intact. */
   unpublishEvent(id: string) {
     return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unpublish`);
+  },
+
+  /**
+   * Stronger than unpublishEvent — NOT reversible by the organizer at all
+   * (see EventAuthorization's frozen lockdown). `reason` is required by the
+   * API and is emailed to the owner verbatim, so it's a real argument here,
+   * not optional like suspendUser's.
+   */
+  freezeEvent(id: string, reason: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/freeze`, { reason });
+  },
+
+  /** Does NOT re-publish the event — that stays the owner's own decision. */
+  unfreezeEvent(id: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unfreeze`);
   },
 
   /**

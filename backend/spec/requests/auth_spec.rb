@@ -5,7 +5,7 @@ RSpec.describe "Auth API", type: :request do
 
   # ── POST /api/v1/auth/signup ─────────────────────────────────────────────────
   describe "POST /api/v1/auth/signup" do
-    let(:valid_params) { { email: "new@example.com", password: password } }
+    let(:valid_params) { { email: "new@example.com", password: password, terms_accepted: true } }
 
     it "creates a user and returns a token" do
       post "/api/v1/auth/signup", params: valid_params, as: :json
@@ -114,6 +114,38 @@ RSpec.describe "Auth API", type: :request do
         post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
       end
     end
+
+    # See event-freeze-and-terms-tickets.md's Ticket F.
+    describe "Terms of Service acceptance" do
+      it "rejects signup with 422 when terms_accepted is missing entirely" do
+        params = valid_params.except(:terms_accepted)
+
+        expect {
+          post "/api/v1/auth/signup", params: params, as: :json
+        }.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("terms_not_accepted")
+      end
+
+      it "rejects signup with 422 when terms_accepted is explicitly false" do
+        expect {
+          post "/api/v1/auth/signup", params: valid_params.merge(terms_accepted: false), as: :json
+        }.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("terms_not_accepted")
+      end
+
+      it "creates the account and stamps terms_accepted_at/terms_version when accepted" do
+        post "/api/v1/auth/signup", params: valid_params, as: :json
+
+        expect(response).to have_http_status(:created)
+        user = User.find(json["user"]["id"])
+        expect(user.terms_accepted_at).to be_present
+        expect(user.terms_version).to eq(TermsOfService::CURRENT_VERSION)
+      end
+    end
   end
 
   # ── POST /api/v1/auth/signin ─────────────────────────────────────────────────
@@ -198,6 +230,38 @@ RSpec.describe "Auth API", type: :request do
       expect(user.provider).to eq("google")
     end
 
+    # See event-freeze-and-terms-tickets.md's Ticket H — this one-click flow
+    # never shows a terms checkbox, so the frontend has to prompt separately
+    # (gated on this being null) and call POST /auth/accept_terms.
+    it "leaves a brand-new account's terms_accepted_at nil" do
+      stub_google_payload(google_payload)
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(json["user"]["terms_accepted_at"]).to be_nil
+      expect(User.find(json["user"]["id"]).terms_accepted_at).to be_nil
+    end
+
+    it "does not retroactively stamp terms_accepted_at for a returning Google user" do
+      stub_google_payload(google_payload)
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      expect(json["user"]["terms_accepted_at"]).to be_nil
+    end
+
+    it "does not touch an existing password account's terms_accepted_at when linking Google" do
+      existing = create(:user, email: "runner@example.com")
+      existing.update!(terms_accepted_at: 3.days.ago, terms_version: "2026-01-01")
+      stub_google_payload(google_payload)
+
+      post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
+
+      existing.reload
+      expect(existing.terms_accepted_at).to be_present
+      expect(existing.terms_version).to eq("2026-01-01")
+    end
+
     it "signs in the same user on a later visit without creating a duplicate" do
       stub_google_payload(google_payload)
       post "/api/v1/auth/google", params: { id_token: "fake" }, as: :json
@@ -239,6 +303,38 @@ RSpec.describe "Auth API", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to be_present
+    end
+  end
+
+  # ── POST /api/v1/auth/accept_terms ───────────────────────────────────────────
+  # See event-freeze-and-terms-tickets.md's Ticket H.
+  describe "POST /api/v1/auth/accept_terms" do
+    it "stamps terms_accepted_at/terms_version for a brand-new Google account" do
+      user = create(:user, terms_accepted_at: nil, terms_version: nil)
+
+      post "/api/v1/auth/accept_terms", headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["user"]["terms_accepted_at"]).to be_present
+      user.reload
+      expect(user.terms_accepted_at).to be_present
+      expect(user.terms_version).to eq(TermsOfService::CURRENT_VERSION)
+    end
+
+    it "is idempotent — calling it again just re-stamps rather than erroring" do
+      user = create(:user, terms_accepted_at: 1.day.ago, terms_version: TermsOfService::CURRENT_VERSION)
+      headers = auth_headers(user)
+
+      post "/api/v1/auth/accept_terms", headers: headers, as: :json
+      expect(response).to have_http_status(:ok)
+
+      post "/api/v1/auth/accept_terms", headers: headers, as: :json
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 401 without a token" do
+      post "/api/v1/auth/accept_terms", as: :json
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 

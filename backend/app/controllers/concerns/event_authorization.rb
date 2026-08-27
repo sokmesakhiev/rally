@@ -73,6 +73,17 @@ module EventAuthorization
     manage_members: [ :owner ]
   }.freeze
 
+  # Capabilities that stay usable on a frozen event (event-freeze-and-terms-tickets.md's
+  # Ticket A) — everything else is denied to every role, including :owner,
+  # the moment event.frozen? is true. The point of a freeze is that it isn't
+  # the owner's call to reverse or work around; letting them keep editing,
+  # unpublishing (to "clean up" before anyone notices), or managing the team
+  # would defeat that. Read access is preserved so the owner can still see
+  # the event and the reason it was frozen.
+  FROZEN_ALLOWED_CAPABILITIES = %i[
+    view_event view_participants view_waitlist view_survey_responses view_activity
+  ].freeze
+
   # The caller's role on `event`: :owner, one of EventMembership::ROLES as a
   # symbol, or nil for no relationship at all.
   #
@@ -93,8 +104,9 @@ module EventAuthorization
     allowed = CAPABILITIES.fetch(capability)
     role = event_role_for(event)
     return false if role.nil?
+    return false unless allowed.include?(role)
 
-    allowed.include?(role)
+    !event.frozen? || FROZEN_ALLOWED_CAPABILITIES.include?(capability)
   end
 
   # 403-style gate, for endpoints that already have the event in hand

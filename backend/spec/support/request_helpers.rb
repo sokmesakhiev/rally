@@ -1,9 +1,10 @@
 module RequestHelpers
   # POST /api/v1/auth/signup and return parsed JSON
-  def signup(email: nil, password: "password123", display_name: nil)
+  def signup(email: nil, password: "password123", display_name: nil, terms_accepted: true)
     email ||= Faker::Internet.unique.email
-    post "/api/v1/auth/signup", params: { email:, password:, display_name: }.compact,
-                                as: :json
+    post "/api/v1/auth/signup",
+         params: { email:, password:, display_name:, terms_accepted: }.compact,
+         as: :json
     JSON.parse(response.body)
   end
 

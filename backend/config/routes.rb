@@ -16,6 +16,8 @@ Rails.application.routes.draw do
       patch  "auth/password", to: "auth#change_password"
       patch  "auth/email",    to: "auth#change_email"
       delete "auth/account",  to: "auth#delete_account"
+      # Google sign-in's terms-of-service gap — see auth#accept_terms.
+      post   "auth/accept_terms", to: "auth#accept_terms"
 
       # Password resets
       post  "password_resets",        to: "password_resets#create"
@@ -130,6 +132,12 @@ Rails.application.routes.draw do
 
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"
+        # Freeze: the moderation lever stronger than unpublish — not
+        # reversible by the organizer at all (see EventAuthorization's
+        # frozen lockdown and Event#freeze!/#unfreeze!). See
+        # event-freeze-and-terms-tickets.md's Ticket B.
+        post   "events/:id/freeze",    to: "events#freeze"
+        post   "events/:id/unfreeze",  to: "events#unfreeze"
         delete "events/:id",           to: "events#destroy"
 
         get "reports", to: "reports#index"
