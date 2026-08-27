@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   BadgeCheck,
   ShieldOff,
+  Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -414,6 +415,18 @@ function EventsPanel() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // No confirmation dialog, unlike freezing — reversing course should be
+  // low-friction; freezing (which emails the owner and locks the event down)
+  // should not be. Mirrors unsuspendUser's lack of a confirm dialog.
+  const unfreeze = useMutation({
+    mutationFn: (id: string) => adminApi.unfreezeEvent(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success(t("admin.toastUnfrozen"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => adminApi.deleteEvent(id),
     onSuccess: () => {
@@ -495,13 +508,23 @@ function EventsPanel() {
                     </td>
                     <td className="p-3">{ev.registrations_count}</td>
                     <td className="p-3">
-                      <Badge variant={ev.is_published ? "secondary" : "outline"}>
-                        {ev.is_published ? t("admin.badgePublished") : t("admin.badgeDraft")}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant={ev.is_published ? "secondary" : "outline"}>
+                          {ev.is_published ? t("admin.badgePublished") : t("admin.badgeDraft")}
+                        </Badge>
+                        {/* Frozen is orthogonal to published/draft — a frozen
+                            event is always unpublished too, but showing both
+                            badges makes clear *why* (moderation, not just a
+                            draft) and that unpublishing it back yourself
+                            won't work. */}
+                        {ev.frozen && (
+                          <Badge variant="destructive">{t("admin.badgeFrozen")}</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3">
-                      <div className="flex justify-end gap-2">
-                        {ev.is_published && (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {ev.is_published && !ev.frozen && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -512,6 +535,20 @@ function EventsPanel() {
                             <EyeOff className="h-3.5 w-3.5" />
                             {t("admin.unpublish")}
                           </Button>
+                        )}
+                        {ev.frozen ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            disabled={unfreeze.isPending}
+                            onClick={() => unfreeze.mutate(ev.id)}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            {t("admin.unfreeze")}
+                          </Button>
+                        ) : (
+                          <FreezeEventDialog event={ev} onDone={invalidate} />
                         )}
                         <DeleteEventDialog
                           event={ev}
@@ -539,6 +576,67 @@ function EventsPanel() {
         </>
       )}
     </div>
+  );
+}
+
+// Mirrors SuspendUserDialog almost exactly, with one deliberate difference:
+// the reason is required (the API rejects a blank one, and it's emailed to
+// the owner verbatim — see EventMailer#frozen), so the confirm button stays
+// disabled until something is typed, rather than allowing an empty reason
+// through like suspending a user does.
+function FreezeEventDialog({ event, onDone }: { event: ApiAdminEvent; onDone: () => void }) {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState("");
+
+  const freeze = useMutation({
+    mutationFn: () => adminApi.freezeEvent(event.id, reason.trim()),
+    onSuccess: () => {
+      setReason("");
+      onDone();
+      toast.success(t("admin.toastFrozen"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="destructive" className="gap-1">
+          <Snowflake className="h-3.5 w-3.5" />
+          {t("admin.freeze")}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("admin.freezeTitle", { title: event.title })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("admin.freezeDesc")}</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor={`freeze-reason-${event.id}`}>{t("admin.freezeReason")}</Label>
+          <Textarea
+            id={`freeze-reason-${event.id}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder={t("admin.freezeReasonPlaceholder")}
+          />
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => freeze.mutate()}
+            disabled={freeze.isPending || reason.trim().length === 0}
+            className="gap-2"
+          >
+            {freeze.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t("admin.confirmFreeze")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

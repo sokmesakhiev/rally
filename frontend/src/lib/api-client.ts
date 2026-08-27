@@ -1114,6 +1114,21 @@ export const adminApi = {
   },
 
   /**
+   * Stronger than unpublishEvent — NOT reversible by the organizer at all
+   * (see EventAuthorization's frozen lockdown). `reason` is required by the
+   * API and is emailed to the owner verbatim, so it's a real argument here,
+   * not optional like suspendUser's.
+   */
+  freezeEvent(id: string, reason: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/freeze`, { reason });
+  },
+
+  /** Does NOT re-publish the event — that stays the owner's own decision. */
+  unfreezeEvent(id: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unfreeze`);
+  },
+
+  /**
    * Irreversible, and rejected server-side if the event has paid
    * registrations. `confirm` is required by the API — passed explicitly rather
    * than defaulted so a stray call can't delete anything.
