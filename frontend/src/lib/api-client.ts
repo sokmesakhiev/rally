@@ -351,10 +351,25 @@ export interface ProfileUpdatePayload {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  async signup(email: string, password: string, displayName?: string, recaptchaToken?: string) {
+  /**
+   * `termsAccepted` is required, not optional — the backend rejects signup
+   * with 422 code: "terms_not_accepted" unless it's `true` (see
+   * event-freeze-and-terms-tickets.md's Ticket F). Making it a required
+   * param here rather than optional-and-defaulted means a future call site
+   * can't forget to wire up the checkbox and silently rely on the server's
+   * rejection as the only guard.
+   */
+  async signup(
+    email: string,
+    password: string,
+    termsAccepted: boolean,
+    displayName?: string,
+    recaptchaToken?: string,
+  ) {
     const res = await api.post<{ token: string; user: ApiUser }>("/auth/signup", {
       email,
       password,
+      terms_accepted: termsAccepted,
       display_name: displayName,
       recaptcha_token: recaptchaToken,
     });
