@@ -19,10 +19,23 @@ module Api
             return
           end
 
+          # See event-freeze-and-terms-tickets.md's Ticket F. Rejected before
+          # anything is persisted, same as the recaptcha check above — "missing"
+          # and "false" are treated identically (ActiveModel::Type::Boolean casts
+          # a missing/nil value to false), so there's no way to sign up without
+          # explicitly checking the box.
+          unless ActiveModel::Type::Boolean.new.cast(validated_params[:terms_accepted])
+            render json: { error: "You must accept the Terms of Service to sign up.", code: "terms_not_accepted" },
+                   status: :unprocessable_entity
+            return
+          end
+
           user = User.new(
             email: validated_params[:email],
             password: validated_params[:password],
-            password_confirmation: validated_params[:password]
+            password_confirmation: validated_params[:password],
+            terms_accepted_at: Time.current,
+            terms_version: TermsOfService::CURRENT_VERSION
           )
 
           if validated_params[:display_name].present?

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_27_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -314,6 +314,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_27_000000) do
     t.string "provider"
     t.datetime "suspended_at"
     t.string "suspension_reason"
+    t.datetime "terms_accepted_at"
+    t.string "terms_version"
     t.datetime "updated_at", null: false
     t.datetime "verified_at"
     t.uuid "verified_by_id"

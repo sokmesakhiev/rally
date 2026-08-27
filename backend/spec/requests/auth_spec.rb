@@ -5,7 +5,7 @@ RSpec.describe "Auth API", type: :request do
 
   # ── POST /api/v1/auth/signup ─────────────────────────────────────────────────
   describe "POST /api/v1/auth/signup" do
-    let(:valid_params) { { email: "new@example.com", password: password } }
+    let(:valid_params) { { email: "new@example.com", password: password, terms_accepted: true } }
 
     it "creates a user and returns a token" do
       post "/api/v1/auth/signup", params: valid_params, as: :json
@@ -112,6 +112,38 @@ RSpec.describe "Auth API", type: :request do
           .and_return(RecaptchaVerifier::Result.new(success?: true, score: 0.9, reason: nil))
 
         post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
+      end
+    end
+
+    # See event-freeze-and-terms-tickets.md's Ticket F.
+    describe "Terms of Service acceptance" do
+      it "rejects signup with 422 when terms_accepted is missing entirely" do
+        params = valid_params.except(:terms_accepted)
+
+        expect {
+          post "/api/v1/auth/signup", params: params, as: :json
+        }.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("terms_not_accepted")
+      end
+
+      it "rejects signup with 422 when terms_accepted is explicitly false" do
+        expect {
+          post "/api/v1/auth/signup", params: valid_params.merge(terms_accepted: false), as: :json
+        }.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("terms_not_accepted")
+      end
+
+      it "creates the account and stamps terms_accepted_at/terms_version when accepted" do
+        post "/api/v1/auth/signup", params: valid_params, as: :json
+
+        expect(response).to have_http_status(:created)
+        user = User.find(json["user"]["id"])
+        expect(user.terms_accepted_at).to be_present
+        expect(user.terms_version).to eq(TermsOfService::CURRENT_VERSION)
       end
     end
   end
