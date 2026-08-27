@@ -35,6 +35,7 @@ import {
   Shield,
   LogOut,
   UsersRound,
+  Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -419,24 +420,36 @@ function ManageEvent() {
   // never happens in normal use — this page is only ever reached via the
   // owner's own dashboard or an accepted invitation's `my_events` listing.
   const role = ev?.role ?? null;
+  // event-freeze-and-terms-tickets.md's Ticket E — mirrors the backend's
+  // frozen lockdown (EventAuthorization::FROZEN_ALLOWED_CAPABILITIES): every
+  // mutating capability below is additionally gated on !isFrozen, same as
+  // the server does regardless of role, including the owner. Read
+  // capabilities (viewSurveyResponses/viewActivity/viewMembers) are
+  // deliberately left untouched — the point of a freeze is that the owner
+  // can still see the event and why it was frozen, just not change anything.
+  // Every mutation is re-checked server-side anyway (same caveat as the rest
+  // of this object), so a stale `ev` that hasn't refetched since a freeze
+  // would just get a 403/404 from the API rather than actually doing damage.
+  const isFrozen = !!ev?.frozen;
   const can = {
-    updateEvent: role === "owner" || role === "manager",
-    manageResults: role === "owner" || role === "manager",
-    checkIn: role === "owner" || role === "manager" || role === "check_in",
-    exportParticipants: role === "owner" || role === "manager",
-    updateRegistration: role === "owner" || role === "manager",
-    removeParticipant: role === "owner" || role === "manager",
+    updateEvent: (role === "owner" || role === "manager") && !isFrozen,
+    manageResults: (role === "owner" || role === "manager") && !isFrozen,
+    checkIn: (role === "owner" || role === "manager" || role === "check_in") && !isFrozen,
+    exportParticipants: (role === "owner" || role === "manager") && !isFrozen,
+    updateRegistration: (role === "owner" || role === "manager") && !isFrozen,
+    removeParticipant: (role === "owner" || role === "manager") && !isFrozen,
     viewSurveyResponses: role === "owner" || role === "manager" || role === "viewer",
     viewActivity: role === "owner" || role === "manager" || role === "viewer",
-    managePlan: role === "owner",
-    unpublishEvent: role === "owner",
-    deleteEvent: role === "owner",
+    managePlan: role === "owner" && !isFrozen,
+    unpublishEvent: role === "owner" && !isFrozen,
+    deleteEvent: role === "owner" && !isFrozen,
     // Not a direct CAPABILITIES mirror: the Members tab's own read endpoint
     // (EventMembersController#index) permits every role incl. Check-in, but
     // Check-in's whole point is a narrow, single-purpose surface — see this
     // ticket's acceptance criteria ("Check-in member shows the Check-in and
     // Participants tabs and nothing else"). manage_members itself stays
-    // owner-only either way (enforced inside MembersTab via `canManage`).
+    // owner-only either way (enforced inside MembersTab via `canManage`,
+    // which also needs !isFrozen — see where MembersTab is rendered below).
     viewMembers: role === "owner" || role === "manager" || role === "viewer",
   };
 
@@ -506,6 +519,7 @@ function ManageEvent() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{categoryLabel(ev.category)}</Badge>
                   {!ev.is_published && <Badge variant="outline">{t("common.draft")}</Badge>}
+                  {ev.frozen && <Badge variant="destructive">{t("manageEvent.frozenBadge")}</Badge>}
                   <Badge variant="outline">{formatPrice(ev.price_cents, ev.currency)}</Badge>
                 </div>
                 <h1 className="mt-2 font-display text-3xl font-bold">{ev.title}</h1>
@@ -902,6 +916,28 @@ function ManageEvent() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Frozen banner — see event-freeze-and-terms-tickets.md's Ticket
+                E. Persistent (not dismissable): the point of a freeze is
+                that it isn't a one-time notice, it's the current state of
+                the event, for as long as it stays frozen. */}
+            {ev.frozen && (
+              <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+                <Snowflake className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="font-medium text-destructive">{t("manageEvent.frozenBannerTitle")}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t("manageEvent.frozenBannerDesc")}
+                  </p>
+                  {ev.freeze_reason && (
+                    <p className="mt-2 text-sm">
+                      <span className="font-medium">{t("manageEvent.frozenBannerReason")}</span>{" "}
+                      {ev.freeze_reason}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1439,7 +1475,7 @@ function ManageEvent() {
                 <TabsContent value="members" className="mt-6">
                   <MembersTab
                     eventId={eventId}
-                    canManage={role === "owner"}
+                    canManage={role === "owner" && !isFrozen}
                     currentUserId={user?.id ?? ""}
                   />
                 </TabsContent>

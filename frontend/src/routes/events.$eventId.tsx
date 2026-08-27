@@ -13,7 +13,8 @@ import {
   Check,
   QrCode,
   Hourglass,
-  Award
+  Award,
+  Snowflake
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -330,8 +331,11 @@ function EventDetail() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      {/* Banner */}
-      {ev?.banner_url && (
+      {/* Banner — hidden for the same frozen-and-stranger case the "no
+          longer available" state below covers, so a scam listing's own
+          banner image doesn't render for exactly the audience a freeze is
+          meant to protect. */}
+      {ev?.banner_url && !(ev.frozen && !ev.role) && (
         <div className="relative h-52 w-full overflow-hidden md:h-72">
           <img
             src={ev.banner_url}
@@ -352,7 +356,23 @@ function EventDetail() {
         {eventQuery.isLoading && <p className="text-muted-foreground">{t("common.loading")}</p>}
         {eventQuery.isError && <p className="text-muted-foreground">{t("eventDetail.notFound")}</p>}
 
-        {ev && (
+        {/* A frozen event still 200s for a direct link (see
+            ApplicationController#identify_current_user!/EventAuthorization's
+            read allowlist) so the owner/team can still see it — but a
+            stranger following an old link to a frozen event shouldn't see
+            the full page, since a stranger is exactly who a scam listing was
+            trying to reach. `ev.role` is only ever set for the
+            creator/a team member (see ApiEvent.role's doc comment), so its
+            absence here means "anonymous viewer or signed-in stranger". */}
+        {ev && ev.frozen && !ev.role && (
+          <div className="mt-10 rounded-2xl border border-border bg-muted/30 p-10 text-center">
+            <Snowflake className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-4 text-lg font-semibold">{t("eventDetail.frozenTitle")}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("eventDetail.frozenDesc")}</p>
+          </div>
+        )}
+
+        {ev && !(ev.frozen && !ev.role) && (
           <>
             {/* Logo + title row */}
             <div className="flex items-start gap-4">
