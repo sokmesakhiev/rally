@@ -61,16 +61,17 @@ module Api
         # an already-frozen event is allowed and simply overwrites the reason
         # — an admin refining their note shouldn't have to unfreeze first.
         #
-        # Deliberately does NOT email the owner yet — that's
-        # event-freeze-and-terms-tickets.md's Ticket C, landing separately
-        # once EventMailer#frozen exists, same one-capability-per-ticket
-        # granularity the rest of this feature has followed.
+        # Emails the owner once frozen (EventMailer#frozen, unconditional —
+        # see its own comment for why this isn't gated behind a notify_*
+        # opt-out) so they find out why, not just that their event vanished
+        # from public listings.
         def freeze
           event = Event.find(params[:id])
 
           validate_params_with_schema(AdminFreezeEventRequestSchema) do |validated_params|
             event.freeze!(reason: validated_params[:reason])
             log_admin_action("freeze_event", event)
+            EventMailer.frozen(event).deliver_later
 
             render json: { event: event_json(event.reload) }
           end
