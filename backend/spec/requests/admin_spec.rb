@@ -480,6 +480,42 @@ RSpec.describe "Admin API", type: :request do
       expect(action.action).to eq("freeze_event")
       expect(action.target).to eq(event)
     end
+
+    # event-freeze-and-terms-tickets.md's Ticket C — the owner needs to know
+    # why, not just that their event vanished from public listings.
+    it "emails the event owner with the reason, unconditionally (no notify_* opt-out)" do
+      owner = create(:user)
+      event = create(:event, creator: owner)
+
+      expect {
+        perform_enqueued_jobs do
+          post "/api/v1/admin/events/#{event.id}/freeze",
+               params: { reason: "Reported as a scam" },
+               headers: auth_headers(admin),
+               as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.to).to eq([ owner.email ])
+      expect(mail.subject).to include("has been frozen")
+      expect(mail.body.encoded).to include("Reported as a scam")
+    end
+
+    it "still emails an owner who has no profile display name set" do
+      owner = create(:user)
+      owner.profile.update!(display_name: nil)
+      event = create(:event, creator: owner)
+
+      expect {
+        perform_enqueued_jobs do
+          post "/api/v1/admin/events/#{event.id}/freeze",
+               params: { reason: "Reported" },
+               headers: auth_headers(admin),
+               as: :json
+        end
+      }.to change { ActionMailer::Base.deliveries.count }.by(1)
+    end
   end
 
   # ── POST /api/v1/admin/events/:id/unfreeze ───────────────────────────────────
@@ -522,6 +558,19 @@ RSpec.describe "Admin API", type: :request do
       action = AdminAction.last
       expect(action.action).to eq("unfreeze_event")
       expect(action.target).to eq(event)
+    end
+
+    # No #unfrozen counterpart yet (see event-freeze-and-terms-tickets.md's
+    # "Open questions") — unfreezing is deliberately silent for now.
+    it "does not email the owner" do
+      event = create(:event)
+      event.freeze!(reason: "Reported")
+
+      expect {
+        perform_enqueued_jobs do
+          post "/api/v1/admin/events/#{event.id}/unfreeze", headers: auth_headers(admin), as: :json
+        end
+      }.not_to change { ActionMailer::Base.deliveries.count }
     end
 
     it "restores normal authorization once unfrozen — the owner can update again" do
