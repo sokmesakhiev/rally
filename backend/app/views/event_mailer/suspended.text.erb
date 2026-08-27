@@ -1,0 +1,14 @@
+Hi<%= @creator.profile&.display_name.present? ? " #{@creator.profile.display_name}" : "" %>,
+
+Your event <%= @event.title %> has been suspended by the Rally team and is no longer visible to the public.
+
+Reason: <%= @reason %>
+
+This is different from unpublishing an event yourself — a suspension can only be reversed by the Rally team, so please don't attempt to publish, edit, or otherwise change this event in the meantime.
+
+Event: <%= @manage_url %>
+Event ID: <%= @event.id %>
+
+If you believe this decision was made in error, please email admin@rails-dev.com so we can look into it — include the event link or ID above so we can find it quickly.
+
+— The Rally team

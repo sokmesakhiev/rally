@@ -132,12 +132,14 @@ Rails.application.routes.draw do
 
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"
-        # Freeze: the moderation lever stronger than unpublish — not
+        # Suspend: the moderation lever stronger than unpublish — not
         # reversible by the organizer at all (see EventAuthorization's
-        # frozen lockdown and Event#freeze!/#unfreeze!). See
-        # event-freeze-and-terms-tickets.md's Ticket B.
-        post   "events/:id/freeze",    to: "events#freeze"
-        post   "events/:id/unfreeze",  to: "events#unfreeze"
+        # suspended lockdown and Event#suspend!/#unsuspend!). Named/shaped
+        # to match users/:id/suspend above, since it's the same concept
+        # applied to an event. See event-freeze-and-terms-tickets.md's
+        # Ticket B.
+        post   "events/:id/suspend",    to: "events#suspend"
+        post   "events/:id/unsuspend",  to: "events#unsuspend"
         delete "events/:id",           to: "events#destroy"
 
         get "reports", to: "reports#index"

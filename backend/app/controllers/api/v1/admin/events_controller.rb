@@ -52,26 +52,29 @@ module Api
           render json: { error: "Event not found" }, status: :not_found
         end
 
-        # POST /api/v1/admin/events/:id/freeze
+        # POST /api/v1/admin/events/:id/suspend
         # The stronger moderation lever — see event-freeze-and-terms-tickets.md's
-        # Ticket A/B. Unlike #unpublish, this is NOT reversible by the
-        # organizer: EventAuthorization#event_permits? denies every mutating
-        # capability (including the owner's own unpublish/update/republish)
-        # while frozen_at is set, so only #unfreeze below can undo it. Freezing
-        # an already-frozen event is allowed and simply overwrites the reason
-        # — an admin refining their note shouldn't have to unfreeze first.
+        # Ticket A/B (named/shaped to match User#suspend!, since it's the
+        # same admin-only-reversible-lock concept applied to an event
+        # instead of an account). Unlike #unpublish, this is NOT reversible
+        # by the organizer: EventAuthorization#event_permits? denies every
+        # mutating capability (including the owner's own unpublish/update/
+        # republish) while suspended_at is set, so only #unsuspend below can
+        # undo it. Suspending an already-suspended event is allowed and
+        # simply overwrites the reason — an admin refining their note
+        # shouldn't have to unsuspend first.
         #
-        # Emails the owner once frozen (EventMailer#frozen, unconditional —
-        # see its own comment for why this isn't gated behind a notify_*
-        # opt-out) so they find out why, not just that their event vanished
-        # from public listings.
-        def freeze
+        # Emails the owner once suspended (EventMailer#suspended,
+        # unconditional — see its own comment for why this isn't gated
+        # behind a notify_* opt-out) so they find out why, not just that
+        # their event vanished from public listings.
+        def suspend
           event = Event.find(params[:id])
 
-          validate_params_with_schema(AdminFreezeEventRequestSchema) do |validated_params|
-            event.freeze!(reason: validated_params[:reason])
-            log_admin_action("freeze_event", event)
-            EventMailer.frozen(event).deliver_later
+          validate_params_with_schema(AdminSuspendEventRequestSchema) do |validated_params|
+            event.suspend!(reason: validated_params[:reason])
+            log_admin_action("suspend_event", event)
+            EventMailer.suspended(event).deliver_later
 
             render json: { event: event_json(event.reload) }
           end
@@ -79,14 +82,14 @@ module Api
           render json: { error: "Event not found" }, status: :not_found
         end
 
-        # POST /api/v1/admin/events/:id/unfreeze
-        # Does not re-publish — same reasoning as Event#unfreeze! itself.
-        # Harmless no-op on an event that was never frozen, rather than an
-        # error, since there's nothing unsafe about calling it twice.
-        def unfreeze
+        # POST /api/v1/admin/events/:id/unsuspend
+        # Does not re-publish — same reasoning as Event#unsuspend! itself.
+        # Harmless no-op on an event that was never suspended, rather than
+        # an error, since there's nothing unsafe about calling it twice.
+        def unsuspend
           event = Event.find(params[:id])
-          event.unfreeze!
-          log_admin_action("unfreeze_event", event)
+          event.unsuspend!
+          log_admin_action("unsuspend_event", event)
 
           render json: { event: event_json(event.reload) }
         rescue ActiveRecord::RecordNotFound
@@ -139,9 +142,9 @@ module Api
             location: event.location,
             start_at: event.start_at,
             is_published: event.is_published,
-            frozen: event.frozen?,
-            freeze_reason: event.freeze_reason,
-            frozen_at: event.frozen_at,
+            suspended: event.suspended?,
+            suspension_reason: event.suspension_reason,
+            suspended_at: event.suspended_at,
             plan: event.plan,
             capacity: event.capacity,
             price_cents: event.price_cents,

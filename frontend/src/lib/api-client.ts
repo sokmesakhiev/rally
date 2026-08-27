@@ -252,13 +252,13 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
-  /** True once an admin has frozen this event (event-freeze-and-terms-tickets.md,
+  /** True once an admin has suspended this event (event-freeze-and-terms-tickets.md,
    * Ticket A) — stronger than is_published: false, since the owner cannot
-   * reverse it themselves (every mutating action 404s server-side while
-   * frozen). `freeze_reason`/`frozen_at` are only meaningful when this is true. */
-  frozen: boolean;
-  freeze_reason: string | null;
-  frozen_at: string | null;
+   * reverse it themselves (every mutating action 403s server-side while
+   * suspended). `suspension_reason`/`suspended_at` are only meaningful when this is true. */
+  suspended: boolean;
+  suspension_reason: string | null;
+  suspended_at: string | null;
   brand_color: string;
   banner_url: string | null;
   logo_url: string | null;
@@ -1023,10 +1023,10 @@ export interface ApiAdminEvent {
   location: string | null;
   start_at: string;
   is_published: boolean;
-  /** Admin-only-reversible moderation lock — see ApiEvent.frozen's comment. */
-  frozen: boolean;
-  freeze_reason: string | null;
-  frozen_at: string | null;
+  /** Admin-only-reversible moderation lock — see ApiEvent.suspended's comment. */
+  suspended: boolean;
+  suspension_reason: string | null;
+  suspended_at: string | null;
   plan: string | null;
   capacity: number | null;
   price_cents: number;
@@ -1143,17 +1143,17 @@ export const adminApi = {
 
   /**
    * Stronger than unpublishEvent — NOT reversible by the organizer at all
-   * (see EventAuthorization's frozen lockdown). `reason` is required by the
+   * (see EventAuthorization's suspended lockdown). `reason` is required by the
    * API and is emailed to the owner verbatim, so it's a real argument here,
    * not optional like suspendUser's.
    */
-  freezeEvent(id: string, reason: string) {
-    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/freeze`, { reason });
+  suspendEvent(id: string, reason: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/suspend`, { reason });
   },
 
   /** Does NOT re-publish the event — that stays the owner's own decision. */
-  unfreezeEvent(id: string) {
-    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unfreeze`);
+  unsuspendEvent(id: string) {
+    return api.post<{ event: ApiAdminEvent }>(`/admin/events/${id}/unsuspend`);
   },
 
   /**

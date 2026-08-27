@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -150,8 +150,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000000) do
     t.datetime "deleted_at"
     t.text "description"
     t.datetime "end_at"
-    t.string "freeze_reason"
-    t.datetime "frozen_at"
     t.boolean "is_published", default: false, null: false
     t.decimal "latitude", precision: 10, scale: 6
     t.string "location"
@@ -162,16 +160,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000000) do
     t.string "route_map_url"
     t.datetime "start_at", null: false
     t.uuid "survey_id"
+    t.datetime "suspended_at"
+    t.string "suspension_reason"
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["category"], name: "index_events_on_category"
     t.index ["creator_id"], name: "index_events_on_creator_id"
     t.index ["deleted_at"], name: "index_events_on_deleted_at"
-    t.index ["frozen_at"], name: "index_events_on_frozen_at", where: "(frozen_at IS NOT NULL)"
     t.index ["is_published", "start_at"], name: "index_events_on_is_published_and_start_at"
     t.index ["is_published"], name: "index_events_on_is_published"
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
+    t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
   end
 
   create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
