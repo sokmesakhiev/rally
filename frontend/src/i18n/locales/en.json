@@ -179,7 +179,11 @@
       "displayName": "Display name",
       "displayNamePlaceholder": "Alex Runner",
       "passwordPlaceholder": "At least 8 characters",
-      "confirmPassword": "Confirm password"
+      "confirmPassword": "Confirm password",
+      "termsPrefix": "I agree to the",
+      "termsLink": "Terms of Service",
+      "termsAnd": "and",
+      "privacyLink": "Privacy Policy"
     },
     "forgotPassword": "Forgot password?",
     "welcomeBack": "Welcome back!",
@@ -189,7 +193,8 @@
       "passwordTooShort": "Password must be at least 8 characters",
       "signInFailed": "Sign in failed",
       "signUpFailed": "Sign up failed",
-      "passwordMismatch": "Passwords do not match"
+      "passwordMismatch": "Passwords do not match",
+      "termsNotAccepted": "You must agree to the Terms of Service and Privacy Policy to create an account"
     }
   },
   "forgotPassword": {
@@ -804,5 +809,35 @@
     "toastUnfrozen": "Event unfrozen",
     "toastEventDeleted": "Event deleted",
     "paginationLabel": "Table pagination"
+  },
+  "legal": {
+    "draftNotice": "Draft — pending legal review. This placeholder copy is not yet reviewed legal text and should not be relied on as binding.",
+    "lastUpdated": "Draft dated {{date}}",
+    "termsTitle": "Terms of Service",
+    "termsIntro": "These Terms of Service govern your use of Rally, an event registration platform. By creating an account or using Rally, you agree to these terms.",
+    "termsAccountsTitle": "Accounts",
+    "termsAccountsBody": "You're responsible for the accuracy of the information you provide and for keeping your account credentials secure. You must be old enough to enter into a binding agreement in your jurisdiction to create an account.",
+    "termsEventsTitle": "Organizing events",
+    "termsEventsBody": "If you create an event, you're responsible for its accuracy and for delivering what you promise to participants. Rally may unpublish, freeze, or remove events that violate these terms or applicable law, including events used to collect payments under false pretenses.",
+    "termsPaymentsTitle": "Payments",
+    "termsPaymentsBody": "Registration payments are processed through Rally's payment provider. Refund decisions for a given event are made by that event's organizer, except where Rally intervenes directly in cases of fraud or abuse.",
+    "termsConductTitle": "Prohibited conduct",
+    "termsConductBody": "You may not use Rally to defraud others, collect payments for events you don't intend to hold, or engage in activity that endangers people or violates the law.",
+    "termsTerminationTitle": "Suspension and termination",
+    "termsTerminationBody": "Rally may suspend or terminate accounts, and freeze events, that violate these terms. A frozen event cannot be republished by its organizer — only Rally can reverse a freeze.",
+    "termsContactTitle": "Contact",
+    "termsContactBody": "Questions about these terms can be sent to the email address associated with your Rally account's support channel.",
+    "privacyTitle": "Privacy Policy",
+    "privacyIntro": "This Privacy Policy describes how Rally collects, uses, and shares information when you use the platform.",
+    "privacyCollectTitle": "Information we collect",
+    "privacyCollectBody": "We collect the information you provide when creating an account or registering for an event (name, email, phone), along with event and payment records.",
+    "privacyUseTitle": "How we use it",
+    "privacyUseBody": "We use this information to operate Rally: creating accounts, processing registrations and payments, sending confirmation and notification emails, and moderating the platform.",
+    "privacySharingTitle": "Sharing",
+    "privacySharingBody": "Event organizers can see the registration details of people registered for their own events. We don't sell personal information to third parties.",
+    "privacyRetentionTitle": "Data retention",
+    "privacyRetentionBody": "We retain account and registration data for as long as your account is active, and as needed to comply with legal obligations.",
+    "privacyContactTitle": "Contact",
+    "privacyContactBody": "Questions about this policy can be sent to the email address associated with your Rally account's support channel."
   }
 }
