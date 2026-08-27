@@ -175,6 +175,60 @@ RSpec.describe EventAuthorization do
 
       expect { host.event_permits?(event, :not_a_capability) }.to raise_error(KeyError)
     end
+
+    # event-freeze-and-terms-tickets.md's Ticket A: a freeze is not the
+    # owner's to work around, so it overrides even :owner — the whole point
+    # is that nobody on the team can quietly undo or route around it.
+    context "when the event is frozen" do
+      before { event.freeze!(reason: "Reported as a scam") }
+
+      it "still allows the owner the read-only capabilities" do
+        host.current_user = owner
+
+        described_class::FROZEN_ALLOWED_CAPABILITIES.each do |capability|
+          expect(host.event_permits?(event, capability)).to be(true),
+            "expected owner to still be allowed :#{capability} while frozen"
+        end
+      end
+
+      it "denies the owner every other capability, including unpublish and delete" do
+        host.current_user = owner
+
+        (described_class::CAPABILITIES.keys - described_class::FROZEN_ALLOWED_CAPABILITIES).each do |capability|
+          expect(host.event_permits?(event, capability)).to be(false),
+            "expected owner to be denied :#{capability} while frozen"
+        end
+      end
+
+      it "restricts a Manager to the same read-only allowlist, not their usual write access" do
+        manager = create(:user)
+        create(:event_membership, event: event, user: manager, role: "manager")
+        host.current_user = manager
+
+        described_class::CAPABILITIES.each_key do |capability|
+          expected = described_class::FROZEN_ALLOWED_CAPABILITIES.include?(capability)
+          expect(host.event_permits?(event, capability)).to be(expected),
+            "expected manager to be #{expected ? 'allowed' : 'denied'} :#{capability} while frozen"
+        end
+      end
+
+      it "still denies a stranger everything" do
+        host.current_user = stranger
+
+        described_class::CAPABILITIES.each_key do |capability|
+          expect(host.event_permits?(event, capability)).to be(false)
+        end
+      end
+
+      it "restores normal permissions once unfrozen" do
+        host.current_user = owner
+        expect(host.event_permits?(event, :update_event)).to be(false)
+
+        event.unfreeze!
+
+        expect(host.event_permits?(event, :update_event)).to be(true)
+      end
+    end
   end
 
   describe "#authorize_event!" do

@@ -367,6 +367,20 @@ RSpec.describe "Events API", type: :request do
       get "/api/v1/events/#{event.id}", headers: auth_headers(manager), as: :json
       expect(json["event"]["role"]).to eq("manager")
     end
+
+    # event-freeze-and-terms-tickets.md's Ticket A: view_event stays on the
+    # frozen-allowed list, so the owner (and anyone else) can still see the
+    # event and why it was frozen — just not touch it. See the frozen-lockdown
+    # specs on PATCH/DELETE below for the "can't touch it" half.
+    it "still returns a frozen event, with frozen/freeze_reason set" do
+      event.freeze!(reason: "Reported as a scam")
+
+      get "/api/v1/events/#{event.id}", headers: auth_headers(event.creator), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["event"]["frozen"]).to be(true)
+      expect(json["event"]["freeze_reason"]).to eq("Reported as a scam")
+    end
   end
 
   # ── POST /api/v1/events ──────────────────────────────────────────────────────
@@ -825,6 +839,23 @@ RSpec.describe "Events API", type: :request do
         end
       }.not_to change { ActionMailer::Base.deliveries.count }
     end
+
+    # event-freeze-and-terms-tickets.md's Ticket A — a freeze is admin-only to
+    # reverse, so even the owner can't edit their way around it. 403 (not
+    # 404), matching this controller's existing authorize_creator!/
+    # authorize_event! path for every other denial of update/destroy/unpublish
+    # (set_event already found the event via Event.kept — it's not discarded,
+    # just frozen).
+    it "returns 403 for the owner once the event is frozen" do
+      event.freeze!(reason: "Reported as a scam")
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { title: "New Title" } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:forbidden)
+    end
   end
 
   # ── GET /api/v1/events/:id/activity ──────────────────────────────────────────
@@ -911,6 +942,15 @@ RSpec.describe "Events API", type: :request do
       create(:event_membership, event: event, user: manager, role: "manager")
 
       delete "/api/v1/events/#{event.id}", headers: auth_headers(manager), as: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(Event.kept.find_by(id: event.id)).to be_present
+    end
+
+    it "returns 403 for the owner once the event is frozen, and does not delete it" do
+      event.freeze!(reason: "Reported as a scam")
+
+      delete "/api/v1/events/#{event.id}", headers: auth_headers(user), as: :json
 
       expect(response).to have_http_status(:forbidden)
       expect(Event.kept.find_by(id: event.id)).to be_present

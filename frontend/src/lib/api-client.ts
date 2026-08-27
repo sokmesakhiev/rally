@@ -245,6 +245,13 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** True once an admin has frozen this event (event-freeze-and-terms-tickets.md,
+   * Ticket A) — stronger than is_published: false, since the owner cannot
+   * reverse it themselves (every mutating action 404s server-side while
+   * frozen). `freeze_reason`/`frozen_at` are only meaningful when this is true. */
+  frozen: boolean;
+  freeze_reason: string | null;
+  frozen_at: string | null;
   brand_color: string;
   banner_url: string | null;
   logo_url: string | null;
@@ -988,6 +995,10 @@ export interface ApiAdminEvent {
   location: string | null;
   start_at: string;
   is_published: boolean;
+  /** Admin-only-reversible moderation lock — see ApiEvent.frozen's comment. */
+  frozen: boolean;
+  freeze_reason: string | null;
+  frozen_at: string | null;
   plan: string | null;
   capacity: number | null;
   price_cents: number;
