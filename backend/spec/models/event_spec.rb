@@ -215,45 +215,45 @@ RSpec.describe Event, type: :model do
     end
   end
 
-  # ── Freeze (admin moderation) ─────────────────────────────────────────────────
-  describe "#freeze!" do
-    it "sets frozen_at, stores the reason, and unpublishes" do
+  # ── Suspend (admin moderation) ────────────────────────────────────────────────
+  describe "#suspend!" do
+    it "sets suspended_at, stores the reason, and unpublishes" do
       event = create(:event, is_published: true)
 
-      event.freeze!(reason: "Reported as a scam")
+      event.suspend!(reason: "Reported as a scam")
 
-      expect(event.frozen?).to be(true)
-      expect(event.freeze_reason).to eq("Reported as a scam")
+      expect(event.suspended?).to be(true)
+      expect(event.suspension_reason).to eq("Reported as a scam")
       expect(event.is_published).to be(false)
     end
 
     it "blanks a reason of only whitespace, mirroring User#suspend!" do
       event = create(:event)
 
-      event.freeze!(reason: "   ")
+      event.suspend!(reason: "   ")
 
-      expect(event.freeze_reason).to be_nil
+      expect(event.suspension_reason).to be_nil
     end
 
     it "leaves registrations and memberships untouched" do
       event = create(:event, :full)
       registration = event.registrations.first
 
-      event.freeze!(reason: "Reported")
+      event.suspend!(reason: "Reported")
 
       expect(registration.reload.discarded?).to be(false)
     end
   end
 
-  describe "#unfreeze!" do
-    it "clears frozen_at and freeze_reason without re-publishing" do
+  describe "#unsuspend!" do
+    it "clears suspended_at and suspension_reason without re-publishing" do
       event = create(:event, is_published: true)
-      event.freeze!(reason: "Reported")
+      event.suspend!(reason: "Reported")
 
-      event.unfreeze!
+      event.unsuspend!
 
-      expect(event.frozen?).to be(false)
-      expect(event.freeze_reason).to be_nil
+      expect(event.suspended?).to be(false)
+      expect(event.suspension_reason).to be_nil
       expect(event.is_published).to be(false)
     end
   end

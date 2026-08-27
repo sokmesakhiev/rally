@@ -183,32 +183,35 @@ class Event < ApplicationRecord
 
   # ── Moderation ──────────────────────────────────────────────────────────────
   # See event-freeze-and-terms-tickets.md's Ticket A. Deliberately its own
-  # frozen_at column rather than reusing is_published/deleted_at — a frozen
-  # event is neither a normal unpublish (owner-reversible) nor a soft-delete
-  # (hides everything downstream, including memberships' relevance); it's a
-  # third, admin-only-reversible state that happens to also force
-  # is_published false. Mirrors User#suspend!/#unsuspend! almost exactly.
-  def frozen?
-    frozen_at.present?
+  # suspended_at column rather than reusing is_published/deleted_at — a
+  # suspended event is neither a normal unpublish (owner-reversible) nor a
+  # soft-delete (hides everything downstream, including memberships'
+  # relevance); it's a third, admin-only-reversible state that happens to
+  # also force is_published false. Named (and shaped: suspended_at/
+  # suspension_reason) to match User#suspend!/#unsuspend! exactly, since it's
+  # the same concept — an admin-only-reversible lock — applied to an event
+  # instead of an account.
+  def suspended?
+    suspended_at.present?
   end
 
   # Forces the event off public listings the same way #discard! and
   # User#suspend! both do, but leaves registrations/payments/memberships
   # untouched — refunding attendees or removing the team is a separate,
-  # deliberate decision, not an automatic side effect of a freeze. The actual
-  # lockdown (owner can no longer unpublish/update/republish/etc.) is
+  # deliberate decision, not an automatic side effect of a suspension. The
+  # actual lockdown (owner can no longer unpublish/update/republish/etc.) is
   # enforced centrally in EventAuthorization#event_permits?, not here — this
   # method only flips the two columns and the visibility flag.
-  def freeze!(reason:)
-    update!(frozen_at: Time.current, freeze_reason: reason.presence, is_published: false)
+  def suspend!(reason:)
+    update!(suspended_at: Time.current, suspension_reason: reason.presence, is_published: false)
   end
 
   # Does NOT re-publish the event — same reasoning as User#unsuspend! not
   # re-publishing an unsuspended organizer's events. Republishing after an
-  # unfreeze is the owner's own decision, and for a paid plan should still go
+  # unsuspend is the owner's own decision, and for a paid plan should still go
   # through EventPlanPaymentsController so plan/capacity stay consistent.
-  def unfreeze!
-    update!(frozen_at: nil, freeze_reason: nil)
+  def unsuspend!
+    update!(suspended_at: nil, suspension_reason: nil)
   end
 
   private
