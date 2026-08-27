@@ -52,6 +52,46 @@ module Api
           render json: { error: "Event not found" }, status: :not_found
         end
 
+        # POST /api/v1/admin/events/:id/freeze
+        # The stronger moderation lever — see event-freeze-and-terms-tickets.md's
+        # Ticket A/B. Unlike #unpublish, this is NOT reversible by the
+        # organizer: EventAuthorization#event_permits? denies every mutating
+        # capability (including the owner's own unpublish/update/republish)
+        # while frozen_at is set, so only #unfreeze below can undo it. Freezing
+        # an already-frozen event is allowed and simply overwrites the reason
+        # — an admin refining their note shouldn't have to unfreeze first.
+        #
+        # Deliberately does NOT email the owner yet — that's
+        # event-freeze-and-terms-tickets.md's Ticket C, landing separately
+        # once EventMailer#frozen exists, same one-capability-per-ticket
+        # granularity the rest of this feature has followed.
+        def freeze
+          event = Event.find(params[:id])
+
+          validate_params_with_schema(AdminFreezeEventRequestSchema) do |validated_params|
+            event.freeze!(reason: validated_params[:reason])
+            log_admin_action("freeze_event", event)
+
+            render json: { event: event_json(event.reload) }
+          end
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Event not found" }, status: :not_found
+        end
+
+        # POST /api/v1/admin/events/:id/unfreeze
+        # Does not re-publish — same reasoning as Event#unfreeze! itself.
+        # Harmless no-op on an event that was never frozen, rather than an
+        # error, since there's nothing unsafe about calling it twice.
+        def unfreeze
+          event = Event.find(params[:id])
+          event.unfreeze!
+          log_admin_action("unfreeze_event", event)
+
+          render json: { event: event_json(event.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Event not found" }, status: :not_found
+        end
+
         # DELETE /api/v1/admin/events/:id
         # Soft-delete (see Event#discard!) — hides the event, its
         # registrations, and its waitlist entries rather than destroying
