@@ -16,6 +16,8 @@ Rails.application.routes.draw do
       patch  "auth/password", to: "auth#change_password"
       patch  "auth/email",    to: "auth#change_email"
       delete "auth/account",  to: "auth#delete_account"
+      # Google sign-in's terms-of-service gap — see auth#accept_terms.
+      post   "auth/accept_terms", to: "auth#accept_terms"
 
       # Password resets
       post  "password_resets",        to: "password_resets#create"

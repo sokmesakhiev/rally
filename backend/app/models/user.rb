@@ -226,6 +226,13 @@ class User < ApplicationRecord
         return user
       end
 
+      # Deliberately does NOT stamp terms_accepted_at/terms_version here —
+      # unlike the email/password path (AuthController#signup), this one-click
+      # flow never shows the user a checkbox, so there's nothing real to
+      # record consent for yet. terms_accepted_at stays nil, and
+      # AuthController#accept_terms is what the frontend calls once it shows
+      # this new account a one-time acceptance interstitial. See
+      # event-freeze-and-terms-tickets.md's Ticket H.
       user = create!(email: email, password: SecureRandom.hex(32), google_uid: google_uid, provider: "google")
       user.verify_email! if email_verified
       user.profile.update!(display_name: name) if name.present?

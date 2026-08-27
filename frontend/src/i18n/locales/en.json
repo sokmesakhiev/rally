@@ -195,6 +195,12 @@
       "signUpFailed": "Sign up failed",
       "passwordMismatch": "Passwords do not match",
       "termsNotAccepted": "You must agree to the Terms of Service and Privacy Policy to create an account"
+    },
+    "termsGate": {
+      "title": "Before you continue",
+      "body": "Since you signed in with Google, we still need you to agree to our Terms of Service and Privacy Policy.",
+      "accept": "Agree and continue",
+      "decline": "Sign out instead"
     }
   },
   "forgotPassword": {
