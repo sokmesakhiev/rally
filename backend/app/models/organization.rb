@@ -282,6 +282,30 @@ class Organization < ApplicationRecord
     "•" * 8 + payway_api_key.last(4)
   end
 
+  # ── PayWay predicates ────────────────────────────────────────────────────
+  # Lifted verbatim from Profile (#331) — same semantics, new home.
+
+  # True once this organization has connected its own PayWay account. When
+  # true, its events' registration payments route through these credentials
+  # instead of Rally's platform default — see AbaPayway::Client.for_event.
+  def payway_configured?
+    payway_merchant_id.present? && payway_api_key.present?
+  end
+
+  # payway_rsa_public_key is deliberately not required for #payway_configured?
+  # — an organization can take payments without it and only loses the ability
+  # to issue *gateway* refunds (AbaPayway::Client#refund) until they add it;
+  # the manual/logged refund path (Refunds::IssueRefund) never needs it.
+  def payway_refund_configured?
+    payway_configured? && payway_rsa_public_key.present?
+  end
+
+  # Never expose the real key — just enough to confirm which one is saved.
+  def payway_api_key_masked
+    return nil if payway_api_key.blank?
+    "•" * 8 + payway_api_key.last(4)
+  end
+
   # ── Soft-delete ──────────────────────────────────────────────────────────
 
   def discarded?
