@@ -26,6 +26,61 @@ RSpec.describe "Events API", type: :request do
       expect(ids).not_to include(draft.id, past.id)
     end
 
+    # Ticket J (#339). The cascade derives rather than writes, so these events
+    # keep is_published: true — a bare `.published` scope would happily serve
+    # them to the world. This is the leak the publicly_visible scope closes.
+    describe "suspension" do
+      def listed_ids
+        get "/api/v1/events", as: :json
+        json["events"].map { |e| e["id"] }
+      end
+
+      it "excludes a directly suspended event" do
+        published_upcoming.suspend!(reason: "Reported")
+
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "excludes an event whose organization is suspended" do
+        published_upcoming.organization.suspend!(reason: "Reported")
+
+        expect(published_upcoming.reload.is_published).to be(true)
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "excludes an event whose organizer's account is suspended" do
+        published_upcoming.organization.owner.suspend!(reason: "Fraud")
+
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "brings it back once the organization is unsuspended" do
+        published_upcoming.organization.suspend!(reason: "Reported")
+        expect(listed_ids).not_to include(published_upcoming.id)
+
+        published_upcoming.organization.unsuspend!
+
+        expect(listed_ids).to include(published_upcoming.id)
+      end
+
+      # No `as: :json` here, matching the other param-passing index specs in
+      # this file: on a GET, `as: :json` encodes params into a request body
+      # rather than the query string, so the filter never reaches the action.
+      it "keeps search working alongside the join" do
+        get "/api/v1/events", params: { q: published_upcoming.title }
+
+        expect(response).to have_http_status(:ok)
+        expect(json["events"].map { |e| e["id"] }).to include(published_upcoming.id)
+      end
+
+      it "keeps the category filter working alongside the join" do
+        get "/api/v1/events", params: { category: published_upcoming.category }
+
+        expect(response).to have_http_status(:ok)
+        expect(json["events"].map { |e| e["id"] }).to include(published_upcoming.id)
+      end
+    end
+
     it "does not require authentication" do
       get "/api/v1/events", as: :json
       expect(response).to have_http_status(:ok)

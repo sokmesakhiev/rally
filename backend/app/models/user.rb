@@ -109,21 +109,41 @@ class User < ApplicationRecord
     suspended_at.present?
   end
 
-  # Suspending unpublishes every event the user created, so a suspension takes
-  # effect for the public immediately rather than only blocking the account's
-  # own sign-in. Their registrations are deliberately left alone: cancelling
-  # someone else's paid registration is a refund decision, not a moderation
-  # one, and shouldn't happen as a side effect here.
+  # A suspension takes effect for the public immediately, but nothing is
+  # written downward to do it — see organization-identity-tickets.md's
+  # Ticket J (#339). Organization#suspended? consults its owner, and
+  # Event#suspended? consults its organization, so every event this user
+  # presents drops out of public listings (Event.publicly_visible joins both)
+  # the moment this row is stamped.
+  #
+  # This used to `events.published.update_all(is_published: false)`. That is
+  # deliberately gone: with derivation it's redundant for hiding events, and
+  # now actively wrong, because unsuspending would leave them unpublished and
+  # the organizer with fifty events to manually republish — for a paid plan,
+  # back through the payment flow.
+  #
+  # Only organizations this user *owns* are affected. Being suspended costs
+  # them their own access to a club they merely administer, but the club and
+  # its events carry on: cascading through admin membership would let one bad
+  # actor take down a legitimate organization they happened to volunteer for.
+  #
+  # Their registrations are left alone: cancelling someone else's paid
+  # registration is a refund decision, not a moderation one.
   def suspend!(reason: nil)
-    transaction do
-      update!(suspended_at: Time.current, suspension_reason: reason.presence)
-      events.published.update_all(is_published: false, updated_at: Time.current)
-    end
+    update!(suspended_at: Time.current, suspension_reason: reason.presence)
   end
 
-  # Does NOT re-publish the events unsuspending took down — republishing is the
-  # organizer's decision (and, for a paid plan, goes back through
-  # EventPlanPaymentsController so plan/capacity stay consistent).
+  # Restores everything the cascade took down, automatically — an event
+  # suspended on its own merits stays suspended, because its own suspended_at
+  # is still set (see Event#suspended?).
+  #
+  # Note this differs from Event#unsuspend!, which does NOT re-publish an
+  # event that direct suspension unpublished — that stays the organizer's own
+  # decision, and for a paid plan goes back through
+  # EventPlanPaymentsController so plan/capacity stay consistent. The
+  # asymmetry is deliberate: suspending an event is a judgment about that
+  # event, suspending an account is a judgment about the account, and lifting
+  # the latter should undo it wholesale.
   def unsuspend!
     update!(suspended_at: nil, suspension_reason: nil)
   end

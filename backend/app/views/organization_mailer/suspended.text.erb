@@ -1,0 +1,17 @@
+Hi<%= @owner.profile&.display_name.present? ? " #{@owner.profile.display_name}" : "" %>,
+
+Your organization <%= @organization.name %> has been suspended by the Rally team.
+
+Reason: <%= @reason %>
+
+While it is suspended, your organization's page is no longer publicly visible, and every event it presents has been taken off public listings. You and your team can still sign in and see them, but they cannot be edited, published, or managed until the suspension is lifted.
+
+Organization: <%= @organization.name %>
+Page: <%= @organizer_url %>
+ID: <%= @organization.id %>
+
+If the suspension is lifted, your events return to public listings automatically — there is nothing you need to re-publish.
+
+If you believe this decision was made in error, please email admin@rails-dev.com so we can look into it — include the organization link or ID above so we can find it quickly.
+
+— The Rally team

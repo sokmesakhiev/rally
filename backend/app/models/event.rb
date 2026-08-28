@@ -76,11 +76,20 @@ class Event < ApplicationRecord
   # neither. Added for the public organizer page's "events run" signal
   # (organization-identity-tickets.md's Ticket F).
   scope :ended, -> { where("COALESCE(end_at, start_at) < ?", Time.current) }
-  # Events safe to show an anonymous visitor. Suspension is only this event's
-  # own flag for now; Ticket J (#339) makes Event#suspended? derive from the
-  # organization and its owner, at which point this scope grows the matching
-  # join and every Event.published call site gets audited with it.
-  scope :publicly_visible, -> { published.kept.where(suspended_at: nil) }
+  # Events safe to show an anonymous visitor — the SQL counterpart of
+  # `!suspended?`, extended in Ticket J (#339) to follow the same
+  # event → organization → owner chain that predicate does.
+  #
+  # Every public-facing listing goes through this rather than bare
+  # `.published`: a suspended organization's events stay is_published: true
+  # (the cascade doesn't write to them, so unsuspending restores them), which
+  # means `published` alone would happily serve them to the world.
+  scope :publicly_visible, -> {
+    published.kept.where(suspended_at: nil)
+      .joins(organization: :owner)
+      .where(organizations: { suspended_at: nil, deleted_at: nil })
+      .where(users: { suspended_at: nil })
+  }
 
   # Free-text search across the fields a participant would plausibly type:
   # event name, blurb, and place. Deliberately ILIKE rather than Postgres
@@ -214,8 +223,39 @@ class Event < ApplicationRecord
   # suspension_reason) to match User#suspend!/#unsuspend! exactly, since it's
   # the same concept — an admin-only-reversible lock — applied to an event
   # instead of an account.
+  # Suspension is DERIVED downward, never written downward — see
+  # organization-identity-tickets.md's Ticket J (#339). An event is suspended
+  # if it was suspended directly, or if the organization presenting it is
+  # (which in turn covers that organization's owner being suspended).
+  #
+  # Deriving rather than copying is what makes unsuspending correct: lifting
+  # an organization's suspension restores exactly the events that went down
+  # with it, while an event suspended on its own merits stays down because
+  # its own suspended_at is still set. No provenance column, no reconciliation
+  # job, and no way for the two to drift apart.
+  #
+  # Costs two belongs_to hops. Authorization paths that call this per request
+  # preload with `includes(organization: :owner)` — see
+  # EventAuthorization#find_authorized_event!'s default scope.
   def suspended?
+    suspended_at.present? || organization&.suspended? || false
+  end
+
+  # True only when this event itself was suspended, ignoring the organization.
+  # What lets the UI say *why* something is unavailable — "this event was
+  # suspended" reads differently from "this organizer has been suspended".
+  def suspended_directly?
     suspended_at.present?
+  end
+
+  # nil, "event", or "organization" — the reason it's unavailable, for the
+  # frontend to render. Direct suspension wins when both apply, since that's
+  # the one that survives an organization being unsuspended.
+  def suspension_source
+    return "event" if suspended_directly?
+    return "organization" if organization&.suspended?
+
+    nil
   end
 
   # Forces the event off public listings the same way #discard! and

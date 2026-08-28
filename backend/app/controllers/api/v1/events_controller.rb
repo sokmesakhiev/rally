@@ -37,7 +37,11 @@ module Api
           page     = validated_params[:page] || 1
           per_page = validated_params[:per_page] || EventIndexRequestSchema::DEFAULT_PER_PAGE
 
-          scope = Event.published.upcoming.kept
+          # publicly_visible, not published.kept — see Ticket J (#339). A
+          # suspended organization's events keep is_published: true (the
+          # cascade derives rather than writes, so unsuspending restores
+          # them), so bare `.published` would serve them to the public.
+          scope = Event.publicly_visible.upcoming
             .search(validated_params[:q])
             .in_category(validated_params[:category])
 
@@ -46,7 +50,12 @@ module Api
           total = scope.count
 
           events = scope
-            .includes(event_types: { registration_event_types: :registration })
+            # organization: :owner is preloaded because event_json calls
+            # #suspended?, which since Ticket J (#339) walks
+            # event → organization → owner — two extra queries per row
+            # without this.
+            .includes({ organization: :owner },
+                      event_types: { registration_event_types: :registration })
             .order(start_at: :asc)
             .offset((page - 1) * per_page)
             .limit(per_page)
@@ -77,7 +86,10 @@ module Api
       # preferring :owner over any membership row the creator might also
       # hold) — an event can only be tagged once per response.
       def my_events
-        eager_load = [ :registrations, event_types: { registration_event_types: :registration } ]
+        # organization: :owner for the same reason as events#index — event_json
+        # calls #suspended?, which walks event → organization → owner.
+        eager_load = [ :registrations, { organization: :owner },
+                       { event_types: { registration_event_types: :registration } } ]
 
         owned = current_user.events.kept.includes(*eager_load)
         # Events presented by an organization this user owns or administers,
@@ -118,7 +130,11 @@ module Api
 
       # GET /api/v1/events/:id
       def show
-        @event = Event.includes(:registrations, survey: :survey_questions,
+        # organization: :owner is preloaded because event_json calls
+        # #suspended?, which since Ticket J (#339) walks
+        # event → organization → owner.
+        @event = Event.includes(:registrations, { organization: :owner },
+                                 survey: :survey_questions,
                                  event_types: { registration_event_types: :registration })
           .find(params[:id])
         json = event_json(@event, include_count: true, include_survey: true, include_types: true)
@@ -430,6 +446,12 @@ module Api
           suspended: event.suspended?,
           suspension_reason: event.suspension_reason,
           suspended_at: event.suspended_at,
+          # nil | "event" | "organization" — lets the UI say *why* this is
+          # unavailable, since since Ticket J (#339) an event can be suspended
+          # because its organizer was, not only on its own merits.
+          # suspension_reason/suspended_at stay the event's own values and are
+          # nil for an inherited suspension.
+          suspension_source: event.suspension_source,
           brand_color: event.brand_color,
           banner_url: event.banner_url,
           logo_url: event.logo_url,
