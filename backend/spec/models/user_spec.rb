@@ -202,14 +202,12 @@ RSpec.describe User, type: :model do
       expect(User.discarded).to include(user)
     end
 
-    it "scrubs the profile's PII and PayWay credentials" do
+    it "scrubs the profile's PII" do
       user = create(:user)
       user.profile.update!(
         display_name: "Real Name",
         avatar_url: "https://example.com/a.png",
-        phone: "012345678",
-        payway_merchant_id: "merchant123",
-        payway_api_key: "secret-key"
+        phone: "012345678"
       )
 
       user.discard!
@@ -218,8 +216,54 @@ RSpec.describe User, type: :model do
       expect(profile.display_name).to be_nil
       expect(profile.avatar_url).to be_nil
       expect(profile.phone).to be_nil
-      expect(profile.payway_merchant_id).to be_nil
-      expect(profile.payway_api_key).to be_nil
+    end
+
+    # PayWay credentials live on Organization since #331, so scrubbing them
+    # means scrubbing them there. A deleted account's live merchant
+    # credentials must not linger on an organization that outlives it.
+    it "clears PayWay credentials from every organization the user owns" do
+      user = create(:user)
+      first = create(:organization, owner: user)
+      second = create(:organization, owner: user)
+      [ first, second ].each do |org|
+        org.update!(
+          payway_merchant_id: "merchant123",
+          payway_api_key: "secret-key",
+          payway_rsa_public_key: "-----BEGIN PUBLIC KEY-----"
+        )
+      end
+
+      user.discard!
+
+      [ first, second ].each do |org|
+        org.reload
+        expect(org.payway_merchant_id).to be_nil
+        expect(org.payway_api_key).to be_nil
+        expect(org.payway_rsa_public_key).to be_nil
+      end
+    end
+
+    # The organizations themselves survive — they present events other people
+    # registered for, the same reason #discard! hides events rather than
+    # destroying them.
+    it "leaves the organizations themselves in place" do
+      user = create(:user)
+      organization = create(:organization, owner: user)
+
+      user.discard!
+
+      expect(Organization.exists?(organization.id)).to be(true)
+    end
+
+    it "does not touch PayWay credentials on organizations the user merely administers" do
+      user = create(:user)
+      club = create(:organization)
+      club.update!(payway_merchant_id: "club_merchant", payway_api_key: "club_key")
+      create(:organization_membership, organization: club, user: user, role: "admin")
+
+      user.discard!
+
+      expect(club.reload.payway_merchant_id).to eq("club_merchant")
     end
 
     it "resets email_auto_generated so a deleted account doesn't linger in the 'add a real email' nudge" do

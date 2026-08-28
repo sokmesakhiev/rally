@@ -174,11 +174,23 @@ class User < ApplicationRecord
       profile&.update!(
         display_name: nil,
         avatar_url: nil,
-        phone: nil,
-        payway_merchant_id: nil,
-        payway_api_key: nil,
-        payway_rsa_public_key: nil
+        phone: nil
       )
+      # PayWay credentials live on Organization since Ticket B (#331), so
+      # clearing them here means clearing them there. The organizations
+      # themselves survive — they present events other people registered for,
+      # the same reason this method hides events rather than destroying them —
+      # but a deleted account's live merchant credentials must not linger on
+      # them. Safe by the time we get here: #delete_account already refuses
+      # while any of this user's events still has an outstanding paid
+      # registration.
+      owned_organizations.find_each do |organization|
+        organization.update!(
+          payway_merchant_id: nil,
+          payway_api_key: nil,
+          payway_rsa_public_key: nil
+        )
+      end
     end
   end
 

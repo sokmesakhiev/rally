@@ -55,27 +55,32 @@ module AbaPayway
       end
 
       # Builds a client for a registration payment (attendee → organizer) on
-      # the given event. Uses the event creator's own PayWay credentials when
-      # they've connected one via their profile (Profile#payway_configured?),
-      # so the money lands directly in the organizer's PayWay account;
-      # otherwise falls back to the platform's default credentials
-      # (config/payway.yml).
+      # the given event. Uses the credentials of the organization that
+      # *presents* the event when it has connected its own PayWay account
+      # (Organization#payway_configured?), so the money lands directly in the
+      # organizer's account; otherwise falls back to the platform's default
+      # credentials (config/payway.yml).
+      #
+      # Keyed off event.organization, NOT event.creator — see
+      # organization-identity-tickets.md's Ticket B (#331). A club's
+      # registration money must follow the club, not whichever colleague
+      # happened to click Create.
       #
       # Organizer "pay to publish" charges (EventPlanPayment — organizer →
       # Rally) must never use this; they should always use `Client.new` with
       # no args so proceeds go to Rally's own account.
       def for_event(event)
-        profile = event.creator&.profile
-        if profile&.payway_configured?
+        organization = event.organization
+        if organization&.payway_configured?
           # payway_rsa_public_key may still be nil here (it's optional even
-          # once payway_configured? is true — see Profile#payway_refund_configured?);
+          # once payway_configured? is true — see Organization#payway_refund_configured?);
           # #refund raises a clear ConfigurationError if it's actually needed
           # and missing, rather than silently falling back to Rally's own key
           # (which would send the organizer's tran_id to the platform's RSA
           # key — meaningless, since ABA ties merchant_auth's encryption to
           # whichever merchant_id/api_key pair is presented).
-          new(merchant_id: profile.payway_merchant_id, api_key: profile.payway_api_key,
-              rsa_public_key: profile.payway_rsa_public_key)
+          new(merchant_id: organization.payway_merchant_id, api_key: organization.payway_api_key,
+              rsa_public_key: organization.payway_rsa_public_key)
         else
           new
         end

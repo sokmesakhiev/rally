@@ -13,6 +13,11 @@ class ProfileUpdateRequestSchema < ApplicationRequestSchema
       optional(:display_name).maybe(:string)
       optional(:avatar_url).maybe(:string)
       optional(:phone).maybe(:string)
+      # TRANSITIONAL, remove with Ticket G (#336). These no longer land on
+      # Profile at all — ProfilesController proxies them to the caller's
+      # organization (see #331), because the payment-settings form still posts
+      # here until #336 moves that UI. Delete these three keys, and the
+      # proxying in ProfilesController, together.
       optional(:payway_merchant_id).maybe(:string)
       optional(:payway_api_key).maybe(:string)
       optional(:payway_rsa_public_key).maybe(:string)

@@ -50,6 +50,27 @@ class Organization < ApplicationRecord
   before_validation :generate_slug, on: :create
   validate :slug_is_immutable, on: :update
 
+  # ── PayWay (attendee → organizer registration payments) ──────────────────
+  # Moved here from Profile in Ticket B (#331): registration money settles
+  # into the account of whoever *presents* the event, which is this
+  # organization, not whichever colleague happened to create it.
+  #
+  # PayWay's API key is a payment-gateway secret — encrypted at rest via
+  # Active Record encryption (keys in config/initializers/active_record_encryption.rb).
+  # Never returned as plaintext in JSON; callers get #payway_api_key_masked.
+  encrypts :payway_api_key
+
+  # Require both together (or neither), so an organization can't sit in a
+  # half-configured state where a merchant ID is saved but the key isn't —
+  # which would silently fall back to Rally's platform credentials instead of
+  # raising a clear validation error.
+  validates :payway_api_key, presence: true, if: -> { payway_merchant_id.present? }
+  validates :payway_merchant_id, presence: true, if: -> { payway_api_key.present? }
+
+  # Treat "" as nil so clearing a field in the UI actually disconnects PayWay
+  # rather than leaving an empty string that reads as "present".
+  before_validation :nilify_blank_payway_fields
+
   # Explicit scopes rather than a default_scope, matching Event/Registration/
   # Survey/User: a default_scope here would make any belongs_to pointing at a
   # discarded or suspended organization silently behave as though it doesn't
@@ -157,6 +178,30 @@ class Organization < ApplicationRecord
     update!(verified_at: nil)
   end
 
+  # ── PayWay predicates ────────────────────────────────────────────────────
+  # Lifted verbatim from Profile (#331) — same semantics, new home.
+
+  # True once this organization has connected its own PayWay account. When
+  # true, its events' registration payments route through these credentials
+  # instead of Rally's platform default — see AbaPayway::Client.for_event.
+  def payway_configured?
+    payway_merchant_id.present? && payway_api_key.present?
+  end
+
+  # payway_rsa_public_key is deliberately not required for #payway_configured?
+  # — an organization can take payments without it and only loses the ability
+  # to issue *gateway* refunds (AbaPayway::Client#refund) until they add it;
+  # the manual/logged refund path (Refunds::IssueRefund) never needs it.
+  def payway_refund_configured?
+    payway_configured? && payway_rsa_public_key.present?
+  end
+
+  # Never expose the real key — just enough to confirm which one is saved.
+  def payway_api_key_masked
+    return nil if payway_api_key.blank?
+    "•" * 8 + payway_api_key.last(4)
+  end
+
   # ── Soft-delete ──────────────────────────────────────────────────────────
 
   def discarded?
@@ -204,5 +249,11 @@ class Organization < ApplicationRecord
     return unless slug_changed?
 
     errors.add(:slug, "cannot be changed once the organization has been created")
+  end
+
+  def nilify_blank_payway_fields
+    self.payway_merchant_id = payway_merchant_id.presence
+    self.payway_api_key = payway_api_key.presence
+    self.payway_rsa_public_key = payway_rsa_public_key.presence
   end
 end

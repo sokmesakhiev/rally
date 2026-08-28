@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_041000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_061000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -201,6 +201,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_041000) do
     t.string "logo_url"
     t.string "name", null: false
     t.uuid "owner_id", null: false
+    t.text "payway_api_key"
+    t.string "payway_merchant_id"
+    t.text "payway_rsa_public_key"
     t.string "slug", null: false
     t.datetime "suspended_at"
     t.string "suspension_reason"

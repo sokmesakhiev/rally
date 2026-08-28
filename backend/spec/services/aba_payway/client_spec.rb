@@ -18,14 +18,64 @@ RSpec.describe AbaPayway::Client, ".for_event" do
     expect(client.instance_variable_get(:@api_key)).to eq("platform_key")
   end
 
-  it "uses the organizer's own credentials once they've connected PayWay" do
+  it "uses the presenting organization's credentials once it has connected PayWay" do
     event = create(:event)
-    event.creator.profile.update!(payway_merchant_id: "organizer_merchant", payway_api_key: "organizer_key")
+    event.organization.update!(payway_merchant_id: "organizer_merchant", payway_api_key: "organizer_key")
 
     client = described_class.for_event(event)
 
     expect(client.instance_variable_get(:@merchant_id)).to eq("organizer_merchant")
     expect(client.instance_variable_get(:@api_key)).to eq("organizer_key")
+  end
+
+  it "passes the organization's RSA public key through when set" do
+    event = create(:event)
+    event.organization.update!(
+      payway_merchant_id: "organizer_merchant",
+      payway_api_key: "organizer_key",
+      payway_rsa_public_key: "-----BEGIN PUBLIC KEY-----"
+    )
+
+    client = described_class.for_event(event)
+
+    expect(client.instance_variable_get(:@rsa_public_key)).to eq("-----BEGIN PUBLIC KEY-----")
+  end
+
+  # organization-identity-tickets.md's Ticket B (#331): the money follows the
+  # organization that presents the event, not whichever colleague created it.
+  # Getting this backwards would settle a club's registration income into an
+  # individual's personal merchant account.
+  it "follows the organization, not the event's creator" do
+    club = create(:organization)
+    club.update!(payway_merchant_id: "club_merchant", payway_api_key: "club_key")
+    colleague = create(:user)
+    event = create(:event, :for_organization, creator: colleague, presented_by: club)
+
+    client = described_class.for_event(event)
+
+    expect(client.instance_variable_get(:@merchant_id)).to eq("club_merchant")
+  end
+
+  it "ignores credentials on an organization that does not present the event" do
+    unrelated = create(:organization)
+    unrelated.update!(payway_merchant_id: "unrelated_merchant", payway_api_key: "unrelated_key")
+    event = create(:event)
+
+    client = described_class.for_event(event)
+
+    expect(client.instance_variable_get(:@merchant_id)).to eq("platform_merchant")
+  end
+
+  # Half-configured can't happen through the model's both-or-neither
+  # validation, but a direct DB write could produce it — falling back to the
+  # platform is the safe outcome, versus presenting a merchant_id with no key.
+  it "falls back to the platform when only a merchant id is set" do
+    event = create(:event)
+    event.organization.update_columns(payway_merchant_id: "half_configured")
+
+    client = described_class.for_event(event)
+
+    expect(client.instance_variable_get(:@merchant_id)).to eq("platform_merchant")
   end
 end
 
