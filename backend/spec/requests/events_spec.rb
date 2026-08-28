@@ -26,6 +26,40 @@ RSpec.describe "Events API", type: :request do
       expect(ids).not_to include(draft.id, past.id)
     end
 
+    # Ticket H (#337) — enough to render "Presented by" and link through.
+    it "includes the presenting organization" do
+      published_upcoming.organization.update!(
+        name: "Phnom Penh Runners", logo_url: "https://example.com/logo.png"
+      )
+
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org["slug"]).to eq(published_upcoming.organization.slug)
+      expect(org["name"]).to eq("Phnom Penh Runners")
+      expect(org["logo_url"]).to eq("https://example.com/logo.png")
+      expect(org["verified"]).to be(false)
+    end
+
+    it "reports the organization's verified badge" do
+      published_upcoming.organization.verify!
+
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org["verified"]).to be(true)
+    end
+
+    # The nested object is a listing card's worth of data, not the full
+    # profile — trust signals and contact details stay on the organizers
+    # endpoint, and payment fields must never appear here.
+    it "exposes only the presented-by fields, nothing private" do
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org.keys).to contain_exactly("slug", "name", "logo_url", "verified")
+    end
+
     # Ticket J (#339). The cascade derives rather than writes, so these events
     # keep is_published: true — a bare `.published` scope would happily serve
     # them to the world. This is the leak the publicly_visible scope closes.

@@ -22,6 +22,7 @@ import { Route as AuthenticatedOrganizationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as EventsIndexRouteImport } from './routes/events.index'
 import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
+import { Route as OrganizersSlugRouteImport } from './routes/organizers.$slug'
 import { Route as ResetPasswordTokenRouteImport } from './routes/reset-password.$token'
 import { Route as VerifyEmailTokenRouteImport } from './routes/verify-email.$token'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events.new'
@@ -92,6 +93,11 @@ const EventsEventIdRoute = EventsEventIdRouteImport.update({
   path: '/events/$eventId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrganizersSlugRoute = OrganizersSlugRouteImport.update({
+  id: '/organizers/$slug',
+  path: '/organizers/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordTokenRoute = ResetPasswordTokenRouteImport.update({
   id: '/reset-password/$token',
   path: '/reset-password/$token',
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/organizations': typeof AuthenticatedOrganizationsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/events/$eventId': typeof EventsEventIdRoute
+  '/organizers/$slug': typeof OrganizersSlugRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events/': typeof EventsIndexRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/organizations': typeof AuthenticatedOrganizationsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/events/$eventId': typeof EventsEventIdRoute
+  '/organizers/$slug': typeof OrganizersSlugRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events': typeof EventsIndexRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/_authenticated/organizations': typeof AuthenticatedOrganizationsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/events/$eventId': typeof EventsEventIdRoute
+  '/organizers/$slug': typeof OrganizersSlugRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/events/': typeof EventsIndexRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/profile'
     | '/events/$eventId'
+    | '/organizers/$slug'
     | '/reset-password/$token'
     | '/verify-email/$token'
     | '/events/'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/profile'
     | '/events/$eventId'
+    | '/organizers/$slug'
     | '/reset-password/$token'
     | '/verify-email/$token'
     | '/events'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/_authenticated/organizations'
     | '/_authenticated/profile'
     | '/events/$eventId'
+    | '/organizers/$slug'
     | '/reset-password/$token'
     | '/verify-email/$token'
     | '/events/'
@@ -237,6 +249,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   EventsEventIdRoute: typeof EventsEventIdRoute
+  OrganizersSlugRoute: typeof OrganizersSlugRoute
   ResetPasswordTokenRoute: typeof ResetPasswordTokenRoute
   VerifyEmailTokenRoute: typeof VerifyEmailTokenRoute
   EventsIndexRoute: typeof EventsIndexRoute
@@ -335,6 +348,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventsEventIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/organizers/$slug': {
+      id: '/organizers/$slug'
+      path: '/organizers/$slug'
+      fullPath: '/organizers/$slug'
+      preLoaderRoute: typeof OrganizersSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password/$token': {
       id: '/reset-password/$token'
       path: '/reset-password/$token'
@@ -397,6 +417,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
   EventsEventIdRoute: EventsEventIdRoute,
+  OrganizersSlugRoute: OrganizersSlugRoute,
   ResetPasswordTokenRoute: ResetPasswordTokenRoute,
   VerifyEmailTokenRoute: VerifyEmailTokenRoute,
   EventsIndexRoute: EventsIndexRoute,

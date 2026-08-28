@@ -15,6 +15,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { eventsApi } from "@/lib/api-client";
 import { SiteHeader } from "@/components/site-header";
+import { PresentedByInline } from "@/components/presented-by";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,11 @@ function BrowseEvents() {
                   </div>
 
                   <h3 className="mt-3 text-lg font-semibold">{ev.title}</h3>
+                  {/* Inline (not a link) — this card is already wrapped in
+                      one, and nesting anchors is invalid HTML. */}
+                  <div className="mt-2">
+                    <PresentedByInline organization={ev.organization} />
+                  </div>
                   <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
                     <CalendarDays className="h-4 w-4" /> {formatDateTime(ev.start_at)}
                   </p>
