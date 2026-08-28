@@ -296,6 +296,93 @@ RSpec.describe Organization, type: :model do
     end
   end
 
+  # ── Publish-readiness ────────────────────────────────────────────────────────
+  # Ticket E (#334). A public event must be presented by an organization an
+  # audience can actually evaluate.
+  describe "identity completeness" do
+    def complete_attributes
+      {
+        name: "Phnom Penh Runners",
+        logo_url: "https://example.com/logo.png",
+        description: "A running club.",
+        contact_email: "hello@example.com"
+      }
+    end
+
+    it "is complete when name, logo, description and a contact are present" do
+      organization = build(:organization, **complete_attributes)
+
+      expect(organization.identity_complete?).to be(true)
+      expect(organization.missing_identity_fields).to be_empty
+    end
+
+    it "accepts a phone as the contact instead of an email" do
+      organization = build(:organization, **complete_attributes.merge(contact_email: nil, contact_phone: "012345678"))
+
+      expect(organization.identity_complete?).to be(true)
+    end
+
+    it "names each missing field" do
+      organization = build(:organization, name: "Bare", logo_url: nil, description: nil,
+                                          contact_email: nil, contact_phone: nil)
+
+      expect(organization.missing_identity_fields)
+        .to contain_exactly(:logo_url, :description, :contact)
+    end
+
+    %i[logo_url description].each do |field|
+      it "is incomplete without #{field}" do
+        organization = build(:organization, **complete_attributes.merge(field => nil))
+
+        expect(organization.identity_complete?).to be(false)
+        expect(organization.missing_identity_fields).to include(field)
+      end
+    end
+
+    it "is incomplete with neither contact method" do
+      organization = build(:organization, **complete_attributes.merge(contact_email: nil, contact_phone: nil))
+
+      expect(organization.missing_identity_fields).to include(:contact)
+    end
+
+    # The freshly-backfilled state every existing organization is in — which
+    # is exactly why enforcement is off by default until #336 ships the UI.
+    it "treats a backfilled name-only organization as incomplete" do
+      organization = build(:organization, name: "From Backfill", logo_url: nil,
+                                          description: nil, contact_email: nil, contact_phone: nil)
+
+      expect(organization.identity_complete?).to be(false)
+    end
+  end
+
+  describe ".identity_required_for_publishing?" do
+    # Same ENV swap/restore shape as spec/services/aba_payway/client_spec.rb —
+    # climate_control isn't a dependency here.
+    def with_env(value)
+      original = ENV.to_hash
+      ENV["REQUIRE_ORGANIZATION_IDENTITY"] = value
+      yield
+    ensure
+      ENV.replace(original)
+    end
+
+    it "is off unless REQUIRE_ORGANIZATION_IDENTITY is set" do
+      expect(described_class.identity_required_for_publishing?).to be(false)
+    end
+
+    it "is on when the env var is truthy" do
+      with_env("true") { expect(described_class.identity_required_for_publishing?).to be(true) }
+    end
+
+    it "treats an explicit false the same as unset" do
+      with_env("false") { expect(described_class.identity_required_for_publishing?).to be(false) }
+    end
+
+    it "treats an empty value the same as unset" do
+      with_env("") { expect(described_class.identity_required_for_publishing?).to be(false) }
+    end
+  end
+
   # ── PayWay ───────────────────────────────────────────────────────────────────
   # Moved here from Profile in Ticket B (#331). Registration payments settle
   # into the account of whoever presents the event.

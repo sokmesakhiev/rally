@@ -58,6 +58,12 @@ class Event < ApplicationRecord
   # Only meaningful once a plan has actually set a capacity — a draft event
   # with types but no plan yet (capacity nil) isn't constrained by this.
   validate :capacity_covers_event_types, if: -> { capacity.present? }
+  # Ticket E (#334). Guards the *transition* into published, not the
+  # published state, so an already-live event whose organization predates the
+  # requirement keeps working and can still be edited — this rule must never
+  # retroactively unpublish anything.
+  validate :organization_identity_complete_to_publish,
+    if: -> { is_published? && will_save_change_to_is_published? }
 
   before_validation :default_price_cents
 
@@ -240,5 +246,29 @@ class Event < ApplicationRecord
     return if total <= capacity
     errors.add(:capacity,
       "must be at least #{total} to cover the combined limit across all event types (currently #{total})")
+  end
+
+  # The structural backstop for Ticket E (#334). Three separate code paths set
+  # is_published (EventPlanPaymentsController's re-publish shortcut, its
+  # zero-charge branch, and EventPlanPayment#mark_paid! from the webhook), so
+  # the rule lives here where all three must pass through it rather than in
+  # any one of them.
+  #
+  # It is NOT the primary user-facing check: the webhook path reaches
+  # mark_paid! only after ABA has taken the organizer's money, and failing
+  # there would leave them charged and unpublished. EventPlanPaymentsController
+  # rejects incomplete organizations up front, before any charge is started —
+  # same before-payment ordering #capacity_covers_event_types already has.
+  # This exists so no future call site can quietly skip that.
+  def organization_identity_complete_to_publish
+    return unless Organization.identity_required_for_publishing?
+    return if organization.nil?
+
+    missing = organization.missing_identity_fields
+    return if missing.empty?
+
+    errors.add(:base, :organization_incomplete,
+      message: "Complete your organization's profile before publishing " \
+               "(missing: #{missing.join(', ')})")
   end
 end

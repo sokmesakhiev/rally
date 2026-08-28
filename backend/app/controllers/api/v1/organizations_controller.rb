@@ -175,6 +175,14 @@ module Api
           verified: organization.verified?,
           suspended: organization.suspended?,
           owner_id: organization.owner_id,
+          # Publish-readiness (Ticket E, #334). Surfaced so the settings page
+          # can render the checklist from the server's rule rather than
+          # re-deriving it and drifting. `identity_required` tells the
+          # frontend whether the gate is currently enforced — see
+          # Organization.identity_required_for_publishing?.
+          identity_complete: organization.identity_complete?,
+          missing_identity_fields: organization.missing_identity_fields,
+          identity_required: Organization.identity_required_for_publishing?,
           # What the caller may do, so the frontend doesn't re-derive the
           # rules and drift from the server's answer.
           role: role_for(organization),
