@@ -113,6 +113,14 @@ Rails.application.routes.draw do
       patch  "events/:event_id/members/:id", to: "event_members#update"
       delete "events/:event_id/members/:id", to: "event_members#destroy"
 
+      # The PUBLIC organizer page (Ticket F, #335) — no auth, world-readable.
+      # Deliberately its own resource rather than an action on organizations
+      # below: that surface is authenticated management and its payload
+      # carries PayWay status and the owner's identity. Keeping the two apart
+      # in the routes is the first line of defence against a private field
+      # ending up in a public response.
+      get "organizers/:slug", to: "organizers#show"
+
       # Organizations — the identity an event is presented under. See
       # organization-identity-tickets.md's Ticket D (#333). Addressed by slug
       # (Organization#to_param), which is immutable once generated, so these
