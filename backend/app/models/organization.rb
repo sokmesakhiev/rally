@@ -282,6 +282,48 @@ class Organization < ApplicationRecord
     "•" * 8 + payway_api_key.last(4)
   end
 
+  # ── Publish-readiness ────────────────────────────────────────────────────
+  # organization-identity-tickets.md's Ticket E (#334): a public event must
+  # be presented by an organization an audience can actually evaluate. A
+  # listing whose organizer is a bare name defeats the point of the feature.
+  #
+  # Contact is either/or — an organizer reachable by phone is reachable, and
+  # phone is the more common channel here (see Profile#phone).
+  IDENTITY_REQUIREMENTS = {
+    name: ->(org) { org.name.present? },
+    logo_url: ->(org) { org.logo_url.present? },
+    description: ->(org) { org.description.present? },
+    contact: ->(org) { org.contact_email.present? || org.contact_phone.present? }
+  }.freeze
+
+  # Whether the publish gate is actually enforced.
+  #
+  # Off by default, deliberately. Every organization that exists today was
+  # created by a backfill (#330) or implicitly on first event creation (#332),
+  # so none of them have a description or contact details — and until Ticket G
+  # (#336) ships the organization settings UI, an organizer has no way in the
+  # app to add them. Enforcing on merge would block *all* publishing, for
+  # everyone, until #336.
+  #
+  # Flip REQUIRE_ORGANIZATION_IDENTITY=true once #336 is deployed and
+  # organizers can complete their profile. The rule, its error payload, and
+  # its specs all exist and are exercised either way.
+  def self.identity_required_for_publishing?
+    ActiveModel::Type::Boolean.new.cast(ENV["REQUIRE_ORGANIZATION_IDENTITY"]) || false
+  end
+
+  # Field names the organizer still has to fill in. Empty means ready.
+  # Returned to the frontend so the error names what's missing rather than
+  # making them guess — and so Ticket G's settings page can render the same
+  # checklist from one source of truth.
+  def missing_identity_fields
+    IDENTITY_REQUIREMENTS.reject { |_field, present| present.call(self) }.keys
+  end
+
+  def identity_complete?
+    missing_identity_fields.empty?
+  end
+
   # ── PayWay predicates ────────────────────────────────────────────────────
   # Lifted verbatim from Profile (#331) — same semantics, new home.
 
