@@ -907,8 +907,7 @@
       "admin": "អ្នកគ្រប់គ្រង",
       "member": "សមាជិក"
     }
-<<<<<<< HEAD
-  },
+ },
   "presentedBy": {
     "label": "បង្ហាញដោយ",
     "verified": "បានផ្ទៀងផ្ទាត់",
@@ -923,7 +922,5 @@
     "upcoming": "ព្រឹត្តិការណ៍ខាងមុខ",
     "past": "ព្រឹត្តិការណ៍កន្លងមក",
     "noUpcoming": "គ្មានព្រឹត្តិការណ៍ខាងមុខទេឥឡូវនេះ។"
-=======
->>>>>>> 26841fc (Frontend: organization settings, branding, and org switcher (#336) (#347))
   }
 }
