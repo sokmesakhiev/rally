@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { registrationsApi, eventsApi } from "@/lib/api-client";
+import {
+  PresentedByInline,
+  type PresentedByOrganization,
+} from "@/components/presented-by";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
@@ -39,6 +43,9 @@ interface EventRow {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** Lets a participant check who's behind an event before signing up for
+   * another one — see PresentedByInline (#337). */
+  organization: PresentedByOrganization | null;
 }
 
 function Dashboard() {
@@ -127,6 +134,17 @@ function Dashboard() {
                         </Badge>
                       </div>
                       <h3 className="mt-2 text-lg font-semibold">{ev.title}</h3>
+                      {/* Deciding whether to sign up with this organizer
+                          again starts with knowing who they are. */}
+                      {ev.organization && (
+                        <Link
+                          to="/organizers/$slug"
+                          params={{ slug: ev.organization.slug }}
+                          className="mt-1 inline-flex hover:underline"
+                        >
+                          <PresentedByInline organization={ev.organization} />
+                        </Link>
+                      )}
                       <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                         <CalendarDays className="h-4 w-4" /> {formatDateTime(ev.start_at)}
                       </p>

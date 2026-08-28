@@ -253,9 +253,17 @@ export interface ApiEvent {
   currency: string;
   is_published: boolean;
   /** The organization presenting this event — distinct from creator_id, which
-   * is the individual who set it up. Required when creating. The public
-   * "presented by" details come from organizerApi, not from here. */
+   * is the individual who set it up. Required when creating. */
   organization_id: string;
+  /** Enough to render the "Presented by" block and link through. The full
+   * public profile — trust signals, contact details, their other events —
+   * comes from organizerApi. */
+  organization: {
+    slug: string;
+    name: string;
+    logo_url: string | null;
+    verified: boolean;
+  } | null;
   /** True once an admin has suspended this event (event-freeze-and-terms-tickets.md,
    * Ticket A) — stronger than is_published: false, since the owner cannot
    * reverse it themselves (every mutating action 403s server-side while

@@ -422,10 +422,18 @@ module Api
         json = {
           id: event.id,
           creator_id: event.creator_id,
-          # Just the FK here. The public "presented by" payload (name, logo,
-          # verified badge) is Ticket F's organization endpoint — this is what
-          # lets the dashboard group and filter an organizer's events by org.
           organization_id: event.organization_id,
+          # Just enough to render the "Presented by" block and link through to
+          # the organizer page (Ticket H, #337) — the full public profile,
+          # including trust signals and their other events, is the organizers
+          # endpoint. Safe on a public payload: every field here already
+          # appears on that page.
+          organization: event.organization && {
+            slug: event.organization.slug,
+            name: event.organization.name,
+            logo_url: event.organization.logo_url,
+            verified: event.organization.verified?
+          },
           survey_id: event.survey_id,
           title: event.title,
           description: event.description,

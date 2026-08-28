@@ -29,6 +29,7 @@ import {
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
+import { PresentedBy } from "@/components/presented-by";
 import { EventQRCode } from "@/components/event-qr-code";
 import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
@@ -448,6 +449,11 @@ function EventDetail() {
                 )}
               </p>
             </div>
+
+            {/* Sits below the event's own hero branding, never inside it —
+                the two brandings are shown in different places by design
+                (organization-identity-tickets.md's Ticket H). */}
+            <PresentedBy organization={ev.organization} />
 
             {ev.description && (
               <p className="mt-6 whitespace-pre-wrap leading-relaxed">{ev.description}</p>

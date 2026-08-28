@@ -915,5 +915,20 @@
       "admin": "Admin",
       "member": "Member"
     }
+  },
+  "presentedBy": {
+    "label": "Presented by",
+    "verified": "Verified",
+    "unverified": "Unverified"
+  },
+  "organizerPage": {
+    "notFoundTitle": "Organizer not available",
+    "notFoundDesc": "This organizer page doesn't exist, or is no longer available.",
+    "memberSince": "Organizing since",
+    "eventsRun": "Events run",
+    "participantsHosted": "Participants hosted",
+    "upcoming": "Upcoming events",
+    "past": "Past events",
+    "noUpcoming": "No upcoming events right now."
   }
 }
