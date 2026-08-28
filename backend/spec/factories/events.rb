@@ -1,6 +1,12 @@
 FactoryBot.define do
   factory :event do
-    association :creator, factory: :user
+    creator { association :user }
+    # Owned by the event's own creator, so `create(:event, creator: someone)`
+    # keeps meaning "someone runs this event" — both via creator_id and via
+    # the organization. Pass `organization:` explicitly to model the case
+    # this doesn't cover: an event created by a colleague under a club's
+    # organization (see spec/factories — trait :for_organization below).
+    organization { association :organization, owner: creator }
     title       { Faker::Lorem.sentence(word_count: 3).chomp(".") }
     description { Faker::Lorem.paragraph }
     category    { Event::CATEGORIES.sample }
@@ -31,6 +37,17 @@ FactoryBot.define do
     trait :past do
       start_at { 2.weeks.ago }
       end_at   { 1.week.ago }
+    end
+
+    # An event whose presenting organization is NOT owned by its creator —
+    # the club case. Use when a spec needs creator and organization to come
+    # apart, e.g. proving an org admin can manage a colleague's event.
+    trait :for_organization do
+      transient do
+        presented_by { nil }
+      end
+
+      organization { presented_by || association(:organization) }
     end
   end
 end

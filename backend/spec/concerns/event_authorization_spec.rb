@@ -70,6 +70,65 @@ RSpec.describe EventAuthorization do
 
       expect(host.event_role_for(other_event)).to be_nil
     end
+
+    # organization-identity-tickets.md's Ticket C (#332) — an event is
+    # presented by an organization, and anyone who can act for that
+    # organization can run its events, including ones a colleague created.
+    context "when the event is presented by an organization" do
+      let(:club) { create(:organization) }
+      let(:colleague) { create(:user) }
+      let(:club_event) { create(:event, :for_organization, creator: colleague, presented_by: club) }
+
+      it "returns :owner for the organization's owner, though they didn't create it" do
+        host.current_user = club.owner
+
+        expect(club_event.creator_id).not_to eq(club.owner.id)
+        expect(host.event_role_for(club_event)).to eq(:owner)
+      end
+
+      it "returns :owner for an organization admin" do
+        admin = create(:user)
+        create(:organization_membership, organization: club, user: admin, role: "admin")
+        host.current_user = admin
+
+        expect(host.event_role_for(club_event)).to eq(:owner)
+      end
+
+      # A plain org member has no event authority on its own — they still
+      # need an EventMembership like anyone else.
+      it "returns nil for a plain organization member" do
+        plain_member = create(:user)
+        create(:organization_membership, organization: club, user: plain_member, role: "member")
+        host.current_user = plain_member
+
+        expect(host.event_role_for(club_event)).to be_nil
+      end
+
+      it "still honours an explicit EventMembership for a plain org member" do
+        plain_member = create(:user)
+        create(:organization_membership, organization: club, user: plain_member, role: "member")
+        create(:event_membership, event: club_event, user: plain_member, role: "check_in")
+        host.current_user = plain_member
+
+        expect(host.event_role_for(club_event)).to eq(:check_in)
+      end
+
+      it "does not leak org authority to another organization's events" do
+        other_org_event = create(:event)
+        host.current_user = club.owner
+
+        expect(host.event_role_for(other_org_event)).to be_nil
+      end
+
+      it "prefers :owner over a weaker EventMembership the org admin also holds" do
+        admin = create(:user)
+        create(:organization_membership, organization: club, user: admin, role: "admin")
+        create(:event_membership, event: club_event, user: admin, role: "viewer")
+        host.current_user = admin
+
+        expect(host.event_role_for(club_event)).to eq(:owner)
+      end
+    end
   end
 
   describe "#event_permits?" do
@@ -227,6 +286,22 @@ RSpec.describe EventAuthorization do
         event.unsuspend!
 
         expect(host.event_permits?(event, :update_event)).to be(true)
+      end
+
+      # The lockdown overrides org authority for exactly the same reason it
+      # overrides :owner — nobody on the team can quietly route around a
+      # suspension, however they came by their access.
+      it "restricts an organization admin to the same read-only allowlist" do
+        club = create(:organization)
+        club_event = create(:event, :for_organization, presented_by: club)
+        club_event.suspend!(reason: "Reported as a scam")
+        host.current_user = club.owner
+
+        described_class::CAPABILITIES.each_key do |capability|
+          expected = described_class::SUSPENDED_ALLOWED_CAPABILITIES.include?(capability)
+          expect(host.event_permits?(club_event, capability)).to be(expected),
+            "expected org owner to be #{expected ? 'allowed' : 'denied'} :#{capability} while suspended"
+        end
       end
     end
   end

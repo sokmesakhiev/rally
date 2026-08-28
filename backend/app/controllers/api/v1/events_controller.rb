@@ -80,12 +80,24 @@ module Api
         eager_load = [ :registrations, event_types: { registration_event_types: :registration } ]
 
         owned = current_user.events.kept.includes(*eager_load)
+        # Events presented by an organization this user owns or administers,
+        # including ones a colleague created — see Ticket C (#332). These
+        # count as "owner" for the same reason EventAuthorization resolves
+        # them that way.
+        org_events = Event.kept
+          .where(organization_id: current_user.administered_organizations.select(:id))
+          .includes(*eager_load)
         member_rows = current_user.event_memberships
           .joins(:event).merge(Event.kept)
           .includes(event: eager_load)
 
+        # Insertion order matters: the strongest relationship wins, and each
+        # branch skips events an earlier one already claimed, so someone who
+        # is both an org admin and a check-in member sees "owner", not
+        # "check_in" — and never sees the same event twice.
         events_by_id = {}
         owned.each { |e| events_by_id[e.id] = [ e, "owner" ] }
+        org_events.each { |e| events_by_id[e.id] ||= [ e, "owner" ] }
         member_rows.each do |membership|
           next if events_by_id.key?(membership.event_id)
           events_by_id[membership.event_id] = [ membership.event, membership.role ]
@@ -121,7 +133,12 @@ module Api
       # POST /api/v1/events
       def create
         validate_params_with_schema(EventRequestSchema) do |validated_params|
-          event = current_user.events.new(validated_params[:event])
+          attrs = validated_params[:event]
+          organization = resolve_organization_for_create!(attrs[:organization_id])
+          next if organization.nil?
+
+          event = current_user.events.new(attrs.except(:organization_id))
+          event.organization = organization
 
           # Built unsaved above so the paid-event check runs against what this
           # request would actually produce (including per-type prices) before
@@ -263,6 +280,77 @@ module Api
       # specific bad event down is Admin::EventsController#unpublish's job,
       # and stopping an organizer outright is User#suspend!'s.
       #
+      # Resolves the organization a new event will be presented by, or renders
+      # and returns nil when it can't.
+      #
+      # When organization_id is given it is authoritative and never
+      # second-guessed: a user may administer several organizations (see
+      # organization-identity-tickets.md's Ticket A), so inferring one would
+      # eventually publish an event under the wrong brand — precisely the
+      # failure this feature exists to prevent.
+      #
+      # 404, not 403, for an organization the caller may not use: the same
+      # "don't confirm it exists" reasoning the admin namespace uses.
+      #
+      # ── TRANSITIONAL, remove with Ticket G (#336) ────────────────────────
+      # Everything below the `if organization_id.present?` branch exists only
+      # because the frontend doesn't send organization_id until #336 adds the
+      # org selector. Without it, merging #332 would break event creation for
+      # every user until #336 ships — a sustained outage of the core feature,
+      # not just a deploy-window blip.
+      #
+      # When #336 lands: delete the fallback, and make organization_id
+      # required again in EventRequestSchema.
+      def resolve_organization_for_create!(organization_id)
+        if organization_id.present?
+          organization = Organization.kept.find_by(id: organization_id)
+          return organization if organization&.administered_by?(current_user)
+
+          render json: {
+            error: "Organization not found",
+            code: "organization_not_found"
+          }, status: :not_found
+          return nil
+        end
+
+        implicit_organization_for_create!
+      end
+
+      # TRANSITIONAL — see #resolve_organization_for_create!.
+      def implicit_organization_for_create!
+        candidates = current_user.administered_organizations.kept.to_a
+
+        case candidates.length
+        when 1
+          candidates.first
+        when 0
+          # A user who has never organized anything has no organization: the
+          # #330 backfill only covered people who already had events. Create
+          # one from their profile, mirroring that backfill, so signing up and
+          # creating a first event still works end to end. #336 replaces this
+          # with an explicit "create your organization" step.
+          create_implicit_organization!
+        else
+          # Genuinely ambiguous, so refuse rather than guess. Only reachable
+          # once someone has a second organization, which needs #333's API —
+          # by which point #336 should be sending the id explicitly anyway.
+          render json: {
+            error: "You administer more than one organization. Say which one is presenting this event.",
+            code: "organization_required"
+          }, status: :unprocessable_entity
+          nil
+        end
+      end
+
+      # TRANSITIONAL — see #resolve_organization_for_create!.
+      def create_implicit_organization!
+        name = current_user.profile&.display_name.presence ||
+               current_user.email.to_s.split("@").first.presence ||
+               "Organizer"
+
+        Organization.create!(owner: current_user, name: name)
+      end
+
       # Returns true (and renders) when the request must be rejected, so
       # callers can `next if reject_unverified_paid_event!(...)`.
       def reject_unverified_paid_event!(event, was_paid:)
@@ -318,6 +406,10 @@ module Api
         json = {
           id: event.id,
           creator_id: event.creator_id,
+          # Just the FK here. The public "presented by" payload (name, logo,
+          # verified badge) is Ticket F's organization endpoint — this is what
+          # lets the dashboard group and filter an organizer's events by org.
+          organization_id: event.organization_id,
           survey_id: event.survey_id,
           title: event.title,
           description: event.description,

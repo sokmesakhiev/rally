@@ -7,23 +7,38 @@ require Rails.root.join("db/migrate/20260828022000_backfill_organizations_for_ev
 # Organization so Ticket C (#332) can add events.organization_id as
 # null: false without stranding historical data.
 RSpec.describe BackfillOrganizationsForEventOwners do
+  # Rewinds to the world as it was before #330 ran, then runs the migration.
+  #
+  # This reset is load-bearing. Since #332 the events factory builds an
+  # organization for every event, so fixtures arrive here already holding the
+  # rows this migration is supposed to create — and the migration would
+  # (correctly) skip them, leaving the spec asserting against factory data
+  # instead of migration output. Dropping the NOT NULL is safe because
+  # PostgreSQL DDL is transactional, so the example's rollback undoes it.
   subject(:run_migration) do
+    rewind_to_pre_organizations_state!
     ActiveRecord::Migration.suppress_messages { described_class.new.up }
   end
 
-  # The migration creates rows directly, bypassing the factory, so clear
-  # anything the factories made first — otherwise "one organization per
-  # owner" assertions count organizations this spec didn't ask for.
-  before { Organization.delete_all }
+  def rewind_to_pre_organizations_state!
+    ActiveRecord::Migration.suppress_messages do
+      ActiveRecord::Base.connection.change_column_null(:events, :organization_id, true)
+    end
+    Event.update_all(organization_id: nil)
+    Organization.delete_all
+  end
 
   it "creates one organization per user who has created an event" do
     organizer = create(:user)
     create(:event, creator: organizer)
 
-    expect { run_migration }.to change(Organization, :count).by(1)
+    run_migration
 
-    organization = Organization.sole
-    expect(organization.owner_id).to eq(organizer.id)
+    # Absolute count, not `change(...).by(1)` — the rewind inside
+    # `run_migration` clears the table first, so a relative matcher would
+    # measure the delete and the create cancelling out and report no change.
+    expect(Organization.count).to eq(1)
+    expect(Organization.sole.owner_id).to eq(organizer.id)
   end
 
   it "creates a single organization for an organizer with several events" do
@@ -120,9 +135,13 @@ RSpec.describe BackfillOrganizationsForEventOwners do
   it "leaves organizations created by an earlier partial run untouched" do
     organizer = create(:user)
     create(:event, creator: organizer)
+
+    # Rewind first, then plant the row a half-finished earlier run would have
+    # left behind — going through `run_migration` would wipe it.
+    rewind_to_pre_organizations_state!
     existing = Organization.create!(owner_id: organizer.id, name: "Already Here", slug: "already-here")
 
-    run_migration
+    ActiveRecord::Migration.suppress_messages { described_class.new.up }
 
     expect(Organization.where(owner_id: organizer.id)).to contain_exactly(existing)
     expect(existing.reload.name).to eq("Already Here")
