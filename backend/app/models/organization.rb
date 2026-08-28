@@ -208,6 +208,15 @@ class Organization < ApplicationRecord
     deleted_at.present?
   end
 
+  # False while this organization still presents events people may have
+  # registered and paid for. `has_many :events, dependent: :restrict_with_error`
+  # only guards a real #destroy, which nothing calls — soft-deleting needs its
+  # own check or an organizer could quietly remove the identity behind a live
+  # event, leaving its "Presented by" block pointing at nothing.
+  def discardable?
+    !events.kept.exists?
+  end
+
   def discard!
     update!(deleted_at: Time.current)
   end
