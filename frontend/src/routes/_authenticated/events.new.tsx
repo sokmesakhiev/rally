@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
   eventsApi,
+  organizationsApi,
   surveysApi,
   type SurveyQuestionDraft,
   type ApiEventTypeDraft,
@@ -56,6 +57,27 @@ function NewEvent() {
   const queryClient = useQueryClient();
 
   // Basic fields
+  // Which organization presents this event. Always an explicit choice — a
+  // user may administer several, and guessing would publish under the wrong
+  // brand, the exact failure organizations exist to prevent.
+  const [organizationSlug, setOrganizationSlug] = useState<string | null>(null);
+
+  const organizationsQuery = useQuery({
+    queryKey: ["organizations"],
+    queryFn: () => organizationsApi.list().then((r) => r.organizations),
+  });
+  const organizations = organizationsQuery.data ?? [];
+
+  // Default to the last one they worked in, falling back to the first.
+  useEffect(() => {
+    if (organizationSlug || organizations.length === 0) return;
+    const remembered = localStorage.getItem("rally_last_organization");
+    const match = organizations.find((o) => o.slug === remembered);
+    setOrganizationSlug(match?.slug ?? organizations[0].slug);
+  }, [organizations, organizationSlug]);
+
+  const selectedOrganization = organizations.find((o) => o.slug === organizationSlug) ?? null;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("running");
@@ -102,6 +124,7 @@ function NewEvent() {
 
       // 3. Create the event
       const { event } = await eventsApi.create({
+        organization_id: selectedOrganization!.id,
         title: title.trim(),
         description: description.trim() || null,
         category,
@@ -131,6 +154,10 @@ function NewEvent() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Guarded here as well as in the UI: the payload asserts a selection
+    // (`selectedOrganization!.id`), so submitting without one would throw
+    // rather than surface a message.
+    if (!selectedOrganization) return toast.error(t("eventForm.errorPickOrganization"));
     if (!title.trim()) return toast.error(t("eventForm.errorAddTitle"));
     if (!startAt) return toast.error(t("eventForm.errorAddStart"));
     if (endAt && new Date(endAt) <= new Date(startAt))
@@ -153,6 +180,48 @@ function NewEvent() {
         <p className="mt-1 text-muted-foreground">{t("eventForm.subtitle")}</p>
 
         <form onSubmit={submit} className="mt-8 space-y-5">
+          {/* ── Presented by ──
+              A dropdown only when there's a real choice to make; with one
+              organization this is a label, and with none the organizer is
+              sent to create one first (an event has to be presented by
+              something — see the publish gate in #334). */}
+          {!organizationsQuery.isLoading && organizations.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium">{t("eventForm.noOrganizationTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("eventForm.noOrganizationDesc")}
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link to="/organizations">{t("eventForm.createOrganization")}</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="organization">{t("eventForm.presentedBy")}</Label>
+              {organizations.length > 1 ? (
+                <Select
+                  value={organizationSlug ?? undefined}
+                  onValueChange={setOrganizationSlug}
+                >
+                  <SelectTrigger id="organization">
+                    <SelectValue placeholder={t("eventForm.presentedByPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((o) => (
+                      <SelectItem key={o.slug} value={o.slug}>
+                        {o.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="rounded-md border border-input px-3 py-2 text-sm">
+                  {selectedOrganization?.name ?? t("common.loading")}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── Basic details ── */}
           <div className="space-y-2">
             <Label htmlFor="title">{t("eventForm.eventTitle")}</Label>

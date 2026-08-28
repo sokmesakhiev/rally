@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -87,39 +87,6 @@ function ProfilePage() {
       toast.success(t("profile.toastProfileSaved"));
     },
     onError: (e: any) => toast.error(e.message ?? t("profile.toastProfileSaveError")),
-  });
-
-  // ── PayWay credentials ──
-  const [merchantId, setMerchantId] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
-
-  if (profile && merchantId === null) setMerchantId(profile.payway_merchant_id ?? "");
-
-  const savePayway = useMutation({
-    mutationFn: () =>
-      profileApi.update({
-        payway_merchant_id: merchantId ?? "",
-        // Blank means "leave the saved key unchanged" — omit it entirely so
-        // the backend doesn't overwrite it with an empty value.
-        payway_api_key: apiKey.trim() || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-      setApiKey("");
-      toast.success(t("profile.toastPaymentSaved"));
-    },
-    onError: (e: any) => toast.error(e.message ?? t("profile.toastPaymentSaveError")),
-  });
-
-  const disconnectPayway = useMutation({
-    mutationFn: () => profileApi.update({ payway_merchant_id: "", payway_api_key: "" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-      setMerchantId("");
-      setApiKey("");
-      toast.success(t("profile.toastDisconnected"));
-    },
-    onError: (e: any) => toast.error(e.message ?? t("profile.toastDisconnectError")),
   });
 
   // ── Change password ──
@@ -277,77 +244,24 @@ function ProfilePage() {
               </CardFooter>
             </Card>
 
-            {/* Payment settings */}
+            {/* Payment settings moved to the organization in #331/#336 —
+                registration money follows whoever presents the event, not the
+                individual who created it. Kept as a pointer so anyone landing
+                on an old /profile#payment-settings link isn't left guessing. */}
             <Card id="payment-settings" className="scroll-mt-24">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Wallet className="h-5 w-5 text-muted-foreground" />
                   <CardTitle>{t("header.paymentSettings")}</CardTitle>
-                  {profile.payway_configured && (
-                    <Badge variant="default" className="gap-1">
-                      <ShieldCheck className="h-3 w-3" /> {t("profile.connected")}
-                    </Badge>
-                  )}
                 </div>
-                <CardDescription>
-                  {t("profile.connectPrefix")}{" "}
-                  <a
-                    href="https://developer.payway.com.kh"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-foreground"
-                  >
-                    ABA PayWay
-                    <ExternalLink className="h-3 w-3" />
-                  </a>{" "}
-                  {t("profile.connectSuffix")}
-                </CardDescription>
+                <CardDescription>{t("profile.paymentMovedDesc")}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="payway-merchant-id">{t("profile.merchantId")}</Label>
-                  <Input
-                    id="payway-merchant-id"
-                    value={merchantId ?? ""}
-                    onChange={(e) => setMerchantId(e.target.value)}
-                    placeholder={t("profile.merchantIdPlaceholder")}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="payway-api-key">{t("profile.apiKey")}</Label>
-                  <Input
-                    id="payway-api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={
-                      profile.payway_api_key_masked
-                        ? t("profile.apiKeySavedPlaceholder", {
-                            masked: profile.payway_api_key_masked,
-                          })
-                        : t("profile.apiKeyPlaceholder")
-                    }
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-muted-foreground">{t("profile.apiKeyNote")}</p>
-                </div>
-              </CardContent>
-              <CardFooter className="gap-2">
-                <Button onClick={() => savePayway.mutate()} disabled={savePayway.isPending}>
-                  {savePayway.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t("profile.savePaymentSettings")}
+              <CardFooter>
+                <Button asChild variant="outline">
+                  <Link to="/organizations" hash="payment-settings">
+                    {t("profile.paymentMovedAction")}
+                  </Link>
                 </Button>
-                {profile.payway_configured && (
-                  <Button
-                    variant="outline"
-                    onClick={() => disconnectPayway.mutate()}
-                    disabled={disconnectPayway.isPending}
-                  >
-                    {disconnectPayway.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {t("profile.disconnect")}
-                  </Button>
-                )}
               </CardFooter>
             </Card>
 

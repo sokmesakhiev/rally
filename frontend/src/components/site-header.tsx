@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, LogOut, ShieldAlert, User, Wallet } from "lucide-react";
+import { Building2, ChevronDown, LogOut, ShieldAlert, User, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -130,7 +130,15 @@ export function SiteHeader() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/profile" hash="payment-settings" className="cursor-pointer">
+                    <Link to="/organizations" className="cursor-pointer">
+                      <Building2 className="h-4 w-4" /> {t("header.organization")}
+                    </Link>
+                  </DropdownMenuItem>
+                  {/* Payment settings moved onto the organization in #331 —
+                      registration money follows whoever presents the event,
+                      not the individual who created it. */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/organizations" hash="payment-settings" className="cursor-pointer">
                       <Wallet className="h-4 w-4" /> {t("header.paymentSettings")}
                     </Link>
                   </DropdownMenuItem>
