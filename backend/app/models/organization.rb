@@ -324,6 +324,27 @@ class Organization < ApplicationRecord
     missing_identity_fields.empty?
   end
 
+  # ── Public trust signals ─────────────────────────────────────────────────
+  # organization-identity-tickets.md's Ticket F (#335). Read on every public
+  # organizer page view, so both are single database aggregates — loading
+  # events and counting registrations in Ruby would be an N+1 on a page
+  # anyone can hit.
+  #
+  # "Run" means finished, not merely published: an organizer with fifty
+  # upcoming events and none delivered has no track record to speak of, and
+  # this number is meant to say something an audience can rely on.
+  def events_run
+    events.publicly_visible.ended.count
+  end
+
+  # Registrations across those same finished events, excluding cancellations.
+  # One COUNT over a join rather than a per-event tally.
+  def participants_hosted
+    Registration.kept.active
+      .where(event_id: events.publicly_visible.ended.select(:id))
+      .count
+  end
+
   # ── PayWay predicates ────────────────────────────────────────────────────
   # Lifted verbatim from Profile (#331) — same semantics, new home.
 
