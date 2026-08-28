@@ -113,6 +113,29 @@ Rails.application.routes.draw do
       patch  "events/:event_id/members/:id", to: "event_members#update"
       delete "events/:event_id/members/:id", to: "event_members#destroy"
 
+      # Organizations — the identity an event is presented under. See
+      # organization-identity-tickets.md's Ticket D (#333). Addressed by slug
+      # (Organization#to_param), which is immutable once generated, so these
+      # URLs stay valid for as long as the organization does.
+      #
+      # #index lists only the organizations the caller owns or administers —
+      # it's the org switcher's data source, not a public directory. The
+      # public-facing page is Ticket F (#335).
+      get    "organizations",       to: "organizations#index"
+      post   "organizations",       to: "organizations#create"
+      get    "organizations/:slug", to: "organizations#show"
+      patch  "organizations/:slug", to: "organizations#update"
+      delete "organizations/:slug", to: "organizations#destroy"
+      post   "organizations/:slug/transfer_ownership", to: "organizations#transfer_ownership"
+
+      # An organization's team. Mirrors events/:event_id/members: listing is
+      # open to any member, changes are owner/admin, and anyone may remove
+      # themselves.
+      get    "organizations/:slug/members",     to: "organization_members#index"
+      post   "organizations/:slug/members",     to: "organization_members#create"
+      patch  "organizations/:slug/members/:id", to: "organization_members#update"
+      delete "organizations/:slug/members/:id", to: "organization_members#destroy"
+
       # File uploads
       post "uploads", to: "uploads#create"
 
