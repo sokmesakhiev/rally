@@ -8,6 +8,63 @@ RSpec.describe User, type: :model do
     it { is_expected.to have_one(:profile).dependent(:destroy) }
     it { is_expected.to have_many(:events).with_foreign_key(:creator_id).dependent(:destroy) }
     it { is_expected.to have_many(:registrations).dependent(:destroy) }
+    # restrict_with_error, not destroy: an organization presents events other
+    # people have paid to register for, so deleting the account can't quietly
+    # take it down.
+    it {
+      is_expected.to have_many(:owned_organizations)
+        .class_name("Organization").with_foreign_key(:owner_id).dependent(:restrict_with_error)
+    }
+    it { is_expected.to have_many(:organization_memberships).dependent(:destroy) }
+  end
+
+  # ── Organizations ────────────────────────────────────────────────────────────
+  # The set a user may act for — what Ticket C (#332) uses to widen
+  # EventAuthorization and my_events, and what the frontend org switcher lists.
+  describe "#administered_organizations" do
+    let(:user) { create(:user) }
+
+    it "includes organizations the user owns" do
+      owned = create(:organization, owner: user)
+
+      expect(user.administered_organizations).to include(owned)
+    end
+
+    it "includes organizations where the user is an admin" do
+      org = create(:organization)
+      create(:organization_membership, organization: org, user: user, role: "admin")
+
+      expect(user.administered_organizations).to include(org)
+    end
+
+    it "excludes organizations where the user is only a plain member" do
+      org = create(:organization)
+      create(:organization_membership, organization: org, user: user, role: "member")
+
+      expect(user.administered_organizations).not_to include(org)
+    end
+
+    it "excludes organizations the user has no relationship with" do
+      stranger_org = create(:organization)
+
+      expect(user.administered_organizations).not_to include(stranger_org)
+    end
+
+    # People genuinely work with several organizations at once — their own
+    # race series plus a club they volunteer for.
+    it "spans owned and administered organizations together, without duplicates" do
+      owned_one = create(:organization, owner: user)
+      owned_two = create(:organization, owner: user)
+      admin_of = create(:organization)
+      create(:organization_membership, organization: admin_of, user: user, role: "admin")
+
+      expect(user.administered_organizations)
+        .to contain_exactly(owned_one, owned_two, admin_of)
+    end
+
+    it "is empty for a participant who organizes nothing" do
+      expect(user.administered_organizations).to be_empty
+    end
   end
 
   # ── Validations ──────────────────────────────────────────────────────────────

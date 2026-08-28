@@ -18,6 +18,30 @@ class User < ApplicationRecord
   has_many :event_memberships, dependent: :destroy
   has_many :member_events, through: :event_memberships, source: :event
 
+  # Organizations this user owns — see Organization, where ownership is a
+  # column rather than a role. restrict_with_error, not destroy: an
+  # organization presents events that other people have paid to register for,
+  # so deleting the account can't quietly take it down. User#discard!
+  # anonymizes rather than destroys for the same reason.
+  has_many :owned_organizations, class_name: "Organization", foreign_key: :owner_id,
+                                 dependent: :restrict_with_error
+  # Organizations this user helps run but does not own. Distinct from
+  # owned_organizations for the same reason member_events is distinct from
+  # events above: conflating them would let an admin's dashboard imply
+  # ownership they don't have.
+  has_many :organization_memberships, dependent: :destroy
+  has_many :member_organizations, through: :organization_memberships, source: :organization
+
+  # Every organization this user may act for — owned, plus those where they
+  # hold the admin role. This is the set Ticket C (#332) uses to widen
+  # EventAuthorization and events#my_events, and the set the frontend's org
+  # switcher lists. Plain members are excluded on purpose: org membership
+  # alone grants no event authority.
+  def administered_organizations
+    Organization.where(id: owned_organizations.select(:id))
+                .or(Organization.where(id: organization_memberships.admins.select(:organization_id)))
+  end
+
   # Tokens are single-use, random, and time-boxed — plain-text storage is fine
   # here (unlike passwords) since they're low-value, short-lived, and unique.
   PASSWORD_RESET_EXPIRY = 2.hours

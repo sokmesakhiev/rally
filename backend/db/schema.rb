@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_022000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -172,6 +172,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_010000) do
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
     t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+  end
+
+  create_table "organization_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "invited_by_id"
+    t.uuid "organization_id", null: false
+    t.string "role", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["organization_id", "user_id"], name: "index_organization_memberships_on_organization_id_and_user_id", unique: true
+    t.index ["role"], name: "index_organization_memberships_on_role"
+    t.index ["user_id"], name: "index_organization_memberships_on_user_id"
+  end
+
+  create_table "organizations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "banner_url"
+    t.string "brand_color"
+    t.string "contact_email"
+    t.string "contact_phone"
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.text "description"
+    t.string "facebook_url"
+    t.string "instagram_url"
+    t.string "logo_url"
+    t.string "name", null: false
+    t.uuid "owner_id", null: false
+    t.string "slug", null: false
+    t.datetime "suspended_at"
+    t.string "suspension_reason"
+    t.string "telegram_url"
+    t.datetime "updated_at", null: false
+    t.datetime "verified_at"
+    t.string "website"
+    t.index ["deleted_at"], name: "index_organizations_on_deleted_at"
+    t.index ["owner_id"], name: "index_organizations_on_owner_id"
+    t.index ["slug"], name: "index_organizations_on_slug", unique: true
+    t.index ["suspended_at"], name: "index_organizations_on_suspended_at", where: "(suspended_at IS NOT NULL)"
   end
 
   create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -360,6 +398,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_010000) do
   add_foreign_key "event_types", "events"
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
+  add_foreign_key "organization_memberships", "organizations"
+  add_foreign_key "organization_memberships", "users"
+  add_foreign_key "organization_memberships", "users", column: "invited_by_id"
+  add_foreign_key "organizations", "users", column: "owner_id"
   add_foreign_key "payments", "registrations"
   add_foreign_key "profiles", "users"
   add_foreign_key "refunds", "payments"
