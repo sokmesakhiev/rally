@@ -296,6 +296,79 @@ RSpec.describe Organization, type: :model do
     end
   end
 
+  # ── PayWay ───────────────────────────────────────────────────────────────────
+  # Moved here from Profile in Ticket B (#331). Registration payments settle
+  # into the account of whoever presents the event.
+  describe "PayWay credentials" do
+    let(:organization) { create(:organization) }
+
+    it "is unconfigured by default" do
+      expect(organization.payway_configured?).to be(false)
+      expect(organization.payway_refund_configured?).to be(false)
+      expect(organization.payway_api_key_masked).to be_nil
+    end
+
+    it "is configured once both merchant id and api key are set" do
+      organization.update!(payway_merchant_id: "m_123", payway_api_key: "secret_abcdef1234")
+
+      expect(organization.payway_configured?).to be(true)
+    end
+
+    it "encrypts the api key at rest" do
+      organization.update!(payway_merchant_id: "m_123", payway_api_key: "secret_abcdef1234")
+
+      raw = Organization.connection.select_value(
+        "SELECT payway_api_key FROM organizations WHERE id = #{Organization.connection.quote(organization.id)}"
+      )
+
+      expect(raw).not_to include("secret_abcdef1234")
+      expect(organization.reload.payway_api_key).to eq("secret_abcdef1234")
+    end
+
+    it "masks all but the last four characters of the key" do
+      organization.update!(payway_merchant_id: "m_123", payway_api_key: "secret_abcdef1234")
+
+      expect(organization.payway_api_key_masked).to eq("••••••••1234")
+    end
+
+    # Half-configured would silently fall back to Rally's platform credentials
+    # instead of failing loudly.
+    it "rejects a merchant id without an api key" do
+      organization.payway_merchant_id = "m_123"
+
+      expect(organization).not_to be_valid
+      expect(organization.errors[:payway_api_key]).to be_present
+    end
+
+    it "rejects an api key without a merchant id" do
+      organization.payway_api_key = "secret_abcdef1234"
+
+      expect(organization).not_to be_valid
+      expect(organization.errors[:payway_merchant_id]).to be_present
+    end
+
+    it "treats blank strings as a disconnect rather than a half-configured state" do
+      organization.update!(payway_merchant_id: "m_123", payway_api_key: "secret_abcdef1234")
+
+      organization.update!(payway_merchant_id: "", payway_api_key: "")
+
+      expect(organization.reload.payway_merchant_id).to be_nil
+      expect(organization.payway_api_key).to be_nil
+      expect(organization.payway_configured?).to be(false)
+    end
+
+    # The RSA key is only needed for gateway refunds — an organization can
+    # take payments perfectly well without it.
+    it "needs the RSA public key only for refund capability" do
+      organization.update!(payway_merchant_id: "m_123", payway_api_key: "secret_abcdef1234")
+      expect(organization.payway_configured?).to be(true)
+      expect(organization.payway_refund_configured?).to be(false)
+
+      organization.update!(payway_rsa_public_key: "-----BEGIN PUBLIC KEY-----")
+      expect(organization.payway_refund_configured?).to be(true)
+    end
+  end
+
   # ── Verification ─────────────────────────────────────────────────────────────
   describe "verification" do
     it "is unverified by default" do
