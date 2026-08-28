@@ -45,7 +45,7 @@ RSpec.describe "Public organizer page API", type: :request do
       get "/api/v1/organizers/#{organization.slug}", as: :json
       expect(json["organizer"]["verified"]).to be(false)
 
-      organization.verify!
+      organization.verify!(by: create(:user, admin: true))
       get "/api/v1/organizers/#{organization.slug}", as: :json
       expect(json["organizer"]["verified"]).to be(true)
     end

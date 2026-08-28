@@ -5,8 +5,13 @@ FactoryBot.define do
     # keeps meaning "someone runs this event" — both via creator_id and via
     # the organization. Pass `organization:` explicitly to model the case
     # this doesn't cover: an event created by a colleague under a club's
-    # organization (see spec/factories — trait :for_organization below).
-    organization { association :organization, owner: creator }
+    # organization (see trait :for_organization below).
+    #
+    # Verification is inherited from the creator, mirroring what #338's
+    # backfill did in production: a verified organizer's organizations came
+    # out verified, so `create(:user, :verified)` still means "can run paid
+    # events" now that the gate reads the organization rather than the user.
+    organization { association :organization, owner: creator, verified_at: creator.verified_at }
     title       { Faker::Lorem.sentence(word_count: 3).chomp(".") }
     description { Faker::Lorem.paragraph }
     category    { Event::CATEGORIES.sample }

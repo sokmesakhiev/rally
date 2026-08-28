@@ -83,6 +83,13 @@ class User < ApplicationRecord
   # is what gates creating paid events (Event#paid?, EventsController's
   # #authorize_paid_event!). Keeping the two separate means loosening or
   # automating email verification later can't accidentally open up payments.
+  # RETAINED FOR ONE RELEASE. The paid-event gate moved to
+  # Organization#verified? in Ticket I (#338) — verification is a claim about
+  # who takes the money, and since #331 that's the organization's own PayWay
+  # account. Nothing in the app gates on this any more; the admin
+  # verify/unverify endpoints and this pair of methods stay only so a rollback
+  # has something to land on. Remove them, along with users.verified_at /
+  # verified_by_id, once #338 has been deployed and settled.
   def verified?
     verified_at.present?
   end

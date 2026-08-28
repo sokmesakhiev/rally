@@ -13,6 +13,10 @@
 # a join through membership rows on a hot authorization path.
 class Organization < ApplicationRecord
   belongs_to :owner, class_name: "User"
+  # Which staff account vouched for this organization — mirrors
+  # User#verified_by. Nullable: unverified organizations have none, and an
+  # admin's account may later be anonymized by User#discard!.
+  belongs_to :verified_by, class_name: "User", optional: true
 
   has_many :organization_memberships, dependent: :destroy
   has_many :members, through: :organization_memberships, source: :user
@@ -163,19 +167,32 @@ class Organization < ApplicationRecord
   end
 
   # ── Verification ─────────────────────────────────────────────────────────
-  # Populated by Ticket I (#338), which moves the paid-event gate off
-  # User#verified?. Defined now so the public payload and badge have a stable
-  # thing to read; until #338 lands nothing sets it.
+  # What gates creating paid events, as of Ticket I (#338). Verification is a
+  # claim about *who takes the money* — since #332 that's the organization
+  # presenting the event, not whichever colleague clicked Create, and since
+  # #331 the funds settle into this organization's own PayWay account.
+  #
+  # Mirrors User#verified?/#verify!(by:)/#unverify! exactly, including the
+  # `by:` argument, so the two read the same at every call site. Deliberately
+  # unrelated to a *user's* email verification, which is self-service —
+  # keeping them separate means loosening email verification later can't
+  # accidentally open up payments.
   def verified?
     verified_at.present?
   end
 
-  def verify!
-    update!(verified_at: Time.current)
+  def verify!(by:)
+    update!(verified_at: Time.current, verified_by_id: by&.id)
   end
 
+  # Revoking leaves existing paid events alone — they stay published and keep
+  # taking registrations, matching User#unverify!'s reasoning: participants
+  # already committed money to an event that was legitimately created, and
+  # silently unpublishing it would strand them. This only bites on the *next*
+  # attempt to create or price a paid event. Taking a specific bad event down
+  # is a separate moderation action (Admin::EventsController#suspend).
   def unverify!
-    update!(verified_at: nil)
+    update!(verified_at: nil, verified_by_id: nil)
   end
 
   # ── Publish-readiness ────────────────────────────────────────────────────

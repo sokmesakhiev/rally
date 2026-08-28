@@ -180,6 +180,11 @@ Rails.application.routes.draw do
         get  "organizations",              to: "organizations#index"
         post "organizations/:id/suspend",   to: "organizations#suspend"
         post "organizations/:id/unsuspend", to: "organizations#unsuspend"
+        # Gates creating paid events (Ticket I, #338) — the organization-level
+        # counterpart of users/:id/verify above, which stays in place for one
+        # release while the gate moves across.
+        post "organizations/:id/verify",   to: "organizations#verify"
+        post "organizations/:id/unverify", to: "organizations#unverify"
 
         get "reports", to: "reports#index"
 
