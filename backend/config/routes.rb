@@ -173,6 +173,14 @@ Rails.application.routes.draw do
         post   "events/:id/unsuspend",  to: "events#unsuspend"
         delete "events/:id",           to: "events#destroy"
 
+        # Organization moderation (Ticket J, #339). Suspending an
+        # organization takes down every event it presents, because
+        # Event#suspended? derives from it — and unsuspending restores them
+        # automatically, since nothing was written to them.
+        get  "organizations",              to: "organizations#index"
+        post "organizations/:id/suspend",   to: "organizations#suspend"
+        post "organizations/:id/unsuspend", to: "organizations#unsuspend"
+
         get "reports", to: "reports#index"
 
         # Queryable audit trail — see AdminAction, BaseController#log_admin_action.

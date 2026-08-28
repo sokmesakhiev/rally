@@ -288,6 +288,45 @@ RSpec.describe EventAuthorization do
         expect(host.event_permits?(event, :update_event)).to be(true)
       end
 
+      # Ticket J (#339): a cascade locks the event down exactly as a direct
+      # suspension does — read-only survives, everything else is denied.
+      it "locks down identically when the suspension is inherited from the organization" do
+        club = create(:organization)
+        club_event = create(:event, :for_organization, presented_by: club)
+        club.suspend!(reason: "Reported as fraudulent")
+        host.current_user = club.owner
+
+        described_class::CAPABILITIES.each_key do |capability|
+          expected = described_class::SUSPENDED_ALLOWED_CAPABILITIES.include?(capability)
+          expect(host.event_permits?(club_event.reload, capability)).to be(expected),
+            "expected org owner to be #{expected ? 'allowed' : 'denied'} :#{capability} while cascaded"
+        end
+      end
+
+      it "locks down when the organization's owner is suspended" do
+        club = create(:organization)
+        club_event = create(:event, :for_organization, presented_by: club)
+        admin = create(:user)
+        create(:organization_membership, organization: club, user: admin, role: "admin")
+        club.owner.suspend!(reason: "Fraud")
+        host.current_user = admin
+
+        expect(host.event_permits?(club_event.reload, :update_event)).to be(false)
+        expect(host.event_permits?(club_event, :view_event)).to be(true)
+      end
+
+      it "restores full permissions once the cascade is lifted" do
+        club = create(:organization)
+        club_event = create(:event, :for_organization, presented_by: club)
+        club.suspend!(reason: "Reported")
+        host.current_user = club.owner
+        expect(host.event_permits?(club_event.reload, :update_event)).to be(false)
+
+        club.unsuspend!
+
+        expect(host.event_permits?(club_event.reload, :update_event)).to be(true)
+      end
+
       # The lockdown overrides org authority for exactly the same reason it
       # overrides :owner — nobody on the team can quietly route around a
       # suspension, however they came by their access.

@@ -143,7 +143,11 @@ module EventAuthorization
   # `scope` lets callers keep their own eager-loading and #kept filtering
   # (they differ per endpoint — see EventsController#activity vs
   # EventPlanPaymentsController#create).
-  def find_authorized_event!(event_id, capability, scope: Event.all)
+  # The default scope preloads organization: :owner because #event_permits?
+  # below calls Event#suspended?, which since Ticket J (#339) walks
+  # event → organization → owner. Callers passing their own `scope:` should
+  # include it too if they're loading more than one event.
+  def find_authorized_event!(event_id, capability, scope: Event.includes(organization: :owner))
     event = scope.find(event_id)
     raise ActiveRecord::RecordNotFound unless event_permits?(event, capability)
 
