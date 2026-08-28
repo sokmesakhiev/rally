@@ -69,6 +69,18 @@ class Event < ApplicationRecord
 
   scope :published, -> { where(is_published: true) }
   scope :upcoming, -> { where("start_at >= ?", Time.current) }
+  # The SQL counterpart of #ended?, including its end_at → start_at fallback,
+  # so "has this finished" means the same thing in a query as it does in Ruby.
+  # Deliberately not the exact inverse of :upcoming — that one only looks at
+  # start_at, so a multi-day event that has started but not finished is in
+  # neither. Added for the public organizer page's "events run" signal
+  # (organization-identity-tickets.md's Ticket F).
+  scope :ended, -> { where("COALESCE(end_at, start_at) < ?", Time.current) }
+  # Events safe to show an anonymous visitor. Suspension is only this event's
+  # own flag for now; Ticket J (#339) makes Event#suspended? derive from the
+  # organization and its owner, at which point this scope grows the matching
+  # join and every Event.published call site gets audited with it.
+  scope :publicly_visible, -> { published.kept.where(suspended_at: nil) }
 
   # Free-text search across the fields a participant would plausibly type:
   # event name, blurb, and place. Deliberately ILIKE rather than Postgres
