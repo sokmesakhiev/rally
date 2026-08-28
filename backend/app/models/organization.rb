@@ -17,10 +17,11 @@ class Organization < ApplicationRecord
   has_many :organization_memberships, dependent: :destroy
   has_many :members, through: :organization_memberships, source: :user
 
-  # NOTE: `has_many :events` deliberately does NOT live here yet — Ticket C
-  # (#332) adds it along with the events.organization_id column. Declaring it
-  # now would install a dependent-callback that queries a column the database
-  # doesn't have, which fails only at destroy time rather than at boot.
+  # restrict_with_error, not destroy: an organization presents events other
+  # people have paid to register for, so removing it can't quietly take them
+  # down. Same reasoning as User#owned_organizations, and the same reason
+  # User#discard! anonymizes rather than destroys.
+  has_many :events, dependent: :restrict_with_error
 
   MAX_SLUG_LENGTH = 60
 

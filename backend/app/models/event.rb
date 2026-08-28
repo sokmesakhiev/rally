@@ -1,4 +1,9 @@
 class Event < ApplicationRecord
+  # Who the event is *presented by* — see organization-identity-tickets.md's
+  # Ticket C (#332). Distinct from #creator, which is the individual who set
+  # it up: a club admin can create an event that the club presents, and the
+  # public only ever sees the organization.
+  belongs_to :organization
   belongs_to :creator, class_name: "User"
   belongs_to :survey, optional: true
   has_many :registrations, dependent: :destroy

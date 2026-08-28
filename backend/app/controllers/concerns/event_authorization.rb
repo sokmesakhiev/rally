@@ -95,6 +95,14 @@ module EventAuthorization
   def event_role_for(event)
     return nil if event.nil? || current_user.nil?
     return :owner if event.creator_id == current_user.id
+    # Anyone who can act for the presenting organization gets owner-level
+    # access to its events — see organization-identity-tickets.md's Ticket C
+    # (#332). Without this, a club's second admin couldn't manage an event a
+    # colleague created, which is most of the point of organizations.
+    #
+    # Deliberately owner/admin only: a plain org `member` gets nothing here
+    # and still needs an explicit EventMembership, same as anyone else.
+    return :owner if event.organization&.administered_by?(current_user)
 
     membership = EventMembership.find_by(event_id: event.id, user_id: current_user.id)
     membership&.role&.to_sym

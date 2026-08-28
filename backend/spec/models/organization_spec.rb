@@ -7,6 +7,18 @@ RSpec.describe Organization, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:owner).class_name("User") }
     it { is_expected.to have_many(:organization_memberships).dependent(:destroy) }
+    it { is_expected.to have_many(:events).dependent(:restrict_with_error) }
+
+    # An organization presents events other people have paid to register for,
+    # so removing it can't quietly take them down.
+    it "refuses to be destroyed while it still presents events" do
+      organization = create(:organization)
+      create(:event, :for_organization, presented_by: organization)
+
+      expect(organization.destroy).to be(false)
+      expect(organization.errors[:base]).to be_present
+      expect(Organization.exists?(organization.id)).to be(true)
+    end
   end
 
   # ── Validations ──────────────────────────────────────────────────────────────

@@ -6,7 +6,28 @@ RSpec.describe Event, type: :model do
   # ── Associations ─────────────────────────────────────────────────────────────
   describe "associations" do
     it { is_expected.to belong_to(:creator).class_name("User") }
+    it { is_expected.to belong_to(:organization) }
     it { is_expected.to have_many(:registrations).dependent(:destroy) }
+
+    # Required, not optional — every event is presented by someone.
+    it "is invalid without an organization" do
+      event.organization = nil
+      expect(event).not_to be_valid
+      expect(event.errors[:organization]).to be_present
+    end
+
+    # creator and organization answer different questions: who set this up
+    # vs. who it's presented by. A club admin creating an event under the
+    # club's name is the normal case, not an anomaly.
+    it "allows a creator who does not own the presenting organization" do
+      club = create(:organization)
+      colleague = create(:user)
+
+      event = build(:event, :for_organization, creator: colleague, presented_by: club)
+
+      expect(event).to be_valid
+      expect(event.creator_id).not_to eq(club.owner_id)
+    end
   end
 
   # ── Validations ──────────────────────────────────────────────────────────────

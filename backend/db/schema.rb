@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_022000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_041000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -155,6 +155,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_022000) do
     t.string "location"
     t.string "logo_url"
     t.decimal "longitude", precision: 10, scale: 6
+    t.uuid "organization_id", null: false
     t.string "plan"
     t.integer "price_cents", default: 0, null: false
     t.string "route_map_url"
@@ -169,6 +170,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_022000) do
     t.index ["deleted_at"], name: "index_events_on_deleted_at"
     t.index ["is_published", "start_at"], name: "index_events_on_is_published_and_start_at"
     t.index ["is_published"], name: "index_events_on_is_published"
+    t.index ["organization_id"], name: "index_events_on_organization_id"
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
     t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
@@ -396,6 +398,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_022000) do
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"
   add_foreign_key "event_types", "events"
+  add_foreign_key "events", "organizations"
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "organization_memberships", "organizations"
