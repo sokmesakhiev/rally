@@ -86,5 +86,6 @@ COPY --chown=rails:rails --from=build /rails /rails
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 # Start server via Thruster by default, this can be overwritten at runtime
+# Set PROCESS_TYPE=jobs to run SolidQueue workers instead
 EXPOSE 3001
 CMD ["./bin/thrust", "./bin/rails", "server"]
