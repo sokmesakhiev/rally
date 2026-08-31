@@ -175,7 +175,7 @@ RSpec.describe "Admin API", type: :request do
 
   # ── POST /api/v1/admin/users/:id/suspend ─────────────────────────────────────
   describe "POST /api/v1/admin/users/:id/suspend" do
-    it "suspends the user, records the reason, and unpublishes their events" do
+    it "suspends the user, records the reason, and hides their events publicly" do
       published = create(:event, creator: regular, is_published: true)
 
       post "/api/v1/admin/users/#{regular.id}/suspend",
@@ -189,7 +189,28 @@ RSpec.describe "Admin API", type: :request do
 
       expect(regular.reload).to be_suspended
       # Suspension has to take effect publicly, not just block the account.
-      expect(published.reload.is_published).to be(false)
+      # Since Ticket J (#339) that happens by derivation rather than by
+      # unpublishing: Event#suspended? consults the organization, which
+      # consults its owner, and Event.publicly_visible joins both. The event
+      # stays is_published so that unsuspending restores it automatically
+      # instead of leaving the organizer to republish everything by hand.
+      expect(published.reload.is_published).to be(true)
+      expect(published.suspended?).to be(true)
+      expect(Event.publicly_visible).not_to include(published)
+    end
+
+    it "brings their events back on unsuspend, with nothing to republish" do
+      published = create(:event, creator: regular, is_published: true)
+
+      post "/api/v1/admin/users/#{regular.id}/suspend",
+           params: { reason: "Fraudulent event listings" },
+           headers: auth_headers(admin), as: :json
+      post "/api/v1/admin/users/#{regular.id}/unsuspend",
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(published.reload.suspended?).to be(false)
+      expect(Event.publicly_visible).to include(published)
     end
 
     it "does not touch the suspended user's own registrations for other events" do
@@ -259,15 +280,36 @@ RSpec.describe "Admin API", type: :request do
       expect(regular.reload.suspension_reason).to be_nil
     end
 
-    it "does not re-publish events that the suspension took down" do
-      # Republishing is the organizer's call — and for a paid plan it has to go
-      # back through the plan-payment flow so plan/capacity stay consistent.
+    # Since Ticket J (#339) a user suspension no longer unpublishes anything —
+    # it hides events by derivation instead (Event#suspended? consults the
+    # organization, which consults its owner). So unsuspending restores them
+    # outright, rather than leaving the organizer to republish by hand.
+    #
+    # This is the deliberate opposite of Event#unsuspend!, which still does NOT
+    # re-publish an event that direct suspension unpublished: that stays the
+    # organizer's call, and for a paid plan goes back through the plan-payment
+    # flow so plan/capacity stay consistent.
+    it "restores the events the suspension hid, with nothing to republish" do
       event = create(:event, creator: regular, is_published: true)
+      regular.suspend!
+      expect(Event.publicly_visible).not_to include(event)
+
+      post "/api/v1/admin/users/#{regular.id}/unsuspend", headers: auth_headers(admin), as: :json
+
+      expect(event.reload.is_published).to be(true)
+      expect(event.suspended?).to be(false)
+      expect(Event.publicly_visible).to include(event)
+    end
+
+    it "leaves an individually suspended event suspended after the account is restored" do
+      event = create(:event, creator: regular, is_published: true)
+      event.suspend!(reason: "Its own problem")
       regular.suspend!
 
       post "/api/v1/admin/users/#{regular.id}/unsuspend", headers: auth_headers(admin), as: :json
 
-      expect(event.reload.is_published).to be(false)
+      expect(event.reload.suspended?).to be(true)
+      expect(event.suspension_source).to eq("event")
     end
   end
 

@@ -8,6 +8,63 @@ RSpec.describe User, type: :model do
     it { is_expected.to have_one(:profile).dependent(:destroy) }
     it { is_expected.to have_many(:events).with_foreign_key(:creator_id).dependent(:destroy) }
     it { is_expected.to have_many(:registrations).dependent(:destroy) }
+    # restrict_with_error, not destroy: an organization presents events other
+    # people have paid to register for, so deleting the account can't quietly
+    # take it down.
+    it {
+      is_expected.to have_many(:owned_organizations)
+        .class_name("Organization").with_foreign_key(:owner_id).dependent(:restrict_with_error)
+    }
+    it { is_expected.to have_many(:organization_memberships).dependent(:destroy) }
+  end
+
+  # ── Organizations ────────────────────────────────────────────────────────────
+  # The set a user may act for — what Ticket C (#332) uses to widen
+  # EventAuthorization and my_events, and what the frontend org switcher lists.
+  describe "#administered_organizations" do
+    let(:user) { create(:user) }
+
+    it "includes organizations the user owns" do
+      owned = create(:organization, owner: user)
+
+      expect(user.administered_organizations).to include(owned)
+    end
+
+    it "includes organizations where the user is an admin" do
+      org = create(:organization)
+      create(:organization_membership, organization: org, user: user, role: "admin")
+
+      expect(user.administered_organizations).to include(org)
+    end
+
+    it "excludes organizations where the user is only a plain member" do
+      org = create(:organization)
+      create(:organization_membership, organization: org, user: user, role: "member")
+
+      expect(user.administered_organizations).not_to include(org)
+    end
+
+    it "excludes organizations the user has no relationship with" do
+      stranger_org = create(:organization)
+
+      expect(user.administered_organizations).not_to include(stranger_org)
+    end
+
+    # People genuinely work with several organizations at once — their own
+    # race series plus a club they volunteer for.
+    it "spans owned and administered organizations together, without duplicates" do
+      owned_one = create(:organization, owner: user)
+      owned_two = create(:organization, owner: user)
+      admin_of = create(:organization)
+      create(:organization_membership, organization: admin_of, user: user, role: "admin")
+
+      expect(user.administered_organizations)
+        .to contain_exactly(owned_one, owned_two, admin_of)
+    end
+
+    it "is empty for a participant who organizes nothing" do
+      expect(user.administered_organizations).to be_empty
+    end
   end
 
   # ── Validations ──────────────────────────────────────────────────────────────
@@ -145,14 +202,12 @@ RSpec.describe User, type: :model do
       expect(User.discarded).to include(user)
     end
 
-    it "scrubs the profile's PII and PayWay credentials" do
+    it "scrubs the profile's PII" do
       user = create(:user)
       user.profile.update!(
         display_name: "Real Name",
         avatar_url: "https://example.com/a.png",
-        phone: "012345678",
-        payway_merchant_id: "merchant123",
-        payway_api_key: "secret-key"
+        phone: "012345678"
       )
 
       user.discard!
@@ -161,8 +216,54 @@ RSpec.describe User, type: :model do
       expect(profile.display_name).to be_nil
       expect(profile.avatar_url).to be_nil
       expect(profile.phone).to be_nil
-      expect(profile.payway_merchant_id).to be_nil
-      expect(profile.payway_api_key).to be_nil
+    end
+
+    # PayWay credentials live on Organization since #331, so scrubbing them
+    # means scrubbing them there. A deleted account's live merchant
+    # credentials must not linger on an organization that outlives it.
+    it "clears PayWay credentials from every organization the user owns" do
+      user = create(:user)
+      first = create(:organization, owner: user)
+      second = create(:organization, owner: user)
+      [ first, second ].each do |org|
+        org.update!(
+          payway_merchant_id: "merchant123",
+          payway_api_key: "secret-key",
+          payway_rsa_public_key: "-----BEGIN PUBLIC KEY-----"
+        )
+      end
+
+      user.discard!
+
+      [ first, second ].each do |org|
+        org.reload
+        expect(org.payway_merchant_id).to be_nil
+        expect(org.payway_api_key).to be_nil
+        expect(org.payway_rsa_public_key).to be_nil
+      end
+    end
+
+    # The organizations themselves survive — they present events other people
+    # registered for, the same reason #discard! hides events rather than
+    # destroying them.
+    it "leaves the organizations themselves in place" do
+      user = create(:user)
+      organization = create(:organization, owner: user)
+
+      user.discard!
+
+      expect(Organization.exists?(organization.id)).to be(true)
+    end
+
+    it "does not touch PayWay credentials on organizations the user merely administers" do
+      user = create(:user)
+      club = create(:organization)
+      club.update!(payway_merchant_id: "club_merchant", payway_api_key: "club_key")
+      create(:organization_membership, organization: club, user: user, role: "admin")
+
+      user.discard!
+
+      expect(club.reload.payway_merchant_id).to eq("club_merchant")
     end
 
     it "resets email_auto_generated so a deleted account doesn't linger in the 'add a real email' nudge" do

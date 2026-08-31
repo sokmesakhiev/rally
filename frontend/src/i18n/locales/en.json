@@ -50,7 +50,8 @@
     "fallbackName": "there",
     "editProfile": "Edit profile",
     "paymentSettings": "Payment settings",
-    "admin": "Moderation"
+    "admin": "Moderation",
+    "organization": "Organization"
   },
   "verifyEmailBanner": {
     "message": "Please verify your email address ({{email}}).",
@@ -563,7 +564,13 @@
       "titleRequired": "Give the event a title.",
       "titleTooLong": "Keep the title to 120 characters or fewer.",
       "endBeforeStart": "The end time must be after the start time."
-    }
+    },
+    "presentedBy": "Presented by",
+    "presentedByPlaceholder": "Choose an organization",
+    "noOrganizationTitle": "You need an organization first",
+    "noOrganizationDesc": "Events are presented by an organization. Create one, then come back to set up your event.",
+    "createOrganization": "Create organization",
+    "errorPickOrganization": "Choose which organization is presenting this event"
   },
   "profile": {
     "title": "Your profile",
@@ -631,7 +638,9 @@
     "deleteDialogDesc": "This will permanently deactivate your account and remove your personal information. Registrations and payments tied to events you've organized will be kept for other users' records. Enter your password to confirm.",
     "deleteDialogConfirm": "Delete my account",
     "toastAccountDeleted": "Your account has been deleted.",
-    "toastAccountDeleteError": "Could not delete your account."
+    "toastAccountDeleteError": "Could not delete your account.",
+    "paymentMovedDesc": "Payment settings now live on your organization — registration money goes to whoever presents the event.",
+    "paymentMovedAction": "Go to organization settings"
   },
   "surveyBuilder": {
     "optionLabelPlaceholder": "Option label",
@@ -845,5 +854,81 @@
     "privacyRetentionBody": "We retain account and registration data for as long as your account is active, and as needed to comply with legal obligations.",
     "privacyContactTitle": "Contact",
     "privacyContactBody": "Questions about this policy can be sent to the email address associated with your Rally account's support channel."
+  },
+  "organization": {
+    "title": "Organization",
+    "subtitle": "The identity your events are presented under. Audiences see this, not your personal account.",
+    "createTitle": "Create your organization",
+    "createDesc": "Events are presented by an organization rather than by you personally. Create one to get started.",
+    "createAction": "Create organization",
+    "name": "Name",
+    "namePlaceholder": "e.g. Phnom Penh Runners",
+    "slugNote": "Public address: /organizers/{{slug}} — this never changes, so links you've shared keep working.",
+    "description": "About",
+    "descriptionPlaceholder": "Who you are and what kind of events you run.",
+    "logo": "Logo",
+    "banner": "Banner",
+    "noImage": "Not set",
+    "identityTitle": "Identity and branding",
+    "identityDesc": "Shown on your public organizer page and alongside every event you present.",
+    "verified": "Verified",
+    "contactTitle": "Contact and links",
+    "contactDesc": "Published publicly so people can reach you. This is separate from the email you sign in with.",
+    "contactEmail": "Contact email",
+    "contactPhone": "Contact phone",
+    "website": "Website",
+    "facebook": "Facebook",
+    "instagram": "Instagram",
+    "telegram": "Telegram",
+    "membersTitle": "Team",
+    "membersDesc": "Admins can create and manage events under this organization. Members need to be added to individual events.",
+    "addMember": "Add",
+    "addMemberEmail": "Email address",
+    "addMemberPlaceholder": "colleague@example.com",
+    "addMemberNote": "They need a Rally account already — invitations by email aren't supported yet.",
+    "removeMember": "Remove member",
+    "paymentTitle": "Payment settings",
+    "paymentDesc": "Connect this organization's own ABA PayWay account so registration payments go straight to it. Credentials come from",
+    "paymentConnected": "Connected",
+    "merchantId": "Merchant ID",
+    "apiKey": "API key",
+    "apiKeyPlaceholder": "Paste your PayWay API key",
+    "apiKeySaved": "Saved ({{masked}}) — leave blank to keep it",
+    "disconnect": "Disconnect",
+    "readyToPublish": "This organization is ready to publish events.",
+    "incompleteRequired": "Complete these before you can publish an event:",
+    "incompleteOptional": "Worth completing — audiences trust a full organizer profile:",
+    "toastCreated": "Organization created",
+    "toastSaved": "Organization saved",
+    "toastMemberAdded": "Member added",
+    "toastMemberRemoved": "Member removed",
+    "toastPaymentSaved": "Payment settings saved",
+    "toastPaymentDisconnected": "PayWay disconnected",
+    "field": {
+      "name": "A name",
+      "logo_url": "A logo",
+      "description": "A short description",
+      "contact": "A contact email or phone number"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    }
+  },
+  "presentedBy": {
+    "label": "Presented by",
+    "verified": "Verified",
+    "unverified": "Unverified"
+  },
+  "organizerPage": {
+    "notFoundTitle": "Organizer not available",
+    "notFoundDesc": "This organizer page doesn't exist, or is no longer available.",
+    "memberSince": "Organizing since",
+    "eventsRun": "Events run",
+    "participantsHosted": "Participants hosted",
+    "upcoming": "Upcoming events",
+    "past": "Past events",
+    "noUpcoming": "No upcoming events right now."
   }
 }

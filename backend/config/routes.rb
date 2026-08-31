@@ -113,6 +113,37 @@ Rails.application.routes.draw do
       patch  "events/:event_id/members/:id", to: "event_members#update"
       delete "events/:event_id/members/:id", to: "event_members#destroy"
 
+      # The PUBLIC organizer page (Ticket F, #335) — no auth, world-readable.
+      # Deliberately its own resource rather than an action on organizations
+      # below: that surface is authenticated management and its payload
+      # carries PayWay status and the owner's identity. Keeping the two apart
+      # in the routes is the first line of defence against a private field
+      # ending up in a public response.
+      get "organizers/:slug", to: "organizers#show"
+
+      # Organizations — the identity an event is presented under. See
+      # organization-identity-tickets.md's Ticket D (#333). Addressed by slug
+      # (Organization#to_param), which is immutable once generated, so these
+      # URLs stay valid for as long as the organization does.
+      #
+      # #index lists only the organizations the caller owns or administers —
+      # it's the org switcher's data source, not a public directory. The
+      # public-facing page is Ticket F (#335).
+      get    "organizations",       to: "organizations#index"
+      post   "organizations",       to: "organizations#create"
+      get    "organizations/:slug", to: "organizations#show"
+      patch  "organizations/:slug", to: "organizations#update"
+      delete "organizations/:slug", to: "organizations#destroy"
+      post   "organizations/:slug/transfer_ownership", to: "organizations#transfer_ownership"
+
+      # An organization's team. Mirrors events/:event_id/members: listing is
+      # open to any member, changes are owner/admin, and anyone may remove
+      # themselves.
+      get    "organizations/:slug/members",     to: "organization_members#index"
+      post   "organizations/:slug/members",     to: "organization_members#create"
+      patch  "organizations/:slug/members/:id", to: "organization_members#update"
+      delete "organizations/:slug/members/:id", to: "organization_members#destroy"
+
       # File uploads
       post "uploads", to: "uploads#create"
 
@@ -141,6 +172,19 @@ Rails.application.routes.draw do
         post   "events/:id/suspend",    to: "events#suspend"
         post   "events/:id/unsuspend",  to: "events#unsuspend"
         delete "events/:id",           to: "events#destroy"
+
+        # Organization moderation (Ticket J, #339). Suspending an
+        # organization takes down every event it presents, because
+        # Event#suspended? derives from it — and unsuspending restores them
+        # automatically, since nothing was written to them.
+        get  "organizations",              to: "organizations#index"
+        post "organizations/:id/suspend",   to: "organizations#suspend"
+        post "organizations/:id/unsuspend", to: "organizations#unsuspend"
+        # Gates creating paid events (Ticket I, #338) — the organization-level
+        # counterpart of users/:id/verify above, which stays in place for one
+        # release while the gate moves across.
+        post "organizations/:id/verify",   to: "organizations#verify"
+        post "organizations/:id/unverify", to: "organizations#unverify"
 
         get "reports", to: "reports#index"
 

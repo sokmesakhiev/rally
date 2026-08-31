@@ -1,4 +1,9 @@
 class Event < ApplicationRecord
+  # Who the event is *presented by* — see organization-identity-tickets.md's
+  # Ticket C (#332). Distinct from #creator, which is the individual who set
+  # it up: a club admin can create an event that the club presents, and the
+  # public only ever sees the organization.
+  belongs_to :organization
   belongs_to :creator, class_name: "User"
   belongs_to :survey, optional: true
   has_many :registrations, dependent: :destroy
@@ -53,11 +58,38 @@ class Event < ApplicationRecord
   # Only meaningful once a plan has actually set a capacity — a draft event
   # with types but no plan yet (capacity nil) isn't constrained by this.
   validate :capacity_covers_event_types, if: -> { capacity.present? }
+  # Ticket E (#334). Guards the *transition* into published, not the
+  # published state, so an already-live event whose organization predates the
+  # requirement keeps working and can still be edited — this rule must never
+  # retroactively unpublish anything.
+  validate :organization_identity_complete_to_publish,
+    if: -> { is_published? && will_save_change_to_is_published? }
 
   before_validation :default_price_cents
 
   scope :published, -> { where(is_published: true) }
   scope :upcoming, -> { where("start_at >= ?", Time.current) }
+  # The SQL counterpart of #ended?, including its end_at → start_at fallback,
+  # so "has this finished" means the same thing in a query as it does in Ruby.
+  # Deliberately not the exact inverse of :upcoming — that one only looks at
+  # start_at, so a multi-day event that has started but not finished is in
+  # neither. Added for the public organizer page's "events run" signal
+  # (organization-identity-tickets.md's Ticket F).
+  scope :ended, -> { where("COALESCE(end_at, start_at) < ?", Time.current) }
+  # Events safe to show an anonymous visitor — the SQL counterpart of
+  # `!suspended?`, extended in Ticket J (#339) to follow the same
+  # event → organization → owner chain that predicate does.
+  #
+  # Every public-facing listing goes through this rather than bare
+  # `.published`: a suspended organization's events stay is_published: true
+  # (the cascade doesn't write to them, so unsuspending restores them), which
+  # means `published` alone would happily serve them to the world.
+  scope :publicly_visible, -> {
+    published.kept.where(suspended_at: nil)
+      .joins(organization: :owner)
+      .where(organizations: { suspended_at: nil, deleted_at: nil })
+      .where(users: { suspended_at: nil })
+  }
 
   # Free-text search across the fields a participant would plausibly type:
   # event name, blurb, and place. Deliberately ILIKE rather than Postgres
@@ -191,8 +223,39 @@ class Event < ApplicationRecord
   # suspension_reason) to match User#suspend!/#unsuspend! exactly, since it's
   # the same concept — an admin-only-reversible lock — applied to an event
   # instead of an account.
+  # Suspension is DERIVED downward, never written downward — see
+  # organization-identity-tickets.md's Ticket J (#339). An event is suspended
+  # if it was suspended directly, or if the organization presenting it is
+  # (which in turn covers that organization's owner being suspended).
+  #
+  # Deriving rather than copying is what makes unsuspending correct: lifting
+  # an organization's suspension restores exactly the events that went down
+  # with it, while an event suspended on its own merits stays down because
+  # its own suspended_at is still set. No provenance column, no reconciliation
+  # job, and no way for the two to drift apart.
+  #
+  # Costs two belongs_to hops. Authorization paths that call this per request
+  # preload with `includes(organization: :owner)` — see
+  # EventAuthorization#find_authorized_event!'s default scope.
   def suspended?
+    suspended_at.present? || organization&.suspended? || false
+  end
+
+  # True only when this event itself was suspended, ignoring the organization.
+  # What lets the UI say *why* something is unavailable — "this event was
+  # suspended" reads differently from "this organizer has been suspended".
+  def suspended_directly?
     suspended_at.present?
+  end
+
+  # nil, "event", or "organization" — the reason it's unavailable, for the
+  # frontend to render. Direct suspension wins when both apply, since that's
+  # the one that survives an organization being unsuspended.
+  def suspension_source
+    return "event" if suspended_directly?
+    return "organization" if organization&.suspended?
+
+    nil
   end
 
   # Forces the event off public listings the same way #discard! and
@@ -235,5 +298,29 @@ class Event < ApplicationRecord
     return if total <= capacity
     errors.add(:capacity,
       "must be at least #{total} to cover the combined limit across all event types (currently #{total})")
+  end
+
+  # The structural backstop for Ticket E (#334). Three separate code paths set
+  # is_published (EventPlanPaymentsController's re-publish shortcut, its
+  # zero-charge branch, and EventPlanPayment#mark_paid! from the webhook), so
+  # the rule lives here where all three must pass through it rather than in
+  # any one of them.
+  #
+  # It is NOT the primary user-facing check: the webhook path reaches
+  # mark_paid! only after ABA has taken the organizer's money, and failing
+  # there would leave them charged and unpublished. EventPlanPaymentsController
+  # rejects incomplete organizations up front, before any charge is started —
+  # same before-payment ordering #capacity_covers_event_types already has.
+  # This exists so no future call site can quietly skip that.
+  def organization_identity_complete_to_publish
+    return unless Organization.identity_required_for_publishing?
+    return if organization.nil?
+
+    missing = organization.missing_identity_fields
+    return if missing.empty?
+
+    errors.add(:base, :organization_incomplete,
+      message: "Complete your organization's profile before publishing " \
+               "(missing: #{missing.join(', ')})")
   end
 end

@@ -26,6 +26,95 @@ RSpec.describe "Events API", type: :request do
       expect(ids).not_to include(draft.id, past.id)
     end
 
+    # Ticket H (#337) — enough to render "Presented by" and link through.
+    it "includes the presenting organization" do
+      published_upcoming.organization.update!(
+        name: "Phnom Penh Runners", logo_url: "https://example.com/logo.png"
+      )
+
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org["slug"]).to eq(published_upcoming.organization.slug)
+      expect(org["name"]).to eq("Phnom Penh Runners")
+      expect(org["logo_url"]).to eq("https://example.com/logo.png")
+      expect(org["verified"]).to be(false)
+    end
+
+    it "reports the organization's verified badge" do
+      published_upcoming.organization.verify!(by: create(:user, admin: true))
+
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org["verified"]).to be(true)
+    end
+
+    # The nested object is a listing card's worth of data, not the full
+    # profile — trust signals and contact details stay on the organizers
+    # endpoint, and payment fields must never appear here.
+    it "exposes only the presented-by fields, nothing private" do
+      get "/api/v1/events", as: :json
+
+      org = json["events"].find { |e| e["id"] == published_upcoming.id }["organization"]
+      expect(org.keys).to contain_exactly("slug", "name", "logo_url", "verified")
+    end
+
+    # Ticket J (#339). The cascade derives rather than writes, so these events
+    # keep is_published: true — a bare `.published` scope would happily serve
+    # them to the world. This is the leak the publicly_visible scope closes.
+    describe "suspension" do
+      def listed_ids
+        get "/api/v1/events", as: :json
+        json["events"].map { |e| e["id"] }
+      end
+
+      it "excludes a directly suspended event" do
+        published_upcoming.suspend!(reason: "Reported")
+
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "excludes an event whose organization is suspended" do
+        published_upcoming.organization.suspend!(reason: "Reported")
+
+        expect(published_upcoming.reload.is_published).to be(true)
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "excludes an event whose organizer's account is suspended" do
+        published_upcoming.organization.owner.suspend!(reason: "Fraud")
+
+        expect(listed_ids).not_to include(published_upcoming.id)
+      end
+
+      it "brings it back once the organization is unsuspended" do
+        published_upcoming.organization.suspend!(reason: "Reported")
+        expect(listed_ids).not_to include(published_upcoming.id)
+
+        published_upcoming.organization.unsuspend!
+
+        expect(listed_ids).to include(published_upcoming.id)
+      end
+
+      # No `as: :json` here, matching the other param-passing index specs in
+      # this file: on a GET, `as: :json` encodes params into a request body
+      # rather than the query string, so the filter never reaches the action.
+      it "keeps search working alongside the join" do
+        get "/api/v1/events", params: { q: published_upcoming.title }
+
+        expect(response).to have_http_status(:ok)
+        expect(json["events"].map { |e| e["id"] }).to include(published_upcoming.id)
+      end
+
+      it "keeps the category filter working alongside the join" do
+        get "/api/v1/events", params: { category: published_upcoming.category }
+
+        expect(response).to have_http_status(:ok)
+        expect(json["events"].map { |e| e["id"] }).to include(published_upcoming.id)
+      end
+    end
+
     it "does not require authentication" do
       get "/api/v1/events", as: :json
       expect(response).to have_http_status(:ok)
@@ -259,6 +348,55 @@ RSpec.describe "Events API", type: :request do
       expect(returned["role"]).to eq("owner")
     end
 
+    # Ticket C (#332) — a club's events belong on every admin's dashboard,
+    # not just the dashboard of whoever happened to click Create.
+    context "when the caller administers the presenting organization" do
+      let(:club) { create(:organization) }
+      let!(:colleagues_event) do
+        create(:event, :for_organization, creator: other, presented_by: club)
+      end
+
+      it "includes an event a colleague created under an organization the caller owns" do
+        get "/api/v1/events/my", headers: auth_headers(club.owner), as: :json
+
+        returned = json["events"].find { |e| e["id"] == colleagues_event.id }
+        expect(returned).to be_present
+        expect(returned["role"]).to eq("owner")
+      end
+
+      it "includes it for an organization admin too" do
+        admin = create(:user)
+        create(:organization_membership, organization: club, user: admin, role: "admin")
+
+        get "/api/v1/events/my", headers: auth_headers(admin), as: :json
+
+        expect(json["events"].map { |e| e["id"] }).to include(colleagues_event.id)
+      end
+
+      it "excludes it for a plain organization member" do
+        plain_member = create(:user)
+        create(:organization_membership, organization: club, user: plain_member, role: "member")
+
+        get "/api/v1/events/my", headers: auth_headers(plain_member), as: :json
+
+        expect(json["events"].map { |e| e["id"] }).not_to include(colleagues_event.id)
+      end
+
+      # Someone can reach the same event by two routes at once; it should
+      # appear once, tagged with the stronger relationship.
+      it "lists an event once, as owner, when the caller is both org admin and a member" do
+        admin = create(:user)
+        create(:organization_membership, organization: club, user: admin, role: "admin")
+        create(:event_membership, event: colleagues_event, user: admin, role: "check_in")
+
+        get "/api/v1/events/my", headers: auth_headers(admin), as: :json
+
+        matching = json["events"].select { |e| e["id"] == colleagues_event.id }
+        expect(matching.length).to eq(1)
+        expect(matching.first["role"]).to eq("owner")
+      end
+    end
+
     # Issue #278 — without this, an invited member accepts an invitation and
     # then has no way to reach the event at all.
     context "when the caller is a member of someone else's event, not its creator" do
@@ -385,13 +523,18 @@ RSpec.describe "Events API", type: :request do
 
   # ── POST /api/v1/events ──────────────────────────────────────────────────────
   describe "POST /api/v1/events" do
+    # Every event is presented by an organization, and the caller always says
+    # which — see organization-identity-tickets.md's Ticket C (#332).
+    let!(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, admin: true)) }
+
     let(:valid_params) do
       {
         event: {
           title: "Sunrise 10K",
           category: "running",
           start_at: 1.week.from_now.iso8601,
-          price_cents: 0
+          price_cents: 0,
+          organization_id: organization.id
         }
       }
     end
@@ -402,6 +545,126 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:created)
       expect(json["event"]["title"]).to eq("Sunrise 10K")
       expect(json["event"]["creator_id"]).to eq(user.id)
+    end
+
+    it "presents the event under the organization given" do
+      post "/api/v1/events", params: valid_params, headers: auth_headers(user), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(json["event"]["organization_id"]).to eq(organization.id)
+      expect(Event.find(json["event"]["id"]).organization_id).to eq(organization.id)
+    end
+
+    it "lets an organization admin create an event under it" do
+      club = create(:organization)
+      admin = create(:user)
+      create(:organization_membership, organization: club, user: admin, role: "admin")
+
+      post "/api/v1/events",
+           params: { event: valid_params[:event].merge(organization_id: club.id) },
+           headers: auth_headers(admin),
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(Event.find(json["event"]["id"]).organization_id).to eq(club.id)
+    end
+
+    # ── Transitional behaviour, removed with Ticket G (#336) ──────────────
+    # The frontend doesn't send organization_id until #336 adds the org
+    # selector. These specs pin the fallback that keeps event creation working
+    # in the meantime — without them, merging #332 silently breaks the core
+    # flow for every user until #336 ships.
+    context "when organization_id is omitted (pre-#336 frontend)" do
+      let(:params_without_org) { { event: valid_params[:event].except(:organization_id) } }
+
+      it "uses the caller's organization when they administer exactly one" do
+        post "/api/v1/events", params: params_without_org, headers: auth_headers(user), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["event"]["organization_id"]).to eq(organization.id)
+      end
+
+      it "creates one for a user who has never organized anything" do
+        newcomer = create(:user)
+        newcomer.profile.update!(display_name: "Sunrise Runners")
+
+        expect {
+          post "/api/v1/events", params: params_without_org, headers: auth_headers(newcomer), as: :json
+        }.to change(Organization, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        expect(Organization.find(json["event"]["organization_id"]))
+          .to have_attributes(owner_id: newcomer.id, name: "Sunrise Runners")
+      end
+
+      it "names an implicitly created organization from the email when there's no display name" do
+        newcomer = create(:user, email: "sokmesa@example.com")
+        newcomer.profile.update!(display_name: nil)
+
+        post "/api/v1/events", params: params_without_org, headers: auth_headers(newcomer), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(Organization.find(json["event"]["organization_id"]).name).to eq("sokmesa")
+      end
+
+      # Guessing here would eventually publish under the wrong brand.
+      it "refuses to guess when the caller administers several organizations" do
+        create(:organization, owner: user)
+
+        post "/api/v1/events", params: params_without_org, headers: auth_headers(user), as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["code"]).to eq("organization_required")
+        expect(Event.where(title: "Sunrise 10K")).to be_empty
+      end
+
+      it "counts an administered (not just owned) organization as the caller's one" do
+        loner = create(:user)
+        club = create(:organization)
+        create(:organization_membership, organization: club, user: loner, role: "admin")
+
+        post "/api/v1/events", params: params_without_org, headers: auth_headers(loner), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(json["event"]["organization_id"]).to eq(club.id)
+      end
+    end
+
+    # 404, not 403 — the same "don't confirm it exists" reasoning the admin
+    # namespace uses.
+    it "returns 404 for an organization the caller does not administer" do
+      someone_elses = create(:organization)
+
+      post "/api/v1/events",
+           params: { event: valid_params[:event].merge(organization_id: someone_elses.id) },
+           headers: auth_headers(user),
+           as: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(json["code"]).to eq("organization_not_found")
+      expect(Event.where(title: "Sunrise 10K")).to be_empty
+    end
+
+    # A plain org member can't publish under the org's name.
+    it "returns 404 for an organization where the caller is only a member" do
+      club = create(:organization)
+      create(:organization_membership, organization: club, user: user, role: "member")
+
+      post "/api/v1/events",
+           params: { event: valid_params[:event].merge(organization_id: club.id) },
+           headers: auth_headers(user),
+           as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for an unknown organization" do
+      post "/api/v1/events",
+           params: { event: valid_params[:event].merge(organization_id: SecureRandom.uuid) },
+           headers: auth_headers(user),
+           as: :json
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it "returns 422 when title is missing" do
@@ -475,11 +738,19 @@ RSpec.describe "Events API", type: :request do
       # Explicitly unverified — the outer `user` is verified (see the top of
       # this file), which is the wrong subject for these particular specs.
       let(:unverified) { create(:user) }
+      # Their own organization: `valid_params` points at one owned by `user`,
+      # which this caller doesn't administer, so reusing it would 404 on the
+      # organization check before ever reaching the verification gate these
+      # specs are actually about.
+      let!(:unverified_org) { create(:organization, owner: unverified) }
+      let(:unverified_params) do
+        valid_params.deep_merge(event: { organization_id: unverified_org.id })
+      end
 
       it "rejects a paid event from an unverified organizer" do
         expect {
           post "/api/v1/events",
-               params: valid_params.deep_merge(event: { price_cents: 2500 }),
+               params: unverified_params.deep_merge(event: { price_cents: 2500 }),
                headers: auth_headers(unverified),
                as: :json
         }.not_to change(Event, :count)
@@ -491,7 +762,7 @@ RSpec.describe "Events API", type: :request do
       it "rejects a paid event smuggled in via a per-type price" do
         # event-level price_cents is 0 here — the only price is on the type,
         # which EventType#effective_price_cents would still charge.
-        params = valid_params.deep_merge(
+        params = unverified_params.deep_merge(
           event: {
             price_cents: 0,
             event_types_attributes: [ { name: "10K", price_cents: 1500, position: 0 } ]
@@ -507,20 +778,73 @@ RSpec.describe "Events API", type: :request do
       end
 
       it "allows a free event from an unverified organizer" do
-        post "/api/v1/events", params: valid_params, headers: auth_headers(unverified), as: :json
+        post "/api/v1/events", params: unverified_params, headers: auth_headers(unverified), as: :json
 
         expect(response).to have_http_status(:created)
         expect(json["event"]["price_cents"]).to eq(0)
       end
 
       it "allows free event types (no per-type price) from an unverified organizer" do
-        params = valid_params.deep_merge(
+        params = unverified_params.deep_merge(
           event: { event_types_attributes: [ { name: "Fun run", position: 0 } ] }
         )
 
         post "/api/v1/events", params: params, headers: auth_headers(unverified), as: :json
 
         expect(response).to have_http_status(:created)
+      end
+
+      # Ticket I (#338) — the gate reads the ORGANIZATION, not the signed-in
+      # user. Registration money settles into the organization's own PayWay
+      # account (#331), so that's what has to be vouched for.
+      context "once the gate moved to the organization" do
+        it "rejects a paid event under an unverified organization, even from a verified user" do
+          verified_user = create(:user, :verified)
+          unverified_org = create(:organization, owner: verified_user)
+          unverified_org.unverify!
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: unverified_org.id },
+               ),
+               headers: auth_headers(verified_user), as: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json["code"]).to eq("verification_required")
+        end
+
+        it "allows a paid event under a verified organization" do
+          organizer = create(:user)
+          verified_org = create(:organization, owner: organizer)
+          verified_org.verify!(by: create(:user, admin: true))
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: verified_org.id },
+               ),
+               headers: auth_headers(organizer), as: :json
+
+          expect(response).to have_http_status(:created)
+          expect(json["event"]["price_cents"]).to eq(2500)
+        end
+
+        # A club admin can't charge under a brand Rally hasn't vouched for,
+        # however trusted they are personally.
+        it "rejects a paid event an admin creates under an unverified club" do
+          verified_admin = create(:user, :verified)
+          club = create(:organization)
+          club.unverify!
+          create(:organization_membership, organization: club, user: verified_admin, role: "admin")
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: club.id },
+               ),
+               headers: auth_headers(verified_admin), as: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json["code"]).to eq("verification_required")
+        end
       end
 
       it "allows a paid event from a verified organizer" do

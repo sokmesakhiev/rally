@@ -252,6 +252,18 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** The organization presenting this event — distinct from creator_id, which
+   * is the individual who set it up. Required when creating. */
+  organization_id: string;
+  /** Enough to render the "Presented by" block and link through. The full
+   * public profile — trust signals, contact details, their other events —
+   * comes from organizerApi. */
+  organization: {
+    slug: string;
+    name: string;
+    logo_url: string | null;
+    verified: boolean;
+  } | null;
   /** True once an admin has suspended this event (event-freeze-and-terms-tickets.md,
    * Ticket A) — stronger than is_published: false, since the owner cannot
    * reverse it themselves (every mutating action 403s server-side while
@@ -841,6 +853,195 @@ export const profileApi = {
 
   update(data: ProfileUpdatePayload) {
     return api.patch<{ profile: ApiProfile }>("/profile", { profile: data });
+  },
+};
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+//
+// The identity an event is presented under — see
+// organization-identity-tickets.md. A user may own or administer several, so
+// nothing here infers "the current organization"; the caller always names one.
+//
+// Distinct from `organizerApi` below, which is the world-readable public page.
+// These endpoints require a relationship with the organization and return
+// things a public page must never carry (payment status, owner identity).
+
+export type OrganizationRole = "owner" | "admin" | "member";
+
+export interface ApiOrganization {
+  id: string;
+  /** Immutable once generated — renaming changes `name`, never this, so
+   * links an organizer already shared keep working. */
+  slug: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  brand_color: string | null;
+  website: string | null;
+  /** The address the organizer publishes, not the one they sign in with. */
+  contact_email: string | null;
+  contact_phone: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  telegram_url: string | null;
+  verified: boolean;
+  suspended: boolean;
+  owner_id: string;
+  /** What the caller may do here — the server's answer, so the UI doesn't
+   * re-derive the rules and drift from it. */
+  role: OrganizationRole | null;
+  /** Publish-readiness. `missing_identity_fields` names what's still needed;
+   * `identity_required` says whether the gate is currently enforced (see the
+   * backend's REQUIRE_ORGANIZATION_IDENTITY). */
+  identity_complete: boolean;
+  missing_identity_fields: string[];
+  identity_required: boolean;
+  /** Never the plaintext key — see payway_api_key_masked. */
+  payway_merchant_id: string | null;
+  payway_api_key_masked: string | null;
+  payway_configured: boolean;
+  payway_refund_configured: boolean;
+  events_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiOrganizationMember {
+  /** null for the owner — they're a column on the organization, not a
+   * membership row, so there's nothing to PATCH or DELETE against. */
+  id: string | null;
+  user_id: string;
+  role: OrganizationRole;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  joined_at: string;
+}
+
+export interface OrganizationPayload {
+  name?: string;
+  description?: string | null;
+  logo_url?: string | null;
+  banner_url?: string | null;
+  brand_color?: string | null;
+  website?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  facebook_url?: string | null;
+  instagram_url?: string | null;
+  telegram_url?: string | null;
+  /** Owner-only — an admin sending these gets 403, deliberately, rather than
+   * having them silently dropped. */
+  payway_merchant_id?: string;
+  payway_api_key?: string;
+  payway_rsa_public_key?: string;
+}
+
+export const organizationsApi = {
+  /** Everything the caller owns or administers — the org switcher's source.
+   * Plain memberships are excluded: they grant no authority. */
+  list() {
+    return api.get<{ organizations: ApiOrganization[] }>("/organizations");
+  },
+
+  get(slug: string) {
+    return api.get<{ organization: ApiOrganization }>(`/organizations/${slug}`);
+  },
+
+  create(data: OrganizationPayload) {
+    return api.post<{ organization: ApiOrganization }>("/organizations", { organization: data });
+  },
+
+  update(slug: string, data: OrganizationPayload) {
+    return api.patch<{ organization: ApiOrganization }>(`/organizations/${slug}`, {
+      organization: data,
+    });
+  },
+
+  /** Soft-delete. Refused while the organization still presents events. */
+  remove(slug: string) {
+    return api.delete<{ message: string }>(`/organizations/${slug}`);
+  },
+
+  /** Owner-only, and only to an existing admin. The outgoing owner stays on
+   * as an admin. */
+  transferOwnership(slug: string, userId: string) {
+    return api.post<{ organization: ApiOrganization }>(
+      `/organizations/${slug}/transfer_ownership`,
+      { user_id: userId },
+    );
+  },
+
+  members(slug: string) {
+    return api.get<{ members: ApiOrganizationMember[] }>(`/organizations/${slug}/members`);
+  },
+
+  /** Adds someone who already has a Rally account — there's no invitation
+   * flow for organizations yet, so an unknown email is rejected. */
+  addMember(slug: string, email: string, role: OrganizationRole) {
+    return api.post<{ member: ApiOrganizationMember }>(`/organizations/${slug}/members`, {
+      member: { email, role },
+    });
+  },
+
+  updateMember(slug: string, id: string, role: OrganizationRole) {
+    return api.patch<{ member: ApiOrganizationMember }>(`/organizations/${slug}/members/${id}`, {
+      membership: { role },
+    });
+  },
+
+  removeMember(slug: string, id: string) {
+    return api.delete<{ message: string }>(`/organizations/${slug}/members/${id}`);
+  },
+};
+
+// ─── Public organizer page ────────────────────────────────────────────────────
+//
+// World-readable, no auth. Deliberately a separate resource from
+// organizationsApi above: two payloads with opposite audiences, so they share
+// no type and no endpoint.
+
+export interface ApiOrganizerEvent {
+  id: string;
+  title: string;
+  category: string;
+  location: string | null;
+  start_at: string;
+  end_at: string | null;
+  price_cents: number;
+  currency: string;
+  banner_url: string | null;
+  logo_url: string | null;
+  brand_color: string | null;
+}
+
+export interface ApiOrganizer {
+  slug: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  brand_color: string | null;
+  website: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  telegram_url: string | null;
+  verified: boolean;
+  /** Trust signals. `events_run` counts finished events only — an organizer
+   * with fifty upcoming and none delivered has no track record yet. */
+  member_since: string;
+  events_run: number;
+  participants_hosted: number;
+  upcoming_events: ApiOrganizerEvent[];
+  past_events: ApiOrganizerEvent[];
+}
+
+export const organizerApi = {
+  get(slug: string) {
+    return api.get<{ organizer: ApiOrganizer }>(`/organizers/${slug}`);
   },
 };
 

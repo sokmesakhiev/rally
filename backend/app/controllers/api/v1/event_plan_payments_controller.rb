@@ -19,6 +19,25 @@ module Api
           return
         end
 
+        # Ticket E (#334) — a public event must be presented by an
+        # organization an audience can evaluate. Checked here, before any
+        # charge is started, for the same reason the capacity checks below
+        # are: Event's own validation would only fire when we persist the
+        # publish, which on the gateway path happens after ABA has already
+        # taken the money (see ProcessAbaPaywayWebhookJob). Charging an
+        # organizer and then refusing to publish is the one outcome to avoid.
+        if Organization.identity_required_for_publishing?
+          missing = event.organization.missing_identity_fields
+          if missing.any?
+            render json: {
+              error: "Complete your organization's profile before publishing an event.",
+              code: "organization_incomplete",
+              missing_fields: missing
+            }, status: :unprocessable_entity
+            return
+          end
+        end
+
         # Reject upfront, before charging anything (or applying the plan),
         # if the event doesn't actually fit under it — either its own types'
         # combined limit, or (only relevant once people can already be

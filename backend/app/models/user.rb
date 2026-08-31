@@ -18,6 +18,30 @@ class User < ApplicationRecord
   has_many :event_memberships, dependent: :destroy
   has_many :member_events, through: :event_memberships, source: :event
 
+  # Organizations this user owns — see Organization, where ownership is a
+  # column rather than a role. restrict_with_error, not destroy: an
+  # organization presents events that other people have paid to register for,
+  # so deleting the account can't quietly take it down. User#discard!
+  # anonymizes rather than destroys for the same reason.
+  has_many :owned_organizations, class_name: "Organization", foreign_key: :owner_id,
+                                 dependent: :restrict_with_error
+  # Organizations this user helps run but does not own. Distinct from
+  # owned_organizations for the same reason member_events is distinct from
+  # events above: conflating them would let an admin's dashboard imply
+  # ownership they don't have.
+  has_many :organization_memberships, dependent: :destroy
+  has_many :member_organizations, through: :organization_memberships, source: :organization
+
+  # Every organization this user may act for — owned, plus those where they
+  # hold the admin role. This is the set Ticket C (#332) uses to widen
+  # EventAuthorization and events#my_events, and the set the frontend's org
+  # switcher lists. Plain members are excluded on purpose: org membership
+  # alone grants no event authority.
+  def administered_organizations
+    Organization.where(id: owned_organizations.select(:id))
+                .or(Organization.where(id: organization_memberships.admins.select(:organization_id)))
+  end
+
   # Tokens are single-use, random, and time-boxed — plain-text storage is fine
   # here (unlike passwords) since they're low-value, short-lived, and unique.
   PASSWORD_RESET_EXPIRY = 2.hours
@@ -59,6 +83,13 @@ class User < ApplicationRecord
   # is what gates creating paid events (Event#paid?, EventsController's
   # #authorize_paid_event!). Keeping the two separate means loosening or
   # automating email verification later can't accidentally open up payments.
+  # RETAINED FOR ONE RELEASE. The paid-event gate moved to
+  # Organization#verified? in Ticket I (#338) — verification is a claim about
+  # who takes the money, and since #331 that's the organization's own PayWay
+  # account. Nothing in the app gates on this any more; the admin
+  # verify/unverify endpoints and this pair of methods stay only so a rollback
+  # has something to land on. Remove them, along with users.verified_at /
+  # verified_by_id, once #338 has been deployed and settled.
   def verified?
     verified_at.present?
   end
@@ -85,21 +116,41 @@ class User < ApplicationRecord
     suspended_at.present?
   end
 
-  # Suspending unpublishes every event the user created, so a suspension takes
-  # effect for the public immediately rather than only blocking the account's
-  # own sign-in. Their registrations are deliberately left alone: cancelling
-  # someone else's paid registration is a refund decision, not a moderation
-  # one, and shouldn't happen as a side effect here.
+  # A suspension takes effect for the public immediately, but nothing is
+  # written downward to do it — see organization-identity-tickets.md's
+  # Ticket J (#339). Organization#suspended? consults its owner, and
+  # Event#suspended? consults its organization, so every event this user
+  # presents drops out of public listings (Event.publicly_visible joins both)
+  # the moment this row is stamped.
+  #
+  # This used to `events.published.update_all(is_published: false)`. That is
+  # deliberately gone: with derivation it's redundant for hiding events, and
+  # now actively wrong, because unsuspending would leave them unpublished and
+  # the organizer with fifty events to manually republish — for a paid plan,
+  # back through the payment flow.
+  #
+  # Only organizations this user *owns* are affected. Being suspended costs
+  # them their own access to a club they merely administer, but the club and
+  # its events carry on: cascading through admin membership would let one bad
+  # actor take down a legitimate organization they happened to volunteer for.
+  #
+  # Their registrations are left alone: cancelling someone else's paid
+  # registration is a refund decision, not a moderation one.
   def suspend!(reason: nil)
-    transaction do
-      update!(suspended_at: Time.current, suspension_reason: reason.presence)
-      events.published.update_all(is_published: false, updated_at: Time.current)
-    end
+    update!(suspended_at: Time.current, suspension_reason: reason.presence)
   end
 
-  # Does NOT re-publish the events unsuspending took down — republishing is the
-  # organizer's decision (and, for a paid plan, goes back through
-  # EventPlanPaymentsController so plan/capacity stay consistent).
+  # Restores everything the cascade took down, automatically — an event
+  # suspended on its own merits stays suspended, because its own suspended_at
+  # is still set (see Event#suspended?).
+  #
+  # Note this differs from Event#unsuspend!, which does NOT re-publish an
+  # event that direct suspension unpublished — that stays the organizer's own
+  # decision, and for a paid plan goes back through
+  # EventPlanPaymentsController so plan/capacity stay consistent. The
+  # asymmetry is deliberate: suspending an event is a judgment about that
+  # event, suspending an account is a judgment about the account, and lifting
+  # the latter should undo it wholesale.
   def unsuspend!
     update!(suspended_at: nil, suspension_reason: nil)
   end
@@ -150,11 +201,23 @@ class User < ApplicationRecord
       profile&.update!(
         display_name: nil,
         avatar_url: nil,
-        phone: nil,
-        payway_merchant_id: nil,
-        payway_api_key: nil,
-        payway_rsa_public_key: nil
+        phone: nil
       )
+      # PayWay credentials live on Organization since Ticket B (#331), so
+      # clearing them here means clearing them there. The organizations
+      # themselves survive — they present events other people registered for,
+      # the same reason this method hides events rather than destroying them —
+      # but a deleted account's live merchant credentials must not linger on
+      # them. Safe by the time we get here: #delete_account already refuses
+      # while any of this user's events still has an outstanding paid
+      # registration.
+      owned_organizations.find_each do |organization|
+        organization.update!(
+          payway_merchant_id: nil,
+          payway_api_key: nil,
+          payway_rsa_public_key: nil
+        )
+      end
     end
   end
 

@@ -38,6 +38,18 @@ class EventRequestSchema < ApplicationRequestSchema
       optional(:logo_url).maybe(:string)
       # events.survey_id is a uuid column (see db/schema.rb), not an integer.
       optional(:survey_id).maybe(:string)
+      # OPTIONAL only transitionally. The end state is required — a user may
+      # administer several organizations, so the caller should say which one
+      # presents the event rather than have the server guess.
+      #
+      # It can't be required *yet*: the frontend doesn't send it until Ticket
+      # G (#336) adds the org selector, and flipping this to required first
+      # would break event creation for everyone in the meantime — not just
+      # during the deploy window, but until #336 actually ships.
+      # EventsController#resolve_organization_for_create! handles the absent
+      # case and documents exactly what to delete here when #336 lands. Also
+      # a uuid column, hence :string.
+      optional(:organization_id).maybe(:string)
       # Matches accepts_nested_attributes_for :event_types on Event — the
       # association setter is event_types_attributes=, not event_types=, so
       # using the wrong key here would raise ActiveRecord::AssociationTypeMismatch
