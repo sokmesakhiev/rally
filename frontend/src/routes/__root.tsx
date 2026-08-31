@@ -18,6 +18,7 @@ import { initErrorReporting, reportError } from "../lib/error-reporting";
 import { AuthProvider } from "../lib/use-auth";
 import { applyStoredLanguage } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
+import iconUrl from "@/assets/icon.png";
 
 function NotFoundComponent() {
   const { t } = useTranslation();
@@ -96,6 +97,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Organize running races, group rides, and community gatherings. Set up an event in minutes.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: iconUrl },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Rally" },
     ],
