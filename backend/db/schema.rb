@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_061000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_121000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -210,11 +210,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_061000) do
     t.string "telegram_url"
     t.datetime "updated_at", null: false
     t.datetime "verified_at"
+    t.uuid "verified_by_id"
     t.string "website"
     t.index ["deleted_at"], name: "index_organizations_on_deleted_at"
     t.index ["owner_id"], name: "index_organizations_on_owner_id"
     t.index ["slug"], name: "index_organizations_on_slug", unique: true
     t.index ["suspended_at"], name: "index_organizations_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+    t.index ["verified_at"], name: "index_organizations_on_verified_at", where: "(verified_at IS NOT NULL)"
   end
 
   create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -408,6 +410,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_061000) do
   add_foreign_key "organization_memberships", "users"
   add_foreign_key "organization_memberships", "users", column: "invited_by_id"
   add_foreign_key "organizations", "users", column: "owner_id"
+  add_foreign_key "organizations", "users", column: "verified_by_id"
   add_foreign_key "payments", "registrations"
   add_foreign_key "profiles", "users"
   add_foreign_key "refunds", "payments"

@@ -42,7 +42,7 @@ RSpec.describe "Events API", type: :request do
     end
 
     it "reports the organization's verified badge" do
-      published_upcoming.organization.verify!
+      published_upcoming.organization.verify!(by: create(:user, admin: true))
 
       get "/api/v1/events", as: :json
 
@@ -525,7 +525,7 @@ RSpec.describe "Events API", type: :request do
   describe "POST /api/v1/events" do
     # Every event is presented by an organization, and the caller always says
     # which — see organization-identity-tickets.md's Ticket C (#332).
-    let!(:organization) { create(:organization, owner: user) }
+    let!(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, admin: true)) }
 
     let(:valid_params) do
       {
@@ -792,6 +792,59 @@ RSpec.describe "Events API", type: :request do
         post "/api/v1/events", params: params, headers: auth_headers(unverified), as: :json
 
         expect(response).to have_http_status(:created)
+      end
+
+      # Ticket I (#338) — the gate reads the ORGANIZATION, not the signed-in
+      # user. Registration money settles into the organization's own PayWay
+      # account (#331), so that's what has to be vouched for.
+      context "once the gate moved to the organization" do
+        it "rejects a paid event under an unverified organization, even from a verified user" do
+          verified_user = create(:user, :verified)
+          unverified_org = create(:organization, owner: verified_user)
+          unverified_org.unverify!
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: unverified_org.id },
+               ),
+               headers: auth_headers(verified_user), as: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json["code"]).to eq("verification_required")
+        end
+
+        it "allows a paid event under a verified organization" do
+          organizer = create(:user)
+          verified_org = create(:organization, owner: organizer)
+          verified_org.verify!(by: create(:user, admin: true))
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: verified_org.id },
+               ),
+               headers: auth_headers(organizer), as: :json
+
+          expect(response).to have_http_status(:created)
+          expect(json["event"]["price_cents"]).to eq(2500)
+        end
+
+        # A club admin can't charge under a brand Rally hasn't vouched for,
+        # however trusted they are personally.
+        it "rejects a paid event an admin creates under an unverified club" do
+          verified_admin = create(:user, :verified)
+          club = create(:organization)
+          club.unverify!
+          create(:organization_membership, organization: club, user: verified_admin, role: "admin")
+
+          post "/api/v1/events",
+               params: valid_params.deep_merge(
+                 event: { price_cents: 2500, organization_id: club.id },
+               ),
+               headers: auth_headers(verified_admin), as: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json["code"]).to eq("verification_required")
+        end
       end
 
       it "allows a paid event from a verified organizer" do

@@ -166,6 +166,94 @@ RSpec.describe "Admin organizations API", type: :request do
     end
   end
 
+  # ── Verify / unverify ────────────────────────────────────────────────────────
+  # Ticket I (#338) — what unlocks charging for events.
+  describe "POST /api/v1/admin/organizations/:id/verify" do
+    before { organization.unverify! }
+
+    it "verifies the organization and records who did it" do
+      post "/api/v1/admin/organizations/#{organization.id}/verify",
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["organization"]["verified"]).to be(true)
+      expect(organization.reload.verified_by_id).to eq(admin.id)
+    end
+
+    it "records a queryable AdminAction" do
+      expect {
+        post "/api/v1/admin/organizations/#{organization.id}/verify",
+             headers: auth_headers(admin), as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      expect(AdminAction.last.action).to eq("verify_organization")
+      expect(AdminAction.last.target).to eq(organization)
+    end
+
+    it "unlocks paid events for that organization" do
+      organizer = organization.owner
+      post "/api/v1/admin/organizations/#{organization.id}/verify",
+           headers: auth_headers(admin), as: :json
+
+      post "/api/v1/events",
+           params: { event: { title: "Paid 10K", category: "running",
+                              start_at: 1.week.from_now.iso8601, price_cents: 2500,
+                              organization_id: organization.id } },
+           headers: auth_headers(organizer), as: :json
+
+      expect(response).to have_http_status(:created)
+    end
+
+    it "returns 404 for an unknown organization" do
+      post "/api/v1/admin/organizations/#{SecureRandom.uuid}/verify",
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is blocked for a non-admin" do
+      post "/api/v1/admin/organizations/#{organization.id}/verify",
+           headers: auth_headers(regular), as: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(organization.reload.verified?).to be(false)
+    end
+  end
+
+  describe "POST /api/v1/admin/organizations/:id/unverify" do
+    before { organization.verify!(by: admin) }
+
+    it "clears verification and who granted it" do
+      post "/api/v1/admin/organizations/#{organization.id}/unverify",
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["organization"]["verified"]).to be(false)
+      expect(organization.reload.verified_by_id).to be_nil
+    end
+
+    # Participants already committed money to events that were legitimately
+    # created — silently unpublishing them would strand those people.
+    it "leaves existing paid events published" do
+      paid_event = create(:event, :paid, :for_organization,
+                          presented_by: organization, creator: organization.owner)
+
+      post "/api/v1/admin/organizations/#{organization.id}/unverify",
+           headers: auth_headers(admin), as: :json
+
+      expect(paid_event.reload.is_published).to be(true)
+    end
+
+    it "records a queryable AdminAction" do
+      expect {
+        post "/api/v1/admin/organizations/#{organization.id}/unverify",
+             headers: auth_headers(admin), as: :json
+      }.to change(AdminAction, :count).by(1)
+
+      expect(AdminAction.last.action).to eq("unverify_organization")
+    end
+  end
+
   # ── Unsuspend ────────────────────────────────────────────────────────────────
   describe "POST /api/v1/admin/organizations/:id/unsuspend" do
     let!(:event) { create(:event, :for_organization, presented_by: organization, creator: organizer) }

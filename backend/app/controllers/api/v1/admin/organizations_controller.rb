@@ -76,6 +76,36 @@ module Api
           render json: { error: "Organization not found" }, status: :not_found
         end
 
+        # POST /api/v1/admin/organizations/:id/verify
+        #
+        # What unlocks creating paid events (Ticket I, #338). Distinct from a
+        # user's self-service email verification: this is a human at Rally
+        # deciding an organization can be trusted to take other people's money.
+        def verify
+          organization = ::Organization.kept.find(params[:id])
+
+          organization.verify!(by: current_user)
+          log_admin_action("verify_organization", organization)
+
+          render json: { organization: organization_json(organization.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Organization not found" }, status: :not_found
+        end
+
+        # POST /api/v1/admin/organizations/:id/unverify
+        #
+        # Leaves existing paid events published — see Organization#unverify!.
+        def unverify
+          organization = ::Organization.kept.find(params[:id])
+
+          organization.unverify!
+          log_admin_action("unverify_organization", organization)
+
+          render json: { organization: organization_json(organization.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "Organization not found" }, status: :not_found
+        end
+
         private
 
         def organization_json(organization)

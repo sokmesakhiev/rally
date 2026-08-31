@@ -464,12 +464,33 @@ RSpec.describe Organization, type: :model do
 
     it "round-trips through verify!/unverify!" do
       org = create(:organization)
+      admin = create(:user, admin: true)
 
-      org.verify!
+      org.verify!(by: admin)
       expect(org.verified?).to be(true)
 
       org.unverify!
       expect(org.verified?).to be(false)
+    end
+
+    # Mirrors User#verify!(by:) — AdminAction logs it too, but this answers
+    # "who vouched for this organization" straight off the row.
+    it "records which staff account granted it" do
+      org = create(:organization)
+      admin = create(:user, admin: true)
+
+      org.verify!(by: admin)
+
+      expect(org.reload.verified_by).to eq(admin)
+    end
+
+    it "clears who granted it on unverify" do
+      org = create(:organization)
+      org.verify!(by: create(:user, admin: true))
+
+      org.unverify!
+
+      expect(org.reload.verified_by_id).to be_nil
     end
   end
 

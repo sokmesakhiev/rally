@@ -369,13 +369,25 @@ module Api
 
       # Returns true (and renders) when the request must be rejected, so
       # callers can `next if reject_unverified_paid_event!(...)`.
+      #
+      # Gated on the ORGANIZATION since Ticket I (#338), not the signed-in
+      # user. Verification is a claim about who takes the money, and since
+      # #331 registration payments settle into the organization's own PayWay
+      # account — so a verified individual creating an event under an
+      # unverified club must not be able to charge for it.
+      #
+      # Existing organizers didn't lose access when this moved: the #338
+      # backfill carried each verified owner's status onto the organizations
+      # they own. A newly created organization does start unverified, which
+      # is the intended behaviour — staff vouch for each brand that takes
+      # payments, not once per person.
       def reject_unverified_paid_event!(event, was_paid:)
         return false if was_paid
         return false unless event.paid?
-        return false if current_user.verified?
+        return false if event.organization&.verified?
 
         render json: {
-          error: "Your account needs to be verified before you can create a paid event. " \
+          error: "This organization needs to be verified before it can run a paid event. " \
                  "You can publish free events in the meantime.",
           code: "verification_required"
         }, status: :unprocessable_entity
