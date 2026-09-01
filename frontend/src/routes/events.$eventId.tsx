@@ -50,7 +50,92 @@ import {
 import { downloadICS } from "@/lib/ics";
 
 export const Route = createFileRoute("/events/$eventId")({
-  head: () => ({ meta: [{ title: "Event — Rally" }] }),
+  loader: async ({ params }) => {
+    const { event } = await eventsApi.get(params.eventId);
+    return { event };
+  },
+  head: ({ loaderData }) => {
+    const event = loaderData?.event;
+
+    if (!event) {
+      return { meta: [{ title: "Event — Rally" }] };
+    }
+
+    const title = `${event.title} — Rally`;
+    const description = event.description
+      ? `${event.description.substring(0, 160)}${event.description.length > 160 ? "..." : ""}`
+      : `Join ${event.title} on ${formatDateTime(event.start_at)}. ${categoryLabel(event.category)} event in ${event.location || "Cambodia"}.`;
+    const imageUrl = event.banner_url || event.logo_url || undefined;
+    const baseUrl = import.meta.env.VITE_BASE_URL || "";
+
+    // JSON-LD structured data for events
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      name: event.title,
+      description: event.description || description,
+      startDate: event.start_at,
+      endDate: event.end_at || event.start_at,
+      location: event.location
+        ? {
+            "@type": "Place",
+            name: event.location,
+            ...(event.latitude && event.longitude
+              ? {
+                  geo: {
+                    "@type": "GeoCoordinates",
+                    latitude: event.latitude,
+                    longitude: event.longitude,
+                  },
+                }
+              : null),
+          }
+        : undefined,
+      organizer: event.organization
+        ? {
+            "@type": "Organization",
+            name: event.organization.name,
+            url: `${baseUrl}/organizers/${event.organization.slug}`,
+          }
+        : undefined,
+      image: imageUrl,
+      offers: event.price_cents > 0
+        ? {
+            "@type": "Offer",
+            price: (event.price_cents / 100).toFixed(2),
+            priceCurrency: event.currency.toUpperCase(),
+            availability: "https://schema.org/InStock",
+          }
+        : {
+            "@type": "Offer",
+            price: "0",
+            priceCurrency: event.currency.toUpperCase(),
+            availability: "https://schema.org/InStock",
+          },
+    };
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        ...(imageUrl ? [{ property: "og:image", content: imageUrl }] : []),
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        ...(imageUrl ? [{ name: "twitter:image", content: imageUrl }] : []),
+        ...(baseUrl ? [{ rel: "canonical", href: `${baseUrl}/events/${event.id}` }] : []),
+      ],
+      scripts: [
+        {
+          type: "application/ld+json",
+          innerHTML: JSON.stringify(structuredData),
+        },
+      ],
+    };
+  },
   component: EventDetail,
 });
 
@@ -71,6 +156,7 @@ function EventDetail() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { event } = Route.useLoaderData();
 
   const [regStep, setRegStep] = useState<RegStep>("idle");
   // Guest checkout never signs the visitor in (see registrationsApi.create)
@@ -118,14 +204,6 @@ function EventDetail() {
       phone: guestPhone.trim() || undefined,
     };
   }
-
-  const eventQuery = useQuery({
-    queryKey: ["public-event", eventId],
-    queryFn: async () => {
-      const { event } = await eventsApi.get(eventId);
-      return event;
-    },
-  });
 
   const regQuery = useQuery({
     queryKey: ["my-reg", eventId, user?.id],
@@ -175,7 +253,7 @@ function EventDetail() {
     mutationFn: (opts?: {
       answers?: ApiRegistrationAnswer[];
       eventTypeIds?: string[];
-      guest?: { name: string; email: string };
+      guest?: { name: string; email?: string; phone?: string };
     }) => registrationsApi.create(eventId, opts),
     onSuccess: (res) => {
       setRegStep("idle");
@@ -220,7 +298,7 @@ function EventDetail() {
     },
   });
 
-  const ev = eventQuery.data;
+  const ev = event;
   // A signed-in user's registration comes from regQuery; a guest's comes
   // from client-side state set after registering (see the register
   // mutation above) since there's no session for regQuery to authenticate
@@ -354,8 +432,7 @@ function EventDetail() {
           </Link>
         </Button>
 
-        {eventQuery.isLoading && <p className="text-muted-foreground">{t("common.loading")}</p>}
-        {eventQuery.isError && <p className="text-muted-foreground">{t("eventDetail.notFound")}</p>}
+        {!event && <p className="text-muted-foreground">{t("eventDetail.notFound")}</p>}
 
         {/* A suspended event still 200s for a direct link (see
             ApplicationController#identify_current_user!/EventAuthorization's
