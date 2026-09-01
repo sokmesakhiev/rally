@@ -19,6 +19,7 @@ import { SiteHeader } from "@/components/site-header";
 import { eventPlansApi } from "@/lib/api-client";
 import { formatPrice } from "@/lib/event-utils";
 import heroImg from "@/assets/hero-runners.jpg";
+import iconUrl from "@/assets/icon.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -35,8 +36,8 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "Organize running races, group rides, and community gatherings in minutes.",
       },
-      { property: "og:image", content: heroImg },
-      { name: "twitter:image", content: heroImg },
+      { property: "og:image", content: iconUrl },
+      { name: "twitter:image", content: iconUrl },
     ],
   }),
   component: Index,
