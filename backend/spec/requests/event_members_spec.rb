@@ -116,7 +116,7 @@ RSpec.describe "Event Members API", type: :request do
             params: { membership: { role: "co-owner" } },
             headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 403 for a Manager attempting to change someone's role" do

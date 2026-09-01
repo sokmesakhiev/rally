@@ -34,7 +34,7 @@ RSpec.describe "Auth API", type: :request do
       create(:user, email: "new@example.com")
       post "/api/v1/auth/signup", params: valid_params, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
@@ -43,7 +43,7 @@ RSpec.describe "Auth API", type: :request do
            params: { email: "x@x.com", password: "short" },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 for an invalid email" do
@@ -51,7 +51,7 @@ RSpec.describe "Auth API", type: :request do
            params: { email: "not-valid", password: password },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "sends a verification email and marks the account unverified" do
@@ -65,14 +65,14 @@ RSpec.describe "Auth API", type: :request do
     it "returns 422 when email is missing entirely (schema)" do
       post "/api/v1/auth/signup", params: { password: password }, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
     it "returns 422 when password is missing entirely (schema)" do
       post "/api/v1/auth/signup", params: { email: "new@example.com" }, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
@@ -92,7 +92,7 @@ RSpec.describe "Auth API", type: :request do
           post "/api/v1/auth/signup", params: valid_params.merge(recaptcha_token: "tok"), as: :json
         }.not_to change(User, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("recaptcha_failed")
       end
 
@@ -124,7 +124,7 @@ RSpec.describe "Auth API", type: :request do
           post "/api/v1/auth/signup", params: params, as: :json
         }.not_to change(User, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("terms_not_accepted")
       end
 
@@ -133,7 +133,7 @@ RSpec.describe "Auth API", type: :request do
           post "/api/v1/auth/signup", params: valid_params.merge(terms_accepted: false), as: :json
         }.not_to change(User, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("terms_not_accepted")
       end
 
@@ -190,14 +190,14 @@ RSpec.describe "Auth API", type: :request do
     it "returns 422 when email is missing entirely (schema)" do
       post "/api/v1/auth/signin", params: { password: password }, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
     it "returns 422 when password is missing entirely (schema)" do
       post "/api/v1/auth/signin", params: { email: user.email }, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
   end
@@ -301,7 +301,7 @@ RSpec.describe "Auth API", type: :request do
 
       post "/api/v1/auth/google", params: {}, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
   end
@@ -395,7 +395,7 @@ RSpec.describe "Auth API", type: :request do
                       new_password_confirmation: "newpassword123" },
             headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(user.reload.authenticate(password)).to eq(user)
     end
 
@@ -405,7 +405,7 @@ RSpec.describe "Auth API", type: :request do
                       new_password_confirmation: "somethingelse" },
             headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "rejects a new password shorter than 8 characters" do
@@ -414,7 +414,7 @@ RSpec.describe "Auth API", type: :request do
                       new_password_confirmation: "short" },
             headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 401 without a token" do
@@ -462,7 +462,7 @@ RSpec.describe "Auth API", type: :request do
             params: { current_password: "wrongpass", new_email: "new-address@example.com" },
             headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(user.reload.email).not_to eq("new-address@example.com")
     end
 
@@ -473,7 +473,7 @@ RSpec.describe "Auth API", type: :request do
             params: { current_password: password, new_email: "taken@example.com" },
             headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 401 without a token" do
@@ -505,7 +505,7 @@ RSpec.describe "Auth API", type: :request do
              params: { current_password: "wrongpass" },
              headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(user.reload.discarded?).to be(false)
     end
 
@@ -517,7 +517,7 @@ RSpec.describe "Auth API", type: :request do
              params: { current_password: password },
              headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("has_paid_events")
       expect(user.reload.discarded?).to be(false)
     end

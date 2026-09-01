@@ -93,7 +93,7 @@ RSpec.describe "Organizations API", type: :request do
            params: { organization: { description: "No name" } },
            headers: auth_headers(stranger), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 for a malformed website" do
@@ -101,7 +101,7 @@ RSpec.describe "Organizations API", type: :request do
            params: { organization: { name: "X", website: "example.com" } },
            headers: auth_headers(stranger), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     # Accepting a slug would let a caller squat a URL that can then never be
@@ -240,7 +240,7 @@ RSpec.describe "Organizations API", type: :request do
               params: { organization: { payway_merchant_id: "m_123" } },
               headers: auth_headers(owner), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
   end
@@ -261,7 +261,7 @@ RSpec.describe "Organizations API", type: :request do
 
       delete "/api/v1/organizations/#{organization.slug}", headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("organization_has_events")
       expect(organization.reload.discarded?).to be(false)
     end
@@ -323,7 +323,7 @@ RSpec.describe "Organizations API", type: :request do
       post "/api/v1/organizations/#{organization.slug}/transfer_ownership",
            params: { user_id: plain_member.id }, headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("admin_required")
       expect(organization.reload.owner_id).to eq(owner.id)
     end
@@ -332,7 +332,7 @@ RSpec.describe "Organizations API", type: :request do
       post "/api/v1/organizations/#{organization.slug}/transfer_ownership",
            params: { user_id: stranger.id }, headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(organization.reload.owner_id).to eq(owner.id)
     end
 

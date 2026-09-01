@@ -114,7 +114,7 @@ RSpec.describe "Registrations API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 with a clean message and code when the event is full" do
@@ -125,7 +125,7 @@ RSpec.describe "Registrations API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to eq("This event is full")
       expect(json["code"]).to eq("full")
     end
@@ -140,7 +140,7 @@ RSpec.describe "Registrations API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to eq("5K is full")
       expect(json["code"]).to eq("full")
     end
@@ -153,7 +153,7 @@ RSpec.describe "Registrations API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to eq("Already registered")
       expect(json["code"]).to be_nil
     end
@@ -164,7 +164,7 @@ RSpec.describe "Registrations API", type: :request do
     it "requires either a token or guest info when there's no session" do
       post "/api/v1/events/#{event.id}/registrations", as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("guest_info_required")
     end
   end
@@ -229,7 +229,7 @@ RSpec.describe "Registrations API", type: :request do
         params: { guest: { email: "dara@example.com" } },
         as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "requires a phone number or email" do
@@ -237,7 +237,7 @@ RSpec.describe "Registrations API", type: :request do
         params: { guest: { name: "Dara Kim" } },
         as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("contact_required")
     end
 
@@ -492,7 +492,7 @@ RSpec.describe "Registrations API", type: :request do
             headers: auth_headers(organizer),
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
       expect(reg.reload.payment_status).not_to eq("bogus")
     end

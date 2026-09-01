@@ -77,7 +77,7 @@ RSpec.describe "Payments API", type: :request do
 
       post "/api/v1/registrations/#{registration.id}/payments", headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 502 when ABA PayWay is unreachable" do

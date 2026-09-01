@@ -105,7 +105,7 @@ RSpec.describe "Organization members API", type: :request do
            params: { member: { email: "nobody@example.com", role: "member" } },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("user_not_found")
     end
 
@@ -114,7 +114,7 @@ RSpec.describe "Organization members API", type: :request do
            params: { member: { email: admin.email, role: "member" } },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     # Ownership is a column; a membership row for the owner would be a
@@ -124,7 +124,7 @@ RSpec.describe "Organization members API", type: :request do
            params: { member: { email: owner.email, role: "admin" } },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "rejects an unknown role" do
@@ -132,7 +132,7 @@ RSpec.describe "Organization members API", type: :request do
            params: { member: { email: newcomer.email, role: "superuser" } },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 

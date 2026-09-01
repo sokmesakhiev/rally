@@ -126,7 +126,7 @@ RSpec.describe "Invitations API (accept)", type: :request do
         post "/api/v1/invitations/#{invitation.token}/accept", headers: auth_headers(wrong_user), as: :json
       }.not_to change(EventMembership, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("invitation_email_mismatch")
       expect(json["error"]).to include(recipient.email)
     end
@@ -137,7 +137,7 @@ RSpec.describe "Invitations API (accept)", type: :request do
 
       post "/api/v1/invitations/#{invitation.token}/accept", headers: auth_headers(recipient), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("invitation_invalid")
     end
 
@@ -147,7 +147,7 @@ RSpec.describe "Invitations API (accept)", type: :request do
 
       post "/api/v1/invitations/#{invitation.token}/accept", headers: auth_headers(recipient), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("invitation_invalid")
     end
 

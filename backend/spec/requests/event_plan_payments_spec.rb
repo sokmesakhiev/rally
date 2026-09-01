@@ -28,7 +28,7 @@ RSpec.describe "Event plan payments API", type: :request do
              headers: auth_headers(organizer),
              as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("plan_capacity_too_low")
         expect(json["error"]).to include("Small plan allows up to 200")
         expect(json["error"]).to include("250")
@@ -42,7 +42,7 @@ RSpec.describe "Event plan payments API", type: :request do
              headers: auth_headers(organizer),
              as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("plan_capacity_too_low")
         expect(event.reload).not_to be_is_published
       end
@@ -71,7 +71,7 @@ RSpec.describe "Event plan payments API", type: :request do
              headers: auth_headers(organizer),
              as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("plan_capacity_too_low")
         expect(event.reload).not_to be_is_published
       end
@@ -115,7 +115,7 @@ RSpec.describe "Event plan payments API", type: :request do
              headers: auth_headers(organizer),
              as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["error"]).to include("already on this plan")
       end
 
@@ -182,7 +182,7 @@ RSpec.describe "Event plan payments API", type: :request do
              headers: auth_headers(organizer),
              as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("plan_capacity_too_low")
         expect(json["error"]).to include("already registered")
         expect(event.reload.plan).to eq("small")
@@ -197,7 +197,7 @@ RSpec.describe "Event plan payments API", type: :request do
         post "/api/v1/events/#{event.id}/plan_payments", params: { plan: "large" },
              headers: auth_headers(organizer), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("plan_change_pending")
       end
 

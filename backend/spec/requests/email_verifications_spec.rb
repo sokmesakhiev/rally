@@ -39,7 +39,7 @@ RSpec.describe "Email Verifications API", type: :request do
 
     it "returns 422 for an invalid token" do
       get "/api/v1/email_verifications/bogus-token", as: :json
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 end

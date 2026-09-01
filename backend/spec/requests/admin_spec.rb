@@ -154,7 +154,7 @@ RSpec.describe "Admin API", type: :request do
     it "rejects an unknown status" do
       get "/api/v1/admin/users", params: { status: "banished" }, headers: auth_headers(admin)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "paginates" do
@@ -239,14 +239,14 @@ RSpec.describe "Admin API", type: :request do
            headers: auth_headers(admin),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(regular.reload).not_to be_suspended
     end
 
     it "refuses to let an admin suspend themselves" do
       post "/api/v1/admin/users/#{admin.id}/suspend", headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("self_suspend")
       expect(admin.reload).not_to be_suspended
     end
@@ -256,7 +256,7 @@ RSpec.describe "Admin API", type: :request do
 
       post "/api/v1/admin/users/#{other_admin.id}/suspend", headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("admin_target")
       expect(other_admin.reload).not_to be_suspended
     end
@@ -472,7 +472,7 @@ RSpec.describe "Admin API", type: :request do
            headers: auth_headers(admin),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(event.reload.suspended?).to be(false)
     end
 
@@ -481,7 +481,7 @@ RSpec.describe "Admin API", type: :request do
 
       post "/api/v1/admin/events/#{event.id}/suspend", headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(event.reload.suspended?).to be(false)
     end
 
@@ -640,7 +640,7 @@ RSpec.describe "Admin API", type: :request do
         delete "/api/v1/admin/events/#{event.id}", headers: auth_headers(admin), as: :json
       }.not_to change(Event, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("confirmation_required")
     end
 
@@ -688,7 +688,7 @@ RSpec.describe "Admin API", type: :request do
                as: :json
       }.not_to change(Event, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("has_paid_registrations")
     end
 
@@ -810,7 +810,7 @@ RSpec.describe "Admin API", type: :request do
     it "rejects an unknown period" do
       get "/api/v1/admin/reports", params: { period: "day" }, headers: auth_headers(admin)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "places platform revenue in the bucket matching its EventPlanPayment's created_at" do

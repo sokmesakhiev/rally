@@ -225,7 +225,7 @@ RSpec.describe "Events API", type: :request do
       it "returns 422 for an unknown category rather than silently empty results" do
         get "/api/v1/events", params: { category: "quidditch" }
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["error"]).to be_present
       end
 
@@ -294,19 +294,19 @@ RSpec.describe "Events API", type: :request do
 
       it "rejects a non-positive page" do
         get "/api/v1/events", params: { page: 0 }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "rejects a per_page above the maximum instead of silently clamping" do
         get "/api/v1/events",
             params: { per_page: EventIndexRequestSchema::MAX_PER_PAGE + 1 }
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "rejects a non-numeric page" do
         get "/api/v1/events", params: { page: "abc" }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "still excludes drafts and past events when searching" do
@@ -613,7 +613,7 @@ RSpec.describe "Events API", type: :request do
 
         post "/api/v1/events", params: params_without_org, headers: auth_headers(user), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("organization_required")
         expect(Event.where(title: "Sunrise 10K")).to be_empty
       end
@@ -673,7 +673,7 @@ RSpec.describe "Events API", type: :request do
            headers: auth_headers(user),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 401 without a token" do
@@ -729,7 +729,7 @@ RSpec.describe "Events API", type: :request do
            headers: auth_headers(user),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
@@ -755,7 +755,7 @@ RSpec.describe "Events API", type: :request do
                as: :json
         }.not_to change(Event, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("verification_required")
       end
 
@@ -773,7 +773,7 @@ RSpec.describe "Events API", type: :request do
           post "/api/v1/events", params: params, headers: auth_headers(unverified), as: :json
         }.not_to change(Event, :count)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("verification_required")
       end
 
@@ -809,7 +809,7 @@ RSpec.describe "Events API", type: :request do
                ),
                headers: auth_headers(verified_user), as: :json
 
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(json["code"]).to eq("verification_required")
         end
 
@@ -842,7 +842,7 @@ RSpec.describe "Events API", type: :request do
                ),
                headers: auth_headers(verified_admin), as: :json
 
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(json["code"]).to eq("verification_required")
         end
       end
@@ -988,7 +988,7 @@ RSpec.describe "Events API", type: :request do
             headers: auth_headers(user),
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
@@ -1048,7 +1048,7 @@ RSpec.describe "Events API", type: :request do
               headers: auth_headers(unverified),
               as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("verification_required")
         expect(free_event.reload.price_cents).to eq(0)
       end
@@ -1061,7 +1061,7 @@ RSpec.describe "Events API", type: :request do
               headers: auth_headers(unverified),
               as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("verification_required")
         expect(free_event.reload.event_types).to be_empty
       end

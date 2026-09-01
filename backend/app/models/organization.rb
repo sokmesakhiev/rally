@@ -37,11 +37,11 @@ class Organization < ApplicationRecord
   # both pass a `\Ahttps?://`-style check, and these values are rendered
   # straight into href attributes on the public organizer page.
   #
-  # Wraps URI::DEFAULT_PARSER.make_regexp (the same helper Event#route_map_url
+  # Wraps URI::RFC2396_PARSER.make_regexp (the same helper Event#route_map_url
   # uses) rather than hand-rolling a URL pattern — but note make_regexp is
   # itself UNANCHORED, so using it bare would additionally accept
   # "junk https://example.com". The anchors are doing real work here.
-  URL_FORMAT = /\A#{URI::DEFAULT_PARSER.make_regexp(%w[http https])}\z/
+  URL_FORMAT = /\A#{URI::RFC2396_PARSER.make_regexp(%w[http https])}\z/
 
   validates :name, presence: true, length: { maximum: 120 }
   validates :slug, presence: true, uniqueness: { case_sensitive: false },

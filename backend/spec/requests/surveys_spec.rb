@@ -49,7 +49,7 @@ RSpec.describe "Surveys API", type: :request do
            headers: auth_headers(organizer),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
 
@@ -59,7 +59,7 @@ RSpec.describe "Surveys API", type: :request do
            headers: auth_headers(organizer),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 (model-level) when a choice question has fewer than 2 options" do
@@ -72,7 +72,7 @@ RSpec.describe "Surveys API", type: :request do
            headers: auth_headers(organizer),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 401 without a token" do
