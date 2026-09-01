@@ -40,7 +40,7 @@ RSpec.describe "Organization publish gate", type: :request do
       post "/api/v1/events/#{event.id}/plan_payments",
            params: { plan: "free" }, headers: auth_headers(organizer), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("organization_incomplete")
       expect(event.reload.is_published).to be(false)
     end
@@ -91,7 +91,7 @@ RSpec.describe "Organization publish gate", type: :request do
              params: { plan: "small" }, headers: auth_headers(organizer), as: :json
       }.not_to change(EventPlanPayment, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("organization_incomplete")
     end
   end

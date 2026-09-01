@@ -64,7 +64,7 @@ RSpec.describe "Profiles API", type: :request do
             headers: auth_headers(user),
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "surfaces email_auto_generated so the frontend can nudge for a real email" do
@@ -151,7 +151,7 @@ RSpec.describe "Profiles API", type: :request do
               headers: auth_headers(user),
               as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(organization.reload.payway_merchant_id).to be_nil
       end
 
@@ -184,7 +184,7 @@ RSpec.describe "Profiles API", type: :request do
               headers: auth_headers(user),
               as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("organization_required")
         expect(organization.reload.payway_merchant_id).to be_nil
       end
@@ -209,7 +209,7 @@ RSpec.describe "Profiles API", type: :request do
               headers: auth_headers(user),
               as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(json["code"]).to eq("organization_required")
       end
 

@@ -23,7 +23,7 @@ RSpec.describe "Password Resets API", type: :request do
     it "returns 422 when email is missing entirely (schema)" do
       post "/api/v1/password_resets", params: {}, as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to be_present
     end
   end
@@ -47,7 +47,7 @@ RSpec.describe "Password Resets API", type: :request do
             params: { password: "newpassword123", password_confirmation: "newpassword123" },
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 for an expired token" do
@@ -59,7 +59,7 @@ RSpec.describe "Password Resets API", type: :request do
             params: { password: "newpassword123", password_confirmation: "newpassword123" },
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 when passwords don't match" do
@@ -70,7 +70,7 @@ RSpec.describe "Password Resets API", type: :request do
             params: { password: "newpassword123", password_confirmation: "different" },
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 end

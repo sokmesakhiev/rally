@@ -102,7 +102,7 @@ RSpec.describe "Uploads API", type: :request do
              headers: auth_headers(user)
       }.not_to change(ActiveStorage::Blob, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/JPEG|PNG|WebP|GIF/i)
     end
 
@@ -117,7 +117,7 @@ RSpec.describe "Uploads API", type: :request do
         post "/api/v1/uploads", params: { file: oversized, type: "banner" }, headers: auth_headers(user)
       }.not_to change(ActiveStorage::Blob, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/too large/i)
     end
 
@@ -132,7 +132,7 @@ RSpec.describe "Uploads API", type: :request do
 
       post "/api/v1/uploads", params: { file: huge_pdf, type: "banner" }, headers: auth_headers(user)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/JPEG|PNG|WebP|GIF/i)
     end
 
@@ -165,14 +165,14 @@ RSpec.describe "Uploads API", type: :request do
              headers: auth_headers(user)
       }.not_to change(ActiveStorage::Blob, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/OpenDocument/i)
     end
 
     it "rejects an ODT file for the banner type (image types only)" do
       post "/api/v1/uploads", params: { file: odt_upload, type: "banner" }, headers: auth_headers(user)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/JPEG|PNG|WebP|GIF/i)
     end
 
@@ -201,7 +201,7 @@ RSpec.describe "Uploads API", type: :request do
              headers: auth_headers(user)
       }.not_to change(ActiveStorage::Blob, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["error"]).to match(/too large/i)
     end
   end

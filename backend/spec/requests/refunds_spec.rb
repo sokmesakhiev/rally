@@ -86,14 +86,14 @@ RSpec.describe "Refunds API", type: :request do
         post "/api/v1/payments/#{payment.id}/refunds",
           params: { refund: { refund_method: "manual" } }, headers: auth_headers(organizer), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "rejects a refund amount greater than what's still refundable" do
         post "/api/v1/payments/#{payment.id}/refunds",
           params: { refund: { amount_cents: 10_000 } }, headers: auth_headers(organizer), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "rejects refunding a payment that was never approved" do
@@ -101,7 +101,7 @@ RSpec.describe "Refunds API", type: :request do
 
         post "/api/v1/payments/#{pending_payment.id}/refunds", headers: auth_headers(organizer), as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "skips the refund_issued email when the participant has turned that notification off" do

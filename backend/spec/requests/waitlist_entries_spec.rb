@@ -27,7 +27,7 @@ RSpec.describe "Waitlist Entries API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("not_full")
     end
 
@@ -43,7 +43,7 @@ RSpec.describe "Waitlist Entries API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("already_registered")
     end
 
@@ -55,7 +55,7 @@ RSpec.describe "Waitlist Entries API", type: :request do
            headers: auth_headers(participant),
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "accepts specific event_type_ids" do

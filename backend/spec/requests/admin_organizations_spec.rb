@@ -108,7 +108,7 @@ RSpec.describe "Admin organizations API", type: :request do
       post "/api/v1/admin/organizations/#{organization.id}/suspend",
            headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(organization.reload.suspended_directly?).to be(false)
     end
 
@@ -116,7 +116,7 @@ RSpec.describe "Admin organizations API", type: :request do
       post "/api/v1/admin/organizations/#{organization.id}/suspend",
            params: { reason: "" }, headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 404 for an unknown organization" do

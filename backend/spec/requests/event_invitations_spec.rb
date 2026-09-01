@@ -58,7 +58,7 @@ RSpec.describe "Event Invitations API", type: :request do
              headers: auth_headers(owner), as: :json
       }.not_to change { ActionMailer::Base.deliveries.count }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("self_invite")
     end
 
@@ -74,7 +74,7 @@ RSpec.describe "Event Invitations API", type: :request do
         end
       }.not_to change { ActionMailer::Base.deliveries.count }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("already_member")
       expect(EventInvitation.count).to eq(0)
     end
@@ -102,7 +102,7 @@ RSpec.describe "Event Invitations API", type: :request do
         end
       }.not_to change { ActionMailer::Base.deliveries.count }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("invite_pending")
     end
 
@@ -131,7 +131,7 @@ RSpec.describe "Event Invitations API", type: :request do
            params: { email: "x@example.com", role: "co-owner" },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 422 when email is missing entirely (schema)" do
@@ -139,7 +139,7 @@ RSpec.describe "Event Invitations API", type: :request do
            params: { role: "manager" },
            headers: auth_headers(owner), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 403 for a Manager member — member management is owner-only" do

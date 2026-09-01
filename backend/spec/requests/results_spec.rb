@@ -53,7 +53,7 @@ RSpec.describe "Results API", type: :request do
             headers: auth_headers(organizer),
             as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "returns 403 when a non-organizer tries to set a result" do

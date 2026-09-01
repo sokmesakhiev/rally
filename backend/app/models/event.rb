@@ -52,7 +52,7 @@ class Event < ApplicationRecord
   # Set by the frontend's Google Maps location picker — both or neither, so a
   # pin never ends up half-placed (e.g. after a partial client-side bug).
   validate :lat_lng_present_together
-  validates :route_map_url, format: { with: URI::DEFAULT_PARSER.make_regexp(%w[http https]),
+  validates :route_map_url, format: { with: URI::RFC2396_PARSER.make_regexp(%w[http https]),
     message: "must be a valid http(s) URL" }, allow_blank: true
   validate :end_after_start
   # Only meaningful once a plan has actually set a capacity — a draft event
