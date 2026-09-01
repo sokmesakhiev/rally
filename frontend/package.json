@@ -60,7 +60,7 @@
     "embla-carousel-react": "^8.6.0",
     "i18next": "^26.4.0",
     "input-otp": "^1.5.0",
-    "lucide-react": "^1.34.0",
+    "lucide-react": "^1.35.0",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
