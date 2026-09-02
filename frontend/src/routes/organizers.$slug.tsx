@@ -19,23 +19,48 @@ import { formatPrice, formatDate, categoryLabel } from "@/lib/event-utils";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/organizers/$slug")({
-  // English only, matching the existing convention that route meta isn't
-  // run through t() — see the i18n notes in CLAUDE.md.
-  head: () => ({ meta: [{ title: "Organizer — Rally" }] }),
+  loader: async ({ params }) => {
+    const { organizer } = await organizerApi.get(params.slug);
+    return { organizer };
+  },
+  head: ({ loaderData }) => {
+    const organizer = loaderData?.organizer;
+
+    if (!organizer) {
+      return { meta: [{ title: "Organizer — Rally" }] };
+    }
+
+    const title = `${organizer.name} — Rally`;
+    const description = organizer.description
+      ? `${organizer.description.substring(0, 160)}${organizer.description.length > 160 ? "..." : ""}`
+      : `View events organized by ${organizer.name}. ${organizer.events_run} events run, ${organizer.participants_hosted.toLocaleString()} participants hosted.`;
+    const imageUrl = organizer.banner_url || organizer.logo_url || undefined;
+
+    const baseUrl = import.meta.env.VITE_BASE_URL || "";
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        ...(imageUrl ? [{ property: "og:image", content: imageUrl }] : []),
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        ...(imageUrl ? [{ name: "twitter:image", content: imageUrl }] : []),
+        ...(baseUrl ? [{ rel: "canonical", href: `${baseUrl}/organizers/${organizer.slug}` }] : []),
+      ],
+    };
+  },
   component: OrganizerPage,
 });
 
 function OrganizerPage() {
   const { slug } = Route.useParams();
   const { t } = useTranslation();
-
-  const query = useQuery({
-    queryKey: ["organizer", slug],
-    queryFn: () => organizerApi.get(slug).then((r) => r.organizer),
-    retry: false,
-  });
-
-  const organizer = query.data;
+  const { organizer } = Route.useLoaderData();
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,11 +80,7 @@ function OrganizerPage() {
       )}
 
       <main className="mx-auto max-w-3xl px-5 py-10">
-        {query.isLoading && <p className="text-muted-foreground">{t("common.loading")}</p>}
-
-        {/* A suspended organizer 404s server-side, so this covers both "no
-            such organizer" and "no longer available" without leaking which. */}
-        {query.isError && (
+        {!organizer && (
           <div className="rounded-2xl border border-border bg-muted/30 p-10 text-center">
             <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-4 text-lg font-semibold">{t("organizerPage.notFoundTitle")}</p>
