@@ -286,15 +286,6 @@ function Index() {
           </div>
         </div>
       </section>
-
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-muted-foreground sm:flex-row">
-          <div className="flex items-center gap-2">
-            <span className="font-display font-semibold text-foreground">Rally</span>
-          </div>
-          <p>{t("home.footer.tagline", { year: new Date().getFullYear() })}</p>
-        </div>
-      </footer>
     </div>
   );
 }
