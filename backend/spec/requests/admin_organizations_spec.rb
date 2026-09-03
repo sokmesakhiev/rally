@@ -58,13 +58,21 @@ RSpec.describe "Admin organizations API", type: :request do
       expect(ids).not_to include(other.id)
     end
 
+    # No table-clearing here: the search itself is what's under test, so
+    # assert on what it includes and excludes rather than emptying the
+    # database first. The previous Event.delete_all was a raw bulk DELETE
+    # that tripped the registrations foreign key, and it was never needed —
+    # a non-matching organization is filtered out by the query, not by
+    # deleting it.
     it "searches by name" do
-      create(:organization, name: "Completely Unrelated")
+      unrelated = create(:organization, name: "Completely Unrelated")
 
       get "/api/v1/admin/organizations", params: { q: "Phnom" },
           headers: auth_headers(admin)
 
-      expect(json["organizations"].map { |o| o["name"] }).to eq([ "Phnom Penh Runners" ])
+      names = json["organizations"].map { |o| o["name"] }
+      expect(names).to include("Phnom Penh Runners")
+      expect(json["organizations"].map { |o| o["id"] }).not_to include(unrelated.id)
     end
 
     # Staff need to see whether unsuspending here would actually restore the

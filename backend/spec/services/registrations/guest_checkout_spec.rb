@@ -76,6 +76,14 @@ RSpec.describe Registrations::GuestCheckout, type: :model do
 
     describe "phone already registered" do
       it "attaches to the existing account instead of creating a duplicate" do
+        # Clear from the leaves inward. Users own organizations, which
+        # present events, which registrations reference — and User's
+        # owned_organizations is restrict_with_error, so a bare
+        # User.destroy_all trips the organizations foreign key. The point
+        # here is only that no prior account holds this phone number.
+        Event.destroy_all
+        Organization.delete_all
+        User.destroy_all
         existing = create(:user)
         existing.profile.update!(phone: "012345678")
 
