@@ -18,6 +18,7 @@ import { initErrorReporting, reportError } from "../lib/error-reporting";
 import { AuthProvider } from "../lib/use-auth";
 import { applyStoredLanguage } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
+import { SiteFooter } from "../components/site-footer";
 import iconUrl from "@/assets/icon.png";
 
 function NotFoundComponent() {
@@ -147,7 +148,10 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        <div className="flex min-h-screen flex-col">
+          <Outlet />
+          <SiteFooter />
+        </div>
         <Toaster />
       </AuthProvider>
     </QueryClientProvider>
