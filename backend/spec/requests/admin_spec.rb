@@ -158,10 +158,14 @@ RSpec.describe "Admin API", type: :request do
     end
 
     it "paginates" do
-      # destroy_all, not delete_all — every user has an auto-created Profile
-      # (User#create_profile!), and delete_all is a raw bulk DELETE that
-      # skips dependent: :destroy, so it 500s on that FK the moment any
-      # leftover user exists.
+      # destroy_all, not delete_all, at every level — delete_all is a raw bulk
+      # DELETE that skips dependent: :destroy, so it hits whatever still
+      # references the row. Events are referenced by registrations, and users
+      # by their auto-created Profile (User#create_profile!). Order matters
+      # too: organizations can't go until the events they present have, and
+      # users can't go until the organizations they own have.
+      Event.destroy_all
+      Organization.delete_all
       User.where.not(id: admin.id).destroy_all
       3.times { create(:user) }
 
