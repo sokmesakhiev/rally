@@ -1,0 +1,21 @@
+name: AI PR Review (Claude Opus 5)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: sokmesakhiev/ai-pr-review@v0
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_API_KEY }}
+          github_token: ${{ secrets.GH_ADMIN_TOKEN }}
+          model: 'claude-opus-5' # provider is inferred from the model id
+          reasoning_effort: 'medium'
+          post_mode: 'review'

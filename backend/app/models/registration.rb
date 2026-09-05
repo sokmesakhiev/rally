@@ -120,6 +120,9 @@ class Registration < ApplicationRecord
 
   def event_not_full
     return unless event&.capacity
+    # Use pessimistic locking to prevent race conditions in concurrent registrations
+    # Lock the event row to ensure the capacity check and registration are atomic
+    event.reload(lock: true)
     if event.registrations.active.count >= event.capacity
       # :event_full is a machine-readable code — see
       # RegistrationsController#create, which maps it to `code: "full"` in
