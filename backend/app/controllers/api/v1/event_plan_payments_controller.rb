@@ -82,6 +82,21 @@ module Api
           charge_amount = details[:price_cents]
         end
 
+        # Rally staff publish under any plan without paying for it.
+        #
+        # Only the charge is waived — every guard above still applies. The
+        # capacity checks and the plan-change lock are correctness rules about
+        # whether the event actually fits the plan, not billing rules, and
+        # staff have no more business publishing a 300-person event on a
+        # 200-person plan than anyone else does.
+        #
+        # `charge_amount.positive?` so this only marks a real waiver: an admin
+        # taking the free tier, re-publishing under a plan they already paid
+        # for, or downgrading was never going to be charged anyway, and
+        # recording those as waivers would bury the ones that matter.
+        waived = current_user.admin? && charge_amount.positive?
+        charge_amount = 0 if waived
+
         tran_id = "pln#{SecureRandom.alphanumeric(14)}"
 
         plan_payment = event.event_plan_payments.create!(
@@ -95,12 +110,24 @@ module Api
         )
 
         # Nothing to charge — either the free tier (initial publish), a
-        # downgrade (never charged, never refunded), or an upgrade back to a
+        # downgrade (never charged, never refunded), an upgrade back to a
         # plan whose price is already covered by what's been paid for this
         # event before (the high-water-mark rule in
-        # #amount_already_paid_cents). Apply immediately, no gateway involved.
+        # #amount_already_paid_cents), or a staff waiver. Apply immediately,
+        # no gateway involved.
         if charge_amount.zero?
           plan_payment.mark_paid!
+
+          # Logged only once the waiver has actually taken effect, and
+          # deliberately from outside the admin namespace — the same thing
+          # RefundsController#create does when staff issue a refund. A
+          # privilege that decides whether money gets collected should be
+          # queryable afterwards, and a plan payment recorded at 0 is
+          # otherwise indistinguishable from a genuine free-tier publish.
+          if waived
+            AdminAction.log!(admin: current_user, action: "waive_event_plan_payment", target: event)
+          end
+
           render json: { event: event_json(event.reload), plan_payment: plan_payment_json(plan_payment) }, status: :created
           return
         end
