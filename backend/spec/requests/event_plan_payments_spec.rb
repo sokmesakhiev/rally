@@ -236,5 +236,107 @@ RSpec.describe "Event plan payments API", type: :request do
         expect(response).to have_http_status(:not_found)
       end
     end
+
+    # ── Rally staff publish without paying ────────────────────────────────
+    # Only the charge is waived; every other rule about whether the event
+    # fits the plan still applies.
+    context "when the organizer is Rally staff" do
+      let(:staff) { create(:user, admin: true) }
+      let!(:event) { create(:event, :draft, creator: staff) }
+
+      it "publishes a paid plan immediately, with no gateway call" do
+        expect_any_instance_of(AbaPayway::Client).not_to receive(:generate_qr)
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "small" },
+             headers: auth_headers(staff),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(event.reload.is_published).to be(true)
+      end
+
+      it "applies the plan's capacity, same as a paid publish would" do
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "medium" },
+             headers: auth_headers(staff),
+             as: :json
+
+        expect(event.reload.plan).to eq("medium")
+        expect(event.capacity).to eq(Event::PLANS.fetch("medium")[:capacity])
+      end
+
+      it "records the plan payment as paid, at zero" do
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "large" },
+             headers: auth_headers(staff),
+             as: :json
+
+        plan_payment = event.event_plan_payments.sole
+        expect(plan_payment.status).to eq("paid")
+        expect(plan_payment.amount_cents).to eq(0)
+        expect(plan_payment.qr_string).to be_nil
+      end
+
+      # A plan payment recorded at 0 is otherwise indistinguishable from a
+      # genuine free-tier publish, so the waiver is logged.
+      it "records a queryable AdminAction for the waiver" do
+        expect {
+          post "/api/v1/events/#{event.id}/plan_payments",
+               params: { plan: "small" },
+               headers: auth_headers(staff),
+               as: :json
+        }.to change(AdminAction, :count).by(1)
+
+        action = AdminAction.last
+        expect(action.admin_id).to eq(staff.id)
+        expect(action.action).to eq("waive_event_plan_payment")
+        expect(action.target).to eq(event)
+      end
+
+      # Nothing was going to be charged, so there's no waiver to record —
+      # logging these would bury the ones that matter.
+      it "logs nothing when staff take the free tier" do
+        expect {
+          post "/api/v1/events/#{event.id}/plan_payments",
+               params: { plan: "free" },
+               headers: auth_headers(staff),
+               as: :json
+        }.not_to change(AdminAction, :count)
+
+        expect(event.reload.is_published).to be(true)
+      end
+
+      it "still enforces the plan's capacity against the event's types" do
+        event.event_types.create!(name: "5K", capacity: 100, position: 0)
+        event.event_types.create!(name: "10K", capacity: 150, position: 1)
+
+        post "/api/v1/events/#{event.id}/plan_payments",
+             params: { plan: "small" },
+             headers: auth_headers(staff),
+             as: :json
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(json["code"]).to eq("plan_capacity_too_low")
+        expect(event.reload.is_published).to be(false)
+      end
+
+      it "leaves ordinary organizers paying as before" do
+        ordinary_event = create(:event, :draft, creator: organizer)
+        allow_any_instance_of(AbaPayway::Client)
+          .to receive(:generate_qr).and_return(generate_qr_response)
+
+        expect {
+          post "/api/v1/events/#{ordinary_event.id}/plan_payments",
+               params: { plan: "small" },
+               headers: auth_headers(organizer),
+               as: :json
+        }.not_to change(AdminAction, :count)
+
+        expect(ordinary_event.reload.is_published).to be(false)
+        expect(ordinary_event.event_plan_payments.sole)
+          .to have_attributes(status: "pending", amount_cents: Event::PLANS.fetch("small")[:price_cents])
+      end
+    end
   end
 end
