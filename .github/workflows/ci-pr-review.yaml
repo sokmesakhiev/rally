@@ -1,4 +1,4 @@
-name: AI PR Review (OpenAI Codex)
+name: AI PR Review (Claude Opus 5)
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
