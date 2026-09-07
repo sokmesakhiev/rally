@@ -5,6 +5,10 @@ class Registration < ApplicationRecord
   has_many :registration_event_types, dependent: :destroy
   has_many :event_types, through: :registration_event_types
   has_many :payments, dependent: :destroy
+  # The platform-processed counterpart of #payments, used when the event is
+  # Event#platform_processed?. Only ever one of the two is populated for a
+  # given registration — which one is fixed by the event's payment_model.
+  has_many :platform_payments, dependent: :destroy
   has_one :certificate, dependent: :destroy
   has_one :result, dependent: :destroy
 

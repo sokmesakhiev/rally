@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_121000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -156,6 +156,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_121000) do
     t.string "logo_url"
     t.decimal "longitude", precision: 10, scale: 6
     t.uuid "organization_id", null: false
+    t.string "payment_model", default: "direct", null: false
     t.string "plan"
     t.integer "price_cents", default: 0, null: false
     t.string "route_map_url"
@@ -237,6 +238,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_121000) do
     t.index ["registration_id", "status"], name: "index_payments_on_registration_id_and_status"
     t.index ["registration_id"], name: "index_payments_on_registration_id"
     t.index ["tran_id"], name: "index_payments_on_tran_id", unique: true
+  end
+
+  create_table "platform_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "authorized_at"
+    t.string "capture_reference"
+    t.datetime "captured_at"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.datetime "expires_at"
+    t.integer "gross_amount_cents", null: false
+    t.datetime "hold_expires_at"
+    t.integer "host_net_cents", null: false
+    t.string "payout_reference"
+    t.integer "platform_fee_cents", null: false
+    t.string "provider", default: "aba_payway", null: false
+    t.jsonb "raw_response", default: {}, null: false
+    t.integer "refunded_amount_cents", default: 0, null: false
+    t.uuid "registration_id", null: false
+    t.string "status", default: "pending", null: false
+    t.string "tran_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["registration_id", "status"], name: "index_platform_payments_on_registration_id_and_status"
+    t.index ["tran_id"], name: "index_platform_payments_on_tran_id", unique: true
+    t.check_constraint "gross_amount_cents = (platform_fee_cents + host_net_cents)", name: "platform_payments_split_sums_to_gross"
+    t.check_constraint "gross_amount_cents > 0 AND platform_fee_cents >= 0 AND host_net_cents >= 0", name: "platform_payments_amounts_non_negative"
+    t.check_constraint "refunded_amount_cents >= 0 AND refunded_amount_cents <= gross_amount_cents", name: "platform_payments_refund_within_gross"
   end
 
   create_table "profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -412,6 +439,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_121000) do
   add_foreign_key "organizations", "users", column: "owner_id"
   add_foreign_key "organizations", "users", column: "verified_by_id"
   add_foreign_key "payments", "registrations"
+  add_foreign_key "platform_payments", "registrations"
   add_foreign_key "profiles", "users"
   add_foreign_key "refunds", "payments"
   add_foreign_key "refunds", "users", column: "initiated_by_id"

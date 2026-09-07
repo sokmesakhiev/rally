@@ -78,6 +78,7 @@ Two separate payment flows share one gateway (`app/services/aba_payway/client.rb
 
 - **`Payment`** — an attendee paying to register for an event. Created per-`Registration`.
 - **`EventPlanPayment`** — an organizer paying Rally to *publish* an event under one of `Event::PLANS` (`free`/`small`/`medium`/`large`/`extra_large`, each with a fixed `capacity` and `price_cents`). `EventPlanPayment#mark_paid!` is what actually sets `event.is_published = true` and stamps the event's `plan`/`capacity`. The free tier publishes immediately with no pending payment to poll.
+- **`PlatformPayment`** — an attendee paying *Rally*, which splits the capture between its own commission and the host's share. A third table, not columns on `Payment`, because sharing one would force every query about money to first establish which kind it is. Which of the two an event uses is fixed by `Event#payment_model` (`direct` / `platform`, defaulting to `direct` so every pre-existing event is unaffected) — see `Event#platform_processed?` / `#direct_to_organizer?`. **Nothing writes to this table yet**: the model, its `gross = platform_fee + host_net` invariant (enforced by both a validation and a CHECK constraint) and the `payment_model` column landed ahead of the gateway work, since they have no ABA dependency. See `platform-payments-tickets.md` for the series and `docs/PAYWAY-PREAUTH-SPIKE.md` for what's confirmed about PayWay's pre-auth/split behaviour — notably the 30-day hold ceiling, which is why the host is necessarily paid before the event.
 
 Gateway credentials are two-tiered:
 

@@ -40,8 +40,15 @@ class Event < ApplicationRecord
     "extra_large" => { label: "Extra Large", capacity: 30_000, price_cents: 200_000 }
   }.freeze
 
+  # Where an attendee's registration money goes. See
+  # platform-payments-tickets.md Ticket C, and the migration that adds the
+  # column, for what each one means.
+  PAYMENT_MODELS = %w[direct platform].freeze
+
   validates :title, presence: true, length: { maximum: 120 }
   validates :category, inclusion: { in: CATEGORIES }
+  validates :payment_model, inclusion: { in: PAYMENT_MODELS }
+  validate :payment_model_locked_once_committed, on: :update
   validates :start_at, presence: true
   validates :price_cents, numericality: { greater_than_or_equal_to: 0 }
   validates :plan, inclusion: { in: PLANS.keys }, allow_nil: true
@@ -162,6 +169,18 @@ class Event < ApplicationRecord
 
   def plan_details
     PLANS[plan]
+  end
+
+  # Rally collects the participant's payment and splits it — PlatformPayment.
+  def platform_processed?
+    payment_model == "platform"
+  end
+
+  # The original arrangement: the money goes straight to the organization's
+  # own PayWay merchant account and Rally is never in the payment path —
+  # Payment, via AbaPayway::Client.for_event.
+  def direct_to_organizer?
+    payment_model == "direct"
   end
 
   # Sum of each event type's own capacity — the most people who could
@@ -291,6 +310,25 @@ class Event < ApplicationRecord
   def lat_lng_present_together
     return if latitude.present? == longitude.present?
     errors.add(:base, "latitude and longitude must both be set, or both left blank")
+  end
+
+  # Ticket C describes payment_model as "set at creation and immutable
+  # afterwards". This locks it slightly later than that — on publish, or on
+  # the first registration — because strict immutability from creation strands
+  # every draft event that already exists on "direct" with no way back, and
+  # the reason the rule exists is money that has already moved. Before
+  # publication, with nobody registered, no money can have moved and there is
+  # nothing to protect.
+  #
+  # Both conditions are checked against the values being saved, so a single
+  # update that publishes *and* switches models is refused — which is the safe
+  # direction to fail.
+  def payment_model_locked_once_committed
+    return unless will_save_change_to_payment_model?
+    return unless is_published? || registrations.exists?
+
+    errors.add(:payment_model,
+      "cannot change once the event is published or has registrations")
   end
 
   def capacity_covers_event_types
