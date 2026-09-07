@@ -19,8 +19,8 @@ gem "rack-attack", "~> 6.7"
 
 # Error tracking / performance monitoring — see config/initializers/sentry.rb.
 # Inert unless SENTRY_DSN is set, so local/CI runs send nothing.
-gem "sentry-ruby", "~> 6.7"
-gem "sentry-rails", "~> 6.7"
+gem "sentry-ruby", "~> 7.0"
+gem "sentry-rails", "~> 7.0"
 
 # File uploads
 gem "image_processing", "~> 2.0"
