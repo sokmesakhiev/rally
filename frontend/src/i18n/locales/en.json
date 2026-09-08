@@ -572,6 +572,15 @@
     "createOrganization": "Create organization",
     "errorPickOrganization": "Choose which organization is presenting this event"
   },
+  "pushNotifications": {
+    "title": "Get notified on this device",
+    "body": "We'll let you know when your payment clears, a spot opens up, or event details change.",
+    "settingsBody": "Notifications on this browser or device.",
+    "blocked": "Notifications are blocked in your browser settings for this site.",
+    "enable": "Turn on",
+    "turnOff": "Turn off",
+    "notNow": "Not now"
+  },
   "profile": {
     "title": "Your profile",
     "loadError": "Couldn't load your profile.",

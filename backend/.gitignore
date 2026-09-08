@@ -7,12 +7,16 @@
 # Ignore bundler config.
 /.bundle
 
-# Ignore all environment files, except .env.test — that one is committed on
-# purpose (see its own header comment) to keep the test suite hermetic
-# regardless of what real secrets a developer has filled into their own,
-# still-gitignored .env.
+# Ignore all environment files, except .env.test and .env.example — both are
+# committed on purpose. .env.test (see its own header comment) keeps the test
+# suite hermetic regardless of what real secrets a developer has filled into
+# their own, still-gitignored .env. .env.example is the documentation of what
+# every variable does; frontend/.env.example has always been tracked, and this
+# one was being silently excluded by the /.env* glob, so nobody cloning the
+# repo ever saw it.
 /.env*
 !/.env.test
+!/.env.example
 
 # Ignore all logfiles and tempfiles.
 /log/*

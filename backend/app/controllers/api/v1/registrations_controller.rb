@@ -147,6 +147,13 @@ module Api
               RegistrationMailer.confirmation(registration, new_guest_account: new_guest_account).deliver_later
             end
 
+            # Outside the email_auto_generated? guard above, deliberately: that
+            # guard exists because a phone-only guest's email address is an
+            # unreadable placeholder. A push subscription has no such problem —
+            # if they have one, it works — so a phone-only guest who enabled
+            # notifications should still get this.
+            Notifications::RegistrationPush.confirmation(registration)
+
             # No auth token for a guest registration — see GuestCheckout's
             # class comment. The frontend keeps the guest's own contact info
             # around client-side to authorize the payment step instead (see

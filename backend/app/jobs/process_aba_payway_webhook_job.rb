@@ -36,6 +36,7 @@ class ProcessAbaPaywayWebhookJob < ApplicationJob
       payable.registration.mark_paid_from_payment!(payable)
       if payable.registration.wants_notification?(:payment_received)
         RegistrationMailer.payment_received(payable.registration).deliver_later
+        Notifications::RegistrationPush.payment_received(payable.registration)
       end
     when EventPlanPayment
       payable.mark_paid!(raw_response: response)

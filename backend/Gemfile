@@ -67,6 +67,12 @@ end
 
 gem "dry-validation"
 
+# Web push (VAPID). Encrypting a push payload is ECDH + HKDF + AES-GCM against
+# the subscriber's key — not something to hand-roll. Only loaded when a VAPID
+# keypair is configured; see Notifications::Vapid and the Null adapter for the
+# unconfigured path, which is the default in development, test and CI.
+gem "web-push", "~> 3.0"
+
 gem "ruby-vips", ">= 2.3"
 
 group :development, :test do
