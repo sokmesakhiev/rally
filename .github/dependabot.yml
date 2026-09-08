@@ -15,3 +15,21 @@ updates:
   schedule:
     interval: daily
   open-pull-requests-limit: 10
+  groups:
+    # vitest and its companion packages pin each other to an exact version
+    # (@vitest/coverage-v8@5 requires vitest@5.0.0 precisely, and vitest@4
+    # requires coverage-v8@4.1.11 back). Bumping one alone is therefore
+    # always an unresolvable peer conflict, never a valid update — group
+    # them so they move together or not at all.
+    vitest:
+      patterns:
+        - "vitest"
+        - "@vitest/*"
+  ignore:
+    # TypeScript majors have now broken `npm ci` twice (#376, #395):
+    # typescript-eslint pins a supported range (currently >=4.8.4 <6.1.0)
+    # and lags TypeScript releases by months, so a major bump lands before
+    # anything can consume it. Minor and patch updates still come through;
+    # majors need a human to check typescript-eslint has caught up first.
+    - dependency-name: "typescript"
+      update-types: [ "version-update:semver-major" ]
