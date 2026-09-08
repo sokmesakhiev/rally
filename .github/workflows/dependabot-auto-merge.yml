@@ -14,31 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
-      - name: Wait for CI checks to complete
-        run: |
-          echo "Waiting for CI checks to complete on $PR_URL"
-          gh pr checks $PR_URL --watch
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
-
-
-      - name: Check if all CI checks passed
-        run: |
-          # Get the combined status of all checks
-          STATUS=$(gh pr view $PR_URL --json statusCheckRollup -q '.statusCheckRollup[].conclusion' | grep -v "null" | sort -u)
-          
-          if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "" ]; then
-            echo "✓ All CI checks passed"
-          else
-            echo "✗ CI checks failed or pending: $STATUS"
-            exit 1
-          fi
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
-
-
       - name: Enable auto-merge for Dependabot PRs
         run: gh pr merge --auto --squash "$PR_URL"
         env:
