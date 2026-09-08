@@ -110,24 +110,26 @@ const PRESET_COLORS = [
  * directly rather than useTranslation(), same pattern as event-utils.ts. */
 function describeEventActivity(activity: ApiEventActivity, currency: string): string[] {
   if (activity.action === "remove_participant") {
-    const name = (activity.metadata.participant_name as string | null) || i18n.t("manageEvent.participantFallback");
-    return [ i18n.t("manageEvent.activityRemovedParticipant", { name }) ];
+    const name =
+      (activity.metadata.participant_name as string | null) ||
+      i18n.t("manageEvent.participantFallback");
+    return [i18n.t("manageEvent.activityRemovedParticipant", { name })];
   }
 
   if (activity.action === "invite_member") {
     const email = activity.metadata.email as string;
     const role = memberRoleLabel(activity.metadata.role as string);
-    return [ i18n.t("manageEvent.activityInvitedMember", { email, role }) ];
+    return [i18n.t("manageEvent.activityInvitedMember", { email, role })];
   }
 
   if (activity.action === "revoke_invitation") {
     const email = activity.metadata.email as string;
-    return [ i18n.t("manageEvent.activityRevokedInvitation", { email }) ];
+    return [i18n.t("manageEvent.activityRevokedInvitation", { email })];
   }
 
   if (activity.action === "member_joined") {
     const role = memberRoleLabel(activity.metadata.role as string);
-    return [ i18n.t("manageEvent.activityMemberJoined", { role }) ];
+    return [i18n.t("manageEvent.activityMemberJoined", { role })];
   }
 
   if (activity.action === "remove_member") {
@@ -136,8 +138,8 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
       (activity.metadata.member_email as string | null) ||
       i18n.t("manageEvent.memberFallback");
     return activity.metadata.self_removal
-      ? [ i18n.t("manageEvent.activityLeftTeam") ]
-      : [ i18n.t("manageEvent.activityRemovedMember", { name }) ];
+      ? [i18n.t("manageEvent.activityLeftTeam")]
+      : [i18n.t("manageEvent.activityRemovedMember", { name })];
   }
 
   if (activity.action === "change_member_role") {
@@ -147,7 +149,7 @@ function describeEventActivity(activity: ApiEventActivity, currency: string): st
       i18n.t("manageEvent.memberFallback");
     const from = memberRoleLabel(activity.metadata.from as string);
     const to = memberRoleLabel(activity.metadata.to as string);
-    return [ i18n.t("manageEvent.activityChangedMemberRole", { name, from, to }) ];
+    return [i18n.t("manageEvent.activityChangedMemberRole", { name, from, to })];
   }
 
   const lines: string[] = [];
@@ -220,9 +222,9 @@ function ManageEvent() {
   const [brandColor, setBrandColor] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null | undefined>(undefined);
   const [logoUrl, setLogoUrl] = useState<string | null | undefined>(undefined);
-  const [certificateTemplateUrl, setCertificateTemplateUrl] = useState<
-    string | null | undefined
-  >(undefined);
+  const [certificateTemplateUrl, setCertificateTemplateUrl] = useState<string | null | undefined>(
+    undefined,
+  );
 
   const eventQuery = useQuery({
     queryKey: ["event", eventId],
@@ -293,9 +295,12 @@ function ManageEvent() {
     mutationFn: (id: string) => registrationsApi.checkIn(id),
     onSuccess: (data) => {
       invalidateParticipants();
-      if (!data.already_checked_in) toast.success(t("checkIn.checkedInToast", {
-        name: data.registration.profile?.display_name || t("checkIn.unnamedParticipant"),
-      }));
+      if (!data.already_checked_in)
+        toast.success(
+          t("checkIn.checkedInToast", {
+            name: data.registration.profile?.display_name || t("checkIn.unnamedParticipant"),
+          }),
+        );
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -518,7 +523,9 @@ function ManageEvent() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{categoryLabel(ev.category)}</Badge>
                   {!ev.is_published && <Badge variant="outline">{t("common.draft")}</Badge>}
-                  {ev.suspended && <Badge variant="destructive">{t("manageEvent.suspendedBadge")}</Badge>}
+                  {ev.suspended && (
+                    <Badge variant="destructive">{t("manageEvent.suspendedBadge")}</Badge>
+                  )}
                   <Badge variant="outline">{formatPrice(ev.price_cents, ev.currency)}</Badge>
                 </div>
                 <h1 className="mt-2 font-display text-3xl font-bold">{ev.title}</h1>
@@ -927,7 +934,9 @@ function ManageEvent() {
               <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
                 <Ban className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
                 <div>
-                  <p className="font-medium text-destructive">{t("manageEvent.suspendedBannerTitle")}</p>
+                  <p className="font-medium text-destructive">
+                    {t("manageEvent.suspendedBannerTitle")}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {t("manageEvent.suspendedBannerDesc")}
                   </p>
@@ -1087,7 +1096,9 @@ function ManageEvent() {
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
                                   {t("manageEvent.removeParticipantDialogDesc", {
-                                    name: p.profile?.display_name ?? t("manageEvent.participantFallback"),
+                                    name:
+                                      p.profile?.display_name ??
+                                      t("manageEvent.participantFallback"),
                                   })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
@@ -1111,208 +1122,210 @@ function ManageEvent() {
 
               {/* ── Check-in ── */}
               {tabVisibility.checkin && (
-              <TabsContent value="checkin" className="mt-6 space-y-6">
-                <CheckInScanner onCheckedIn={invalidateParticipants} />
+                <TabsContent value="checkin" className="mt-6 space-y-6">
+                  <CheckInScanner onCheckedIn={invalidateParticipants} />
 
-                <div className="overflow-hidden rounded-2xl border border-border">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-3">
-                    <p className="text-sm font-semibold">
-                      {t("checkIn.manualListTitle", {
-                        checked: checkedInCount,
-                        total: participants.length,
-                      })}
-                    </p>
-                    <div className="relative w-full max-w-[220px]">
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={checkInSearch}
-                        onChange={(e) => setCheckInSearch(e.target.value)}
-                        placeholder={t("checkIn.searchPlaceholder")}
-                        className="h-8 pl-8 text-sm"
-                      />
+                  <div className="overflow-hidden rounded-2xl border border-border">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-3">
+                      <p className="text-sm font-semibold">
+                        {t("checkIn.manualListTitle", {
+                          checked: checkedInCount,
+                          total: participants.length,
+                        })}
+                      </p>
+                      <div className="relative w-full max-w-[220px]">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={checkInSearch}
+                          onChange={(e) => setCheckInSearch(e.target.value)}
+                          placeholder={t("checkIn.searchPlaceholder")}
+                          className="h-8 pl-8 text-sm"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  {filteredForCheckIn.length === 0 ? (
-                    <p className="p-8 text-center text-sm text-muted-foreground">
-                      {t("manageEvent.noParticipants")}
-                    </p>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {filteredForCheckIn.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex flex-wrap items-center justify-between gap-3 p-4"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {p.profile?.display_name ?? t("manageEvent.participantFallback")}
-                            </p>
-                            {p.checked_in_at && (
-                              <p className="text-xs text-muted-foreground">
-                                {t("checkIn.checkedInAt", { date: formatDate(p.checked_in_at) })}
+                    {filteredForCheckIn.length === 0 ? (
+                      <p className="p-8 text-center text-sm text-muted-foreground">
+                        {t("manageEvent.noParticipants")}
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {filteredForCheckIn.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex flex-wrap items-center justify-between gap-3 p-4"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {p.profile?.display_name ?? t("manageEvent.participantFallback")}
                               </p>
+                              {p.checked_in_at && (
+                                <p className="text-xs text-muted-foreground">
+                                  {t("checkIn.checkedInAt", { date: formatDate(p.checked_in_at) })}
+                                </p>
+                              )}
+                            </div>
+                            {p.checked_in_at ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={undoCheckIn.isPending}
+                                onClick={() => undoCheckIn.mutate(p.id)}
+                              >
+                                <Undo2 className="h-4 w-4" /> {t("checkIn.undo")}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={checkIn.isPending}
+                                onClick={() => checkIn.mutate(p.id)}
+                              >
+                                <Check className="h-4 w-4" /> {t("checkIn.checkInButton")}
+                              </Button>
                             )}
                           </div>
-                          {p.checked_in_at ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={undoCheckIn.isPending}
-                              onClick={() => undoCheckIn.mutate(p.id)}
-                            >
-                              <Undo2 className="h-4 w-4" /> {t("checkIn.undo")}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={checkIn.isPending}
-                              onClick={() => checkIn.mutate(p.id)}
-                            >
-                              <Check className="h-4 w-4" /> {t("checkIn.checkInButton")}
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
               )}
 
               {/* ── Results ── */}
               {tabVisibility.results && (
-              <TabsContent value="results" className="mt-6">
-                <ResultsManager
-                  eventId={eventId}
-                  participants={participants}
-                  onChanged={invalidateParticipants}
-                />
-              </TabsContent>
+                <TabsContent value="results" className="mt-6">
+                  <ResultsManager
+                    eventId={eventId}
+                    participants={participants}
+                    onChanged={invalidateParticipants}
+                  />
+                </TabsContent>
               )}
 
               {/* ── QR & Branding ── */}
               {tabVisibility.branding && (
-              <TabsContent value="branding" className="mt-6 space-y-6">
-                {/* QR code card */}
-                <div className="rounded-2xl border border-border bg-card p-6">
-                  <div className="flex items-center gap-2 mb-1">
-                    <QrCode className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="font-semibold">{t("manageEvent.qrTitle")}</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-6">{t("manageEvent.qrDesc")}</p>
-                  <EventQRCode eventId={eventId} brandColor={activeBrandColor} />
-                </div>
-
-                {/* Core details editor — title/date/price/etc. */}
-                <EventDetailsEditor event={ev} registeredCount={participants.length} />
-
-                {/* Branding editor card */}
-                <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-                  <div>
-                    <h2 className="font-semibold">{t("manageEvent.brandingTitle")}</h2>
-                    <p className="text-sm text-muted-foreground">{t("manageEvent.brandingDesc")}</p>
+                <TabsContent value="branding" className="mt-6 space-y-6">
+                  {/* QR code card */}
+                  <div className="rounded-2xl border border-border bg-card p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <QrCode className="h-5 w-5 text-muted-foreground" />
+                      <h2 className="font-semibold">{t("manageEvent.qrTitle")}</h2>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-6">{t("manageEvent.qrDesc")}</p>
+                    <EventQRCode eventId={eventId} brandColor={activeBrandColor} />
                   </div>
 
-                  <ImageUpload
-                    value={bannerUrl ?? null}
-                    onChange={setBannerUrl}
-                    variant="banner"
-                    label={t("manageEvent.bannerImage")}
-                  />
+                  {/* Core details editor — title/date/price/etc. */}
+                  <EventDetailsEditor event={ev} registeredCount={participants.length} />
 
-                  <div className="flex flex-wrap gap-6">
+                  {/* Branding editor card */}
+                  <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                    <div>
+                      <h2 className="font-semibold">{t("manageEvent.brandingTitle")}</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {t("manageEvent.brandingDesc")}
+                      </p>
+                    </div>
+
                     <ImageUpload
-                      value={logoUrl ?? null}
-                      onChange={setLogoUrl}
-                      variant="logo"
-                      label={t("manageEvent.logo")}
+                      value={bannerUrl ?? null}
+                      onChange={setBannerUrl}
+                      variant="banner"
+                      label={t("manageEvent.bannerImage")}
                     />
 
-                    <div className="flex-1 space-y-2 min-w-[160px]">
-                      <Label>{t("manageEvent.brandColor")}</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {PRESET_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
-                            style={{
-                              backgroundColor: c,
-                              borderColor: activeBrandColor === c ? "white" : "transparent",
-                              outline: activeBrandColor === c ? `2px solid ${c}` : "none",
-                              outlineOffset: "1px",
-                            }}
-                            onClick={() => setBrandColor(c)}
-                            aria-label={c}
+                    <div className="flex flex-wrap gap-6">
+                      <ImageUpload
+                        value={logoUrl ?? null}
+                        onChange={setLogoUrl}
+                        variant="logo"
+                        label={t("manageEvent.logo")}
+                      />
+
+                      <div className="flex-1 space-y-2 min-w-[160px]">
+                        <Label>{t("manageEvent.brandColor")}</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {PRESET_COLORS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+                              style={{
+                                backgroundColor: c,
+                                borderColor: activeBrandColor === c ? "white" : "transparent",
+                                outline: activeBrandColor === c ? `2px solid ${c}` : "none",
+                                outlineOffset: "1px",
+                              }}
+                              onClick={() => setBrandColor(c)}
+                              aria-label={c}
+                            />
+                          ))}
+                          <label
+                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-muted text-xs text-muted-foreground hover:border-primary"
+                            title={t("manageEvent.customColor")}
+                          >
+                            <input
+                              type="color"
+                              value={activeBrandColor}
+                              onChange={(e) => setBrandColor(e.target.value)}
+                              className="sr-only"
+                            />
+                            +
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span
+                            className="inline-block h-5 w-5 rounded-full border border-border"
+                            style={{ backgroundColor: activeBrandColor }}
                           />
-                        ))}
-                        <label
-                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-muted text-xs text-muted-foreground hover:border-primary"
-                          title={t("manageEvent.customColor")}
-                        >
-                          <input
-                            type="color"
-                            value={activeBrandColor}
-                            onChange={(e) => setBrandColor(e.target.value)}
-                            className="sr-only"
-                          />
-                          +
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className="inline-block h-5 w-5 rounded-full border border-border"
-                          style={{ backgroundColor: activeBrandColor }}
-                        />
-                        <span className="text-xs text-muted-foreground font-mono">
-                          {activeBrandColor}
-                        </span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {activeBrandColor}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <Button
-                    onClick={() => saveBranding.mutate()}
-                    disabled={saveBranding.isPending}
-                    variant="hero"
-                  >
-                    {saveBranding.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {t("manageEvent.saveBranding")}
-                  </Button>
-                </div>
-              </TabsContent>
+                    <Button
+                      onClick={() => saveBranding.mutate()}
+                      disabled={saveBranding.isPending}
+                      variant="hero"
+                    >
+                      {saveBranding.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {t("manageEvent.saveBranding")}
+                    </Button>
+                  </div>
+                </TabsContent>
               )}
 
               {/* ── Certificate of participation ── */}
               {tabVisibility.certificate && (
-              <TabsContent value="certificate" className="mt-6">
-                <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-                  <div className="flex items-center gap-2">
-                    <Award className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="font-semibold">{t("manageEvent.certificateTitle")}</h2>
+                <TabsContent value="certificate" className="mt-6">
+                  <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                    <div className="flex items-center gap-2">
+                      <Award className="h-5 w-5 text-muted-foreground" />
+                      <h2 className="font-semibold">{t("manageEvent.certificateTitle")}</h2>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {t("manageEvent.certificateDesc")}
+                    </p>
+
+                    <CertificateTemplateUpload
+                      value={certificateTemplateUrl ?? null}
+                      onChange={setCertificateTemplateUrl}
+                    />
+
+                    <Button
+                      onClick={() => saveCertificateTemplate.mutate()}
+                      disabled={saveCertificateTemplate.isPending}
+                      variant="hero"
+                    >
+                      {saveCertificateTemplate.isPending && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
+                      {t("manageEvent.saveCertificate")}
+                    </Button>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {t("manageEvent.certificateDesc")}
-                  </p>
-
-                  <CertificateTemplateUpload
-                    value={certificateTemplateUrl ?? null}
-                    onChange={setCertificateTemplateUrl}
-                  />
-
-                  <Button
-                    onClick={() => saveCertificateTemplate.mutate()}
-                    disabled={saveCertificateTemplate.isPending}
-                    variant="hero"
-                  >
-                    {saveCertificateTemplate.isPending && (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                    {t("manageEvent.saveCertificate")}
-                  </Button>
-                </div>
-              </TabsContent>
+                </TabsContent>
               )}
 
               {/* ── Survey Responses ── */}
@@ -1428,45 +1441,45 @@ function ManageEvent() {
 
               {/* ── Activity ── */}
               {tabVisibility.activity && (
-              <TabsContent value="activity" className="mt-6">
-                <div className="rounded-2xl border border-border bg-card">
-                  {activityQuery.isLoading && (
-                    <p className="p-8 text-center text-sm text-muted-foreground">
-                      {t("common.loading")}
-                    </p>
-                  )}
-                  {!activityQuery.isLoading && (activityQuery.data ?? []).length === 0 && (
-                    <p className="p-8 text-center text-sm text-muted-foreground">
-                      {t("manageEvent.noActivity")}
-                    </p>
-                  )}
-                  {(activityQuery.data ?? []).map((a, i) => (
-                    <div
-                      key={a.id}
-                      className={`flex items-start gap-3 p-4 ${
-                        i > 0 ? "border-t border-border" : ""
-                      }`}
-                    >
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        <ActivityIcon activity={a} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="space-y-0.5 text-sm">
-                          {describeEventActivity(a, ev.currency).map((line, idx) => (
-                            <p key={idx}>{line}</p>
-                          ))}
+                <TabsContent value="activity" className="mt-6">
+                  <div className="rounded-2xl border border-border bg-card">
+                    {activityQuery.isLoading && (
+                      <p className="p-8 text-center text-sm text-muted-foreground">
+                        {t("common.loading")}
+                      </p>
+                    )}
+                    {!activityQuery.isLoading && (activityQuery.data ?? []).length === 0 && (
+                      <p className="p-8 text-center text-sm text-muted-foreground">
+                        {t("manageEvent.noActivity")}
+                      </p>
+                    )}
+                    {(activityQuery.data ?? []).map((a, i) => (
+                      <div
+                        key={a.id}
+                        className={`flex items-start gap-3 p-4 ${
+                          i > 0 ? "border-t border-border" : ""
+                        }`}
+                      >
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                          <ActivityIcon activity={a} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="space-y-0.5 text-sm">
+                            {describeEventActivity(a, ev.currency).map((line, idx) => (
+                              <p key={idx}>{line}</p>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t("manageEvent.activityBy", {
+                              name: a.actor_name,
+                              date: formatDateTime(a.created_at),
+                            })}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t("manageEvent.activityBy", {
-                            name: a.actor_name,
-                            date: formatDateTime(a.created_at),
-                          })}
-                        </p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
+                    ))}
+                  </div>
+                </TabsContent>
               )}
 
               {/* ── Members ── */}

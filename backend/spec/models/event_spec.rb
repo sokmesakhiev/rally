@@ -279,6 +279,70 @@ RSpec.describe Event, type: :model do
     end
   end
 
+  # ── Payment model ────────────────────────────────────────────────────────────
+  describe "payment_model" do
+    it "defaults to direct, so every existing event keeps settling to the organizer" do
+      event = create(:event)
+
+      expect(event.payment_model).to eq("direct")
+      expect(event).to be_direct_to_organizer
+      expect(event).not_to be_platform_processed
+    end
+
+    it "rejects an unknown model" do
+      expect(build(:event, payment_model: "escrow")).not_to be_valid
+    end
+
+    it "can be set at creation" do
+      expect(create(:event, payment_model: "platform")).to be_platform_processed
+    end
+
+    # The rule is "locked once money could have moved", not "locked from
+    # creation" — see Event#payment_model_locked_once_committed.
+    context "once the event is committed" do
+      it "cannot change after publication" do
+        event = create(:event, is_published: true)
+
+        event.payment_model = "platform"
+
+        expect(event).not_to be_valid
+        expect(event.errors[:payment_model].join).to match(/cannot change/)
+      end
+
+      it "cannot change once someone has registered, even on a draft" do
+        event = create(:event, :draft)
+        create(:registration, event: event)
+
+        event.payment_model = "platform"
+
+        expect(event).not_to be_valid
+      end
+
+      it "refuses a single update that both publishes and switches model" do
+        event = create(:event, :draft)
+
+        event.assign_attributes(is_published: true, payment_model: "platform")
+
+        expect(event).not_to be_valid
+      end
+    end
+
+    context "while the event is still a draft with no registrations" do
+      it "can still be switched, so drafts aren't stranded on the wrong model" do
+        event = create(:event, :draft)
+
+        expect(event.update(payment_model: "platform")).to be(true)
+        expect(event.reload).to be_platform_processed
+      end
+
+      it "does not complain about unrelated updates" do
+        event = create(:event, is_published: true)
+
+        expect(event.update(title: "Renamed")).to be(true)
+      end
+    end
+  end
+
   # ── Defaults ─────────────────────────────────────────────────────────────────
   describe "defaults" do
     let(:saved) { create(:event) }

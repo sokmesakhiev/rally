@@ -40,8 +40,16 @@ class Event < ApplicationRecord
     "extra_large" => { label: "Extra Large", capacity: 30_000, price_cents: 200_000 }
   }.freeze
 
+  # Where an attendee's registration money goes. See
+  # platform-payments-tickets.md Ticket C, and the migration that adds the
+  # column, for what each one means.
+  PAYMENT_MODELS = %w[direct platform].freeze
+
   validates :title, presence: true, length: { maximum: 120 }
   validates :category, inclusion: { in: CATEGORIES }
+  validates :payment_model, inclusion: { in: PAYMENT_MODELS }
+  validate :payment_model_locked_once_committed, on: :update
+  validate :refund_policy_well_formed
   validates :start_at, presence: true
   validates :price_cents, numericality: { greater_than_or_equal_to: 0 }
   validates :plan, inclusion: { in: PLANS.keys }, allow_nil: true
@@ -162,6 +170,42 @@ class Event < ApplicationRecord
 
   def plan_details
     PLANS[plan]
+  end
+
+  # The event's refund policy as a value object, or nil when the host hasn't
+  # set one (refunds stay a manual decision — see the migration for why nil
+  # and [] are deliberately different things).
+  #
+  # Note this reads the *current* policy. What a given participant is
+  # entitled to comes from their own snapshot — Registration#refund_policy —
+  # not from here.
+  def refund_policy
+    RefundPolicy.from(refund_policy_tiers)
+  end
+
+  # Accepts a RefundPolicy, a raw tier array, or nil. nil is matched
+  # explicitly rather than duck-typed: NilClass#to_a returns [], so a
+  # respond_to?(:to_a) check here would quietly turn "no policy" into
+  # "non-refundable".
+  def refund_policy=(policy)
+    self.refund_policy_tiers =
+      case policy
+      when nil          then nil
+      when RefundPolicy then policy.to_a
+      else policy
+      end
+  end
+
+  # Rally collects the participant's payment and splits it — PlatformPayment.
+  def platform_processed?
+    payment_model == "platform"
+  end
+
+  # The original arrangement: the money goes straight to the organization's
+  # own PayWay merchant account and Rally is never in the payment path —
+  # Payment, via AbaPayway::Client.for_event.
+  def direct_to_organizer?
+    payment_model == "direct"
   end
 
   # Sum of each event type's own capacity — the most people who could
@@ -291,6 +335,35 @@ class Event < ApplicationRecord
   def lat_lng_present_together
     return if latitude.present? == longitude.present?
     errors.add(:base, "latitude and longitude must both be set, or both left blank")
+  end
+
+  # Ticket C describes payment_model as "set at creation and immutable
+  # afterwards". This locks it slightly later than that — on publish, or on
+  # the first registration — because strict immutability from creation strands
+  # every draft event that already exists on "direct" with no way back, and
+  # the reason the rule exists is money that has already moved. Before
+  # publication, with nobody registered, no money can have moved and there is
+  # nothing to protect.
+  #
+  # Both conditions are checked against the values being saved, so a single
+  # update that publishes *and* switches models is refused — which is the safe
+  # direction to fail.
+  # Folds RefundPolicy's own messages into the model's errors, so a bad
+  # policy comes back as one coherent 422 alongside any other validation
+  # failure rather than as a separate parse error.
+  def refund_policy_well_formed
+    policy = refund_policy
+    return if policy.nil? || policy.valid?
+
+    policy.errors.each { |message| errors.add(:refund_policy_tiers, message) }
+  end
+
+  def payment_model_locked_once_committed
+    return unless will_save_change_to_payment_model?
+    return unless is_published? || registrations.exists?
+
+    errors.add(:payment_model,
+      "cannot change once the event is published or has registrations")
   end
 
   def capacity_covers_event_types

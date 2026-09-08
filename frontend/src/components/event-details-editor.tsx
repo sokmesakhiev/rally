@@ -119,9 +119,7 @@ export function EventDetailsEditor({
   // there: showing an always-visible $0 price input for a free event reads
   // as "this event costs $0" rather than "this event has no price at all".
   const [isPaid, setIsPaid] = useState(event.price_cents > 0);
-  const [price, setPrice] = useState(
-    event.price_cents ? (event.price_cents / 100).toFixed(2) : "",
-  );
+  const [price, setPrice] = useState(event.price_cents ? (event.price_cents / 100).toFixed(2) : "");
 
   // Event types (5K/10K-style sub-races) — same on/off toggle + builder as
   // the create form (events.new.tsx), just seeded from the event's existing
@@ -272,11 +270,7 @@ export function EventDetailsEditor({
             editing the text here leaves latitude/longitude untouched, so an
             existing map pin is preserved rather than being wiped by a typo
             fix. Re-pinning on the map is a separate concern. */}
-        <Input
-          id="edit-location"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-        />
+        <Input id="edit-location" value={location} onChange={(e) => setLocation(e.target.value)} />
         {event.latitude != null && event.longitude != null && (
           <p className="text-xs text-muted-foreground">{t("manageEvent.mapPinPreserved")}</p>
         )}

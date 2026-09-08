@@ -36,6 +36,17 @@ class EventUpdateRequestSchema < ApplicationRequestSchema
       optional(:latitude).maybe(:float)
       optional(:longitude).maybe(:float)
       optional(:route_map_url).maybe(:string)
+      # Refund policy tiers (platform-payments-tickets.md Ticket D). Shape is
+      # checked here; the ordering/range rules live in RefundPolicy and are
+      # surfaced by Event#refund_policy_well_formed, so there is one source of
+      # truth for what a valid policy is rather than two that can drift.
+      # `maybe` because clearing a policy back to "unset" is a legitimate edit.
+      optional(:refund_policy_tiers).maybe(:array).each do
+        hash do
+          required(:hours_before).filled(:integer)
+          required(:refund_percent).filled(:integer)
+        end
+      end
       optional(:start_at).filled(:string)
       optional(:end_at).maybe(:string)
       optional(:price_cents).maybe(:integer)

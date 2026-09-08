@@ -83,7 +83,8 @@ function OrganizationsPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["organizations"] });
-    if (activeSlug) queryClient.invalidateQueries({ queryKey: ["organization-members", activeSlug] });
+    if (activeSlug)
+      queryClient.invalidateQueries({ queryKey: ["organization-members", activeSlug] });
   };
 
   return (
@@ -115,9 +116,7 @@ function OrganizationsPage() {
           )}
         </div>
 
-        {listQuery.isLoading && (
-          <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>
-        )}
+        {listQuery.isLoading && <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>}
 
         {!listQuery.isLoading && organizations.length === 0 && (
           <CreateFirstOrganization onCreated={invalidate} />
@@ -129,9 +128,7 @@ function OrganizationsPage() {
             <IdentityCard organization={active} onSaved={invalidate} />
             <ContactCard organization={active} onSaved={invalidate} />
             <MembersCard organization={active} />
-            {active.role === "owner" && (
-              <PaymentCard organization={active} onSaved={invalidate} />
-            )}
+            {active.role === "owner" && <PaymentCard organization={active} onSaved={invalidate} />}
           </div>
         )}
       </main>
@@ -270,8 +267,13 @@ function IdentityCard({
     setDescription(organization.description ?? "");
     setLogoUrl(organization.logo_url ?? "");
     setBannerUrl(organization.banner_url ?? "");
-  }, [organization.slug, organization.name, organization.description,
-      organization.logo_url, organization.banner_url]);
+  }, [
+    organization.slug,
+    organization.name,
+    organization.description,
+    organization.logo_url,
+    organization.banner_url,
+  ]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -411,9 +413,10 @@ function ContactCard({
     mutationFn: () =>
       organizationsApi.update(
         organization.slug,
-        Object.fromEntries(
-          Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
-        ) as Record<string, string | null>,
+        Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim() || null])) as Record<
+          string,
+          string | null
+        >,
       ),
     onSuccess: () => {
       toast.success(t("organization.toastSaved"));
@@ -708,7 +711,11 @@ function PaymentCard({
           {t("common.save")}
         </Button>
         {organization.payway_configured && (
-          <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
+          <Button
+            variant="outline"
+            onClick={() => disconnect.mutate()}
+            disabled={disconnect.isPending}
+          >
             {t("organization.disconnect")}
           </Button>
         )}

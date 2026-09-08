@@ -5,6 +5,10 @@ class Registration < ApplicationRecord
   has_many :registration_event_types, dependent: :destroy
   has_many :event_types, through: :registration_event_types
   has_many :payments, dependent: :destroy
+  # The platform-processed counterpart of #payments, used when the event is
+  # Event#platform_processed?. Only ever one of the two is populated for a
+  # given registration — which one is fixed by the event's payment_model.
+  has_many :platform_payments, dependent: :destroy
   has_one :certificate, dependent: :destroy
   has_one :result, dependent: :destroy
 
@@ -35,6 +39,14 @@ class Registration < ApplicationRecord
   validates :user_id, uniqueness: { scope: :event_id, message: "already registered for this event" }
   validate :event_not_full, on: :create
 
+  # The refund policy is captured here rather than at each call site — unlike
+  # amount_owed_cents below, which every creation path has to remember to
+  # compute for itself (RegistrationsController, Waitlists::PromoteNext,
+  # Registrations::GuestCheckout). Three places to forget is three places to
+  # get it wrong, and a missing snapshot isn't visible until someone asks for
+  # a refund months later.
+  before_validation :snapshot_refund_policy, on: :create
+
   # Amount owed. `amount_owed_cents` is a snapshot taken once at creation
   # time (see Api::V1::RegistrationsController#compute_amount and
   # Waitlists::PromoteNext#compute_amount) so a still-unpaid registration
@@ -45,6 +57,37 @@ class Registration < ApplicationRecord
   # behavior of recomputing live from the *current* price.
   def owed_amount_cents
     amount_owed_cents || live_owed_amount_cents
+  end
+
+  # The policy this participant actually agreed to, frozen at checkout. Read
+  # this, never event.refund_policy, when deciding what someone is owed.
+  def refund_policy
+    RefundPolicy.from(refund_policy_tiers)
+  end
+
+  # What this registration would get back if it were cancelled at `at`.
+  #
+  # Returns nil — not 0 — when no policy was in force, because "the host
+  # never set a policy, so this is a human decision" and "the policy says
+  # nothing comes back" are different answers, and only one of them can be
+  # acted on automatically. Callers must handle nil explicitly.
+  #
+  # Evaluated against the event's *current* start_at rather than a snapshot
+  # of it: the tiers are expressed relative to when the event starts, so if
+  # an organizer moves the date, "up to 7 days before" should move with it.
+  # Participants are told about date changes separately
+  # (NotifyEventDetailsChangedJob).
+  def refund_entitlement_cents(at: Time.current)
+    policy = refund_policy
+    return nil if policy.nil?
+
+    policy.refund_amount_cents(amount_paid_cents, hours_until_start: hours_until_start(at))
+  end
+
+  def hours_until_start(at = Time.current)
+    return nil if event&.start_at.nil?
+
+    ((event.start_at - at) / 1.hour).floor
   end
 
   def latest_payment
@@ -109,6 +152,18 @@ class Registration < ApplicationRecord
   end
 
   private
+
+  # Copies the event's policy onto this registration once, at creation.
+  #
+  # Guarded on nil? rather than present?: an explicitly non-refundable policy
+  # is an empty array, and `[].present?` is false, so a present? check here
+  # would re-copy it on every attempt and — worse — would let a caller's
+  # deliberate [] be overwritten by the event's tiers.
+  def snapshot_refund_policy
+    return unless refund_policy_tiers.nil?
+
+    self.refund_policy_tiers = event&.refund_policy_tiers
+  end
 
   # Legacy path for rows with no amount_owed_cents snapshot — see
   # #owed_amount_cents above.

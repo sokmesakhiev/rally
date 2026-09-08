@@ -1,14 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { CalendarDays, Users, Ticket, Wallet, Trophy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { adminApi, type ApiReportPeriod } from "@/lib/api-client";

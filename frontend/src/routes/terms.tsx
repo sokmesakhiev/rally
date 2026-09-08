@@ -33,33 +33,59 @@ function TermsPage() {
         </div>
 
         <h1 className="mt-8 font-display text-3xl font-bold">{t("legal.termsTitle")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("legal.lastUpdated", { date: "2026-08-27" })}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("legal.lastUpdated", { date: "2026-08-27" })}
+        </p>
 
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>{t("legal.termsIntro")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsScopeTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsScopeTitle")}
+          </h2>
           <p>{t("legal.termsScopeBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsAccountsTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsAccountsTitle")}
+          </h2>
           <p>{t("legal.termsAccountsBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsEligibilityTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsEligibilityTitle")}
+          </h2>
           <p>{t("legal.termsEligibilityBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsLinksTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsLinksTitle")}
+          </h2>
           <p>{t("legal.termsLinksBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsPaymentsTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsPaymentsTitle")}
+          </h2>
           <p>{t("legal.termsPaymentsBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsRegistrationTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsRegistrationTitle")}
+          </h2>
           <p>{t("legal.termsRegistrationBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsPromoTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsPromoTitle")}
+          </h2>
           <p>{t("legal.termsPromoBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsCancellationTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsCancellationTitle")}
+          </h2>
           <p>{t("legal.termsCancellationBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsRefundTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsRefundTitle")}
+          </h2>
           <p>{t("legal.termsRefundBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsConductTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsConductTitle")}
+          </h2>
           <p>{t("legal.termsConductBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsTerminationTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsTerminationTitle")}
+          </h2>
           <p>{t("legal.termsTerminationBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.termsContactTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.termsContactTitle")}
+          </h2>
           <p>{t("legal.termsContactBody")}</p>
         </div>
 

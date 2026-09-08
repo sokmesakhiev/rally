@@ -30,19 +30,31 @@ function PrivacyPage() {
         </div>
 
         <h1 className="mt-8 font-display text-3xl font-bold">{t("legal.privacyTitle")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("legal.lastUpdated", { date: "2026-08-27" })}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("legal.lastUpdated", { date: "2026-08-27" })}
+        </p>
 
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>{t("legal.privacyIntro")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.privacyCollectTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.privacyCollectTitle")}
+          </h2>
           <p>{t("legal.privacyCollectBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.privacyUseTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.privacyUseTitle")}
+          </h2>
           <p>{t("legal.privacyUseBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.privacySharingTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.privacySharingTitle")}
+          </h2>
           <p>{t("legal.privacySharingBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.privacyRetentionTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.privacyRetentionTitle")}
+          </h2>
           <p>{t("legal.privacyRetentionBody")}</p>
-          <h2 className="font-display text-lg font-semibold text-foreground">{t("legal.privacyContactTitle")}</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            {t("legal.privacyContactTitle")}
+          </h2>
           <p>{t("legal.privacyContactBody")}</p>
         </div>
 

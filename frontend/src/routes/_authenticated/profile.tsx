@@ -126,9 +126,7 @@ function ProfilePage() {
   const [notifyPromotedFromWaitlist, setNotifyPromotedFromWaitlist] = useState<boolean | null>(
     null,
   );
-  const [notifyEventDetailsChanged, setNotifyEventDetailsChanged] = useState<boolean | null>(
-    null,
-  );
+  const [notifyEventDetailsChanged, setNotifyEventDetailsChanged] = useState<boolean | null>(null);
 
   if (profile && notifyPaymentReceived === null) {
     setNotifyPaymentReceived(profile.notify_payment_received);
@@ -407,9 +405,7 @@ function ProfilePage() {
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium">
-                      {t("profile.notifyPromotedFromWaitlist")}
-                    </p>
+                    <p className="text-sm font-medium">{t("profile.notifyPromotedFromWaitlist")}</p>
                     <p className="text-xs text-muted-foreground">
                       {t("profile.notifyPromotedFromWaitlistDesc")}
                     </p>
@@ -421,9 +417,7 @@ function ProfilePage() {
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium">
-                      {t("profile.notifyEventDetailsChanged")}
-                    </p>
+                    <p className="text-sm font-medium">{t("profile.notifyEventDetailsChanged")}</p>
                     <p className="text-xs text-muted-foreground">
                       {t("profile.notifyEventDetailsChangedDesc")}
                     </p>

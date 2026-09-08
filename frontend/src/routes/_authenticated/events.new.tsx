@@ -199,10 +199,7 @@ function NewEvent() {
             <div className="space-y-2">
               <Label htmlFor="organization">{t("eventForm.presentedBy")}</Label>
               {organizations.length > 1 ? (
-                <Select
-                  value={organizationSlug ?? undefined}
-                  onValueChange={setOrganizationSlug}
-                >
+                <Select value={organizationSlug ?? undefined} onValueChange={setOrganizationSlug}>
                   <SelectTrigger id="organization">
                     <SelectValue placeholder={t("eventForm.presentedByPlaceholder")} />
                   </SelectTrigger>

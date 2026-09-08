@@ -23,11 +23,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Mail, Loader2, Trash2, Crown } from "lucide-react";
-import {
-  eventMembersApi,
-  eventInvitationsApi,
-  type ApiEventMember,
-} from "@/lib/api-client";
+import { eventMembersApi, eventInvitationsApi, type ApiEventMember } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -193,10 +189,7 @@ export function MembersTab({ eventId, canManage, currentUserId }: MembersTabProp
           {invitations.length > 0 && (
             <div className="divide-y divide-border">
               {invitations.map((inv) => (
-                <div
-                  key={inv.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4"
-                >
+                <div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{inv.email}</p>
                     <p className="text-xs text-muted-foreground">

@@ -57,7 +57,9 @@ export default defineConfig(({ command, mode }) => ({
   // names, and pins NODE_ENV to "development" in the client bundle.
   ...(command === "build" && mode === "development"
     ? {
-        environments: { client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } } },
+        environments: {
+          client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } },
+        },
         esbuild: { keepNames: true },
       }
     : {}),
@@ -80,7 +82,7 @@ export default defineConfig(({ command, mode }) => ({
     tanstackStart({
       importProtection: {
         behavior: "error",
-        client: { files: [ "**/server/**" ], specifiers: [ "server-only" ] },
+        client: { files: ["**/server/**"], specifiers: ["server-only"] },
       },
       spa: { enabled: true, prerender: { outputPath: "/index" } },
     }),

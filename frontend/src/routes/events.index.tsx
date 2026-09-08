@@ -177,9 +177,7 @@ function BrowseEvents() {
         </div>
 
         {query.isLoading && <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>}
-        {query.isError && (
-          <p className="mt-8 text-destructive">{(query.error as Error).message}</p>
-        )}
+        {query.isError && <p className="mt-8 text-destructive">{(query.error as Error).message}</p>}
         {!query.isLoading && events?.length === 0 && (
           <p className="mt-16 text-center text-muted-foreground">
             {isFiltering ? t("eventsList.emptyFiltered") : t("eventsList.emptyAll")}

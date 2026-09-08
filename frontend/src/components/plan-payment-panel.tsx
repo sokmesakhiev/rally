@@ -180,10 +180,14 @@ export function PlanPaymentPanel({
           <Check className="h-5 w-5" style={{ color: brandColor }} />
         </span>
         <p className="font-medium">
-          {mode === "change" ? t("planPaymentPanel.planChanged") : t("planPaymentPanel.eventPublished")}
+          {mode === "change"
+            ? t("planPaymentPanel.planChanged")
+            : t("planPaymentPanel.eventPublished")}
         </p>
         <p className="text-sm text-muted-foreground">
-          {mode === "change" ? t("planPaymentPanel.planChangeApplied") : t("planPaymentPanel.nowVisible")}
+          {mode === "change"
+            ? t("planPaymentPanel.planChangeApplied")
+            : t("planPaymentPanel.nowVisible")}
         </p>
       </div>
     );
@@ -294,7 +298,9 @@ export function PlanPaymentPanel({
       )}
 
       <p className="text-xs text-muted-foreground">
-        {mode === "change" ? t("planPaymentPanel.autoApplyNote") : t("planPaymentPanel.autoPublishNote")}
+        {mode === "change"
+          ? t("planPaymentPanel.autoApplyNote")
+          : t("planPaymentPanel.autoPublishNote")}
       </p>
     </div>
   );

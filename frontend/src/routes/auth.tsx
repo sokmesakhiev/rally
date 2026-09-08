@@ -123,7 +123,13 @@ function AuthPage() {
       // — the backend only enforces verification once RECAPTCHA_SECRET_KEY
       // is also set, so signup still works either way.
       const recaptchaToken = await getRecaptchaToken("signup");
-      await authApi.signup(email, password, termsAccepted, displayName.trim() || undefined, recaptchaToken);
+      await authApi.signup(
+        email,
+        password,
+        termsAccepted,
+        displayName.trim() || undefined,
+        recaptchaToken,
+      );
       await refresh();
       toast.success(t("auth.accountCreated"));
       navigate({ to: "/dashboard", replace: true });
@@ -341,11 +347,19 @@ function AuthPage() {
                   />
                   <Label htmlFor="terms-up" className="text-sm font-normal leading-snug">
                     {t("auth.fields.termsPrefix")}{" "}
-                    <Link to="/terms" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                    <Link
+                      to="/terms"
+                      target="_blank"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
                       {t("auth.fields.termsLink")}
                     </Link>{" "}
                     {t("auth.fields.termsAnd")}{" "}
-                    <Link to="/privacy" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                    <Link
+                      to="/privacy"
+                      target="_blank"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
                       {t("auth.fields.privacyLink")}
                     </Link>
                   </Label>
@@ -387,11 +401,19 @@ function AuthPage() {
               />
               <Label htmlFor="terms-gate" className="text-sm font-normal leading-snug">
                 {t("auth.fields.termsPrefix")}{" "}
-                <Link to="/terms" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
                   {t("auth.fields.termsLink")}
                 </Link>{" "}
                 {t("auth.fields.termsAnd")}{" "}
-                <Link to="/privacy" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
                   {t("auth.fields.privacyLink")}
                 </Link>
               </Label>

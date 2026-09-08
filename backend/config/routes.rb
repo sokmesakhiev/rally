@@ -49,6 +49,11 @@ Rails.application.routes.draw do
       get    "events/:event_id/registrations/export", to: "registrations#export"
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
+      # Participant cancelling their own spot, with the refund decided by the
+      # policy they agreed to at checkout. Distinct from #destroy above,
+      # which is an organizer removing someone. POST rather than DELETE
+      # because it can move money — see Registrations::Cancel.
+      post   "registrations/:id/cancel",       to: "registrations#cancel"
 
       # Check-in / attendance — organizer scans the attendee's ticket QR
       # (which just encodes the registration id) or taps them in manually.

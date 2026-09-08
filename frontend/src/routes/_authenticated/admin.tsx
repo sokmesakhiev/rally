@@ -607,7 +607,9 @@ function SuspendEventDialog({ event, onDone }: { event: ApiAdminEvent; onDone: (
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("admin.suspendEventTitle", { title: event.title })}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("admin.suspendEventTitle", { title: event.title })}
+          </AlertDialogTitle>
           <AlertDialogDescription>{t("admin.suspendEventDesc")}</AlertDialogDescription>
         </AlertDialogHeader>
 

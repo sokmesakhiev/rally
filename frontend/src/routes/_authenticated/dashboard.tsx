@@ -13,10 +13,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { registrationsApi, eventsApi } from "@/lib/api-client";
-import {
-  PresentedByInline,
-  type PresentedByOrganization,
-} from "@/components/presented-by";
+import { PresentedByInline, type PresentedByOrganization } from "@/components/presented-by";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { RegistrationTicketQR } from "@/components/registration-ticket-qr";

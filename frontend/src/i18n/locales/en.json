@@ -701,6 +701,17 @@
     "tokensTitle": "Placeholder tokens",
     "tokensHint": "Type each token as one continuous run of plain text (turn off autocorrect/autoformat while typing it) — if a word processor silently splits a token across formatting, it won't be replaced and will show up literally on the certificate."
   },
+  "refundPolicy": {
+    "title": "Refund policy",
+    "nonRefundable": "This event is non-refundable. Registrations can't be refunded once paid.",
+    "tierFull": "Full refund if you cancel at least {{lead}} before the event",
+    "tierPartial": "{{percent}}% refund if you cancel at least {{lead}} before the event",
+    "tierNone": "No refund after that",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours"
+  },
   "paymentPanel": {
     "generatingQr": "Generating your KHQR code…",
     "startError": "Could not start payment.",

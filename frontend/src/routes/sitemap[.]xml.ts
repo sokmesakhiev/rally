@@ -15,7 +15,7 @@ export const Route = createFileRoute("/sitemap.xml")({
     handlers: {
       GET: async () => {
         const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
-        
+
         // Fetch published events
         let events: any[] = [];
         try {
@@ -69,7 +69,7 @@ export const Route = createFileRoute("/sitemap.xml")({
             `    <loc>${BASE_URL}${e.path}</loc>`,
             e.changefreq ? `    <changefreq>${e.changefreq}</changefreq>` : null,
             e.priority ? `    <priority>${e.priority}</priority>` : null,
-            e.lastmod ? `    <lastmod>${e.lastmod.split('T')[0]}</lastmod>` : null,
+            e.lastmod ? `    <lastmod>${e.lastmod.split("T")[0]}</lastmod>` : null,
             `  </url>`,
           ]
             .filter(Boolean)

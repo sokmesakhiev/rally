@@ -84,9 +84,7 @@ function OrganizerPage() {
           <div className="rounded-2xl border border-border bg-muted/30 p-10 text-center">
             <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-4 text-lg font-semibold">{t("organizerPage.notFoundTitle")}</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t("organizerPage.notFoundDesc")}
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("organizerPage.notFoundDesc")}</p>
           </div>
         )}
 
@@ -270,7 +268,9 @@ function EventSection({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">{categoryLabel(event.category)}</Badge>
-                    <Badge variant="outline">{formatPrice(event.price_cents, event.currency)}</Badge>
+                    <Badge variant="outline">
+                      {formatPrice(event.price_cents, event.currency)}
+                    </Badge>
                   </div>
                   <p className="mt-1.5 truncate font-medium">{event.title}</p>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
