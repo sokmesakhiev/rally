@@ -1366,3 +1366,42 @@ export const adminApi = {
     return api.delete<{ message: string }>(`/admin/events/${id}?confirm=true`);
   },
 };
+
+/**
+ * Web push subscriptions.
+ *
+ * The VAPID public key is fetched at runtime rather than compiled in as a
+ * `VITE_` var on purpose: this app is built once and cached on CloudFront, so
+ * a baked-in key could only change with a rebuild plus an invalidation, and
+ * would silently disagree with the backend in between. `enabled: false` means
+ * the server has no keypair configured — hide the feature rather than prompt
+ * for a permission nothing can act on.
+ */
+export const pushApi = {
+  vapidPublicKey() {
+    return api.get<{ enabled: boolean; public_key: string | null }>("/push/vapid_public_key");
+  },
+
+  /** Flattened from the browser's PushSubscription so the wire format is ours. */
+  subscribe(sub: { endpoint: string; p256dhKey: string; authKey: string }) {
+    return api.post<{ subscription: { id: string; endpoint: string } }>("/push/subscriptions", {
+      subscription: {
+        endpoint: sub.endpoint,
+        p256dh_key: sub.p256dhKey,
+        auth_key: sub.authKey,
+      },
+    });
+  },
+
+  /**
+   * A POST, not a DELETE. The endpoint belongs in a body — it's a long opaque
+   * URL, and a query string would put a specific device's address into every
+   * access log — but bodies on DELETE aren't reliably parsed end to end
+   * (Rails, and any proxy in between). POST removes the ambiguity.
+   *
+   * Returns 204 whether or not the subscription existed.
+   */
+  unsubscribe(endpoint: string) {
+    return api.post<void>("/push/unsubscribe", { endpoint });
+  },
+};

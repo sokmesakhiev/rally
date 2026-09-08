@@ -179,11 +179,21 @@ if $DEPLOY_FRONTEND; then
   aws s3 sync dist/client/ "s3://$FRONTEND_BUCKET" \
     --delete \
     --cache-control "public,max-age=31536000,immutable" \
-    --exclude "index.html"
+    --exclude "index.html" \
+    --exclude "sw.js"
 
   aws s3 cp dist/client/index.html "s3://$FRONTEND_BUCKET/index.html" \
     --cache-control "no-cache,no-store,must-revalidate" \
     --content-type "text/html"
+
+  # The service worker must never be cached. Browsers re-fetch it to check for
+  # updates, so an immutable year-long cache here would mean the worker on
+  # someone's device can never be replaced — a bug in the push handler would
+  # be permanent for every existing visitor. Unlike the hashed assets above,
+  # this file keeps a stable name by necessity: its URL is its identity.
+  aws s3 cp dist/client/sw.js "s3://$FRONTEND_BUCKET/sw.js" \
+    --cache-control "no-cache,no-store,must-revalidate" \
+    --content-type "application/javascript"
 
   info "Invalidating CloudFront cache..."
   INVALIDATION_ID=$(aws cloudfront create-invalidation \

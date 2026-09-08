@@ -55,6 +55,18 @@ Rails.application.routes.draw do
       post   "registrations/:id/check_in", to: "registrations#check_in"
       delete "registrations/:id/check_in", to: "registrations#undo_check_in"
 
+      # Web push. #vapid_public_key is unauthenticated on purpose — it returns
+      # a public key the browser needs before it can subscribe at all.
+      #
+      # Unsubscribing is a POST rather than a DELETE: the endpoint is a long,
+      # opaque, vendor-controlled URL that belongs in a body (not a path, and
+      # not a query string where it would reach every access log), and bodies
+      # on DELETE aren't reliably parsed end to end. See
+      # PushSubscriptionsController#unsubscribe.
+      get   "push/vapid_public_key", to: "push_subscriptions#vapid_public_key"
+      post  "push/subscriptions",    to: "push_subscriptions#create"
+      post  "push/unsubscribe",      to: "push_subscriptions#unsubscribe"
+
       # Results (finish times) — optional per event; race-style events use
       # it, e.g. a social gathering never gets one. Set one at a time or in
       # bulk via CSV.
