@@ -36,14 +36,18 @@ RSpec is the real test suite (factories in `spec/factories`, request specs in `s
 ### Frontend (run from `frontend/`)
 
 ```
-bun install   (or npm install)
-bun run dev          # vite dev server, default port 8080
-bun run build         # production build (outputs to dist/client/, deployed to S3 — see vite.config.ts)
-bun run lint          # eslint
-bun run format        # prettier --write .
+npm ci                # NOT bun — see below
+npm run dev           # vite dev server, default port 8080
+npm run build         # production build (outputs to dist/client/, deployed to S3 — see vite.config.ts)
+npm run test          # vitest (jsdom + Testing Library, config in vitest.config.ts)
+npm run test:coverage # what CI runs
+npm run lint          # eslint — currently fails on a pre-existing backlog; not run in CI
+npm run format        # prettier --write .
 ```
 
-There is no configured test runner for the frontend (no `test` script, no Jest/Vitest config) despite a `jest` job existing in `ci.yml` — that CI job currently has nothing to run.
+**Use npm, not bun.** Both lockfiles are committed but `bun.lock` is stale to the point of being unusable — it contains neither `vitest` nor `i18next`, so it predates the test suite and i18n, and pins TypeScript 5.9/ESLint 9 against the 6.x/10.x actually in use. Dependabot only updates `package-lock.json` and CI installs with `npm ci`, so that is the lockfile that reflects reality. `bun.lock` is a candidate for deletion.
+
+Vitest is the frontend test runner (`vitest.config.ts`, deliberately standalone rather than extending `vite.config.ts`; setup in `src/test/setup.ts`). Coverage excludes `src/components/ui/**` and generated files. Note ESLint is **not** part of `ci.yml` — `npm run lint` currently exits non-zero on a backlog of pre-existing violations, mostly new `eslint-plugin-react-hooks` v7 rules applied to older code.
 
 ## Architecture
 
