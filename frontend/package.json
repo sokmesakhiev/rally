@@ -88,8 +88,13 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+<<<<<<< HEAD
     "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^10.10.0",
+=======
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.9.1",
+>>>>>>> 5f96892 (Roll back TypeScript 7 and @vitest/coverage-v8 5 (#401))
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -98,7 +103,7 @@
     "jsdom": "^30.0.1",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.9.6",
-    "typescript": "~7.0.2",
+    "typescript": "~6.0.3",
     "typescript-eslint": "^8.69.0",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
