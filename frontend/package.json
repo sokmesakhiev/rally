@@ -88,17 +88,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
-<<<<<<< HEAD
-<<<<<<< HEAD
     "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^10.10.0",
-=======
-    "@vitest/coverage-v8": "^4.1.11",
-=======
-    "@vitest/coverage-v8": "^5.0.0",
->>>>>>> 3c5e852 (Bump the vitest group in /frontend with 2 updates (#402))
-    "eslint": "^10.9.1",
->>>>>>> 5f96892 (Roll back TypeScript 7 and @vitest/coverage-v8 5 (#401))
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^7.1.1",
