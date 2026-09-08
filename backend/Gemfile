@@ -31,7 +31,7 @@ gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 # without needing LibreOffice just to read/write the template itself (only
 # the final ODT→PDF conversion shells out to `soffice`, in
 # Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
-gem "rubyzip", "~> 3.5", require: "zip"
+gem "rubyzip", "~> 3.6", require: "zip"
 
 # CSV results import (Results::ImportCsv) — "csv" moved from a Ruby default
 # gem to a bundled gem as of Ruby 3.4, so under Bundler it needs an explicit
