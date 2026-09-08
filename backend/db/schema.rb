@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_06_040000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -159,6 +159,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
     t.string "payment_model", default: "direct", null: false
     t.string "plan"
     t.integer "price_cents", default: 0, null: false
+    t.jsonb "refund_policy_tiers"
     t.string "route_map_url"
     t.datetime "start_at", null: false
     t.uuid "survey_id"
@@ -175,6 +176,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
     t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+  end
+
+  create_table "host_ledger_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.text "description"
+    t.string "entry_type", null: false
+    t.uuid "organization_id", null: false
+    t.uuid "source_id"
+    t.string "source_type"
+    t.index ["organization_id", "created_at"], name: "index_host_ledger_entries_on_organization_id_and_created_at"
+    t.index ["source_type", "source_id"], name: "index_host_ledger_entries_on_source_type_and_source_id"
+    t.check_constraint "amount_cents <> 0", name: "host_ledger_entries_amount_non_zero"
   end
 
   create_table "organization_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -329,6 +344,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
     t.datetime "deleted_at"
     t.uuid "event_id", null: false
     t.string "payment_status", default: "unpaid", null: false
+    t.jsonb "refund_policy_tiers"
     t.string "status", default: "confirmed", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
@@ -433,6 +449,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_020000) do
   add_foreign_key "events", "organizations"
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
+  add_foreign_key "host_ledger_entries", "organizations"
   add_foreign_key "organization_memberships", "organizations"
   add_foreign_key "organization_memberships", "users"
   add_foreign_key "organization_memberships", "users", column: "invited_by_id"

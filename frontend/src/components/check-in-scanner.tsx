@@ -39,9 +39,7 @@ export function CheckInScanner({ onCheckedIn }: CheckInScannerProps) {
     if (processingRef.current) return;
     processingRef.current = true;
     try {
-      const { registration, already_checked_in } = await registrationsApi.checkIn(
-        registrationId,
-      );
+      const { registration, already_checked_in } = await registrationsApi.checkIn(registrationId);
       const name = registration.profile?.display_name || t("checkIn.unnamedParticipant");
       toast.success(
         already_checked_in

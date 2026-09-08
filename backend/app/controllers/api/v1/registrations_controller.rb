@@ -29,7 +29,10 @@ module Api
       def event_registrations
         event = find_authorized_event!(params[:event_id], :view_participants)
         regs = event.registrations.kept
-          .includes({ user: :profile }, :event_types, :certificate, :result)
+          # :event added for registration_json's refund_entitlement_cents,
+          # which reads event.start_at — without it this is an N+1 across the
+          # whole participant list, which is the longest list in the app.
+          .includes({ user: :profile }, :event, :event_types, :certificate, :result)
           .order(created_at: :asc)
 
         render json: {
@@ -159,6 +162,52 @@ module Api
       end
 
       # PATCH /api/v1/registrations/:id — organizer updates payment status
+      # POST /api/v1/registrations/:id/cancel — a participant giving up their
+      # own spot. The refund amount comes from the policy snapshotted onto
+      # this registration at checkout; nobody decides it. See
+      # Registrations::Cancel for the three outcomes.
+      #
+      # Restricted to the registration's own owner (or a Rally admin) — an
+      # organizer removing a participant is #destroy, which is a different
+      # action with different consequences. Guest registrations have no
+      # session to authorize with and so can't self-cancel yet; those still
+      # go through the organizer.
+      def cancel
+        registration = Registration.kept.find(params[:id])
+
+        unless registration.user_id == current_user.id || current_user.admin?
+          return render json: { error: "Not authorized" }, status: :forbidden
+        end
+
+        result = Registrations::Cancel.new(
+          registration: registration,
+          initiated_by: current_user
+        ).call
+
+        if current_user.admin? && registration.user_id != current_user.id
+          AdminAction.log!(admin: current_user, action: "cancel_registration", target: registration)
+        end
+
+        case result.status
+        when :cancelled, :cancelled_with_refund
+          render json: {
+            registration: registration_json(result.registration, include_types: true),
+            refund_cents: result.refund_cents
+          }
+        when :requires_organizer
+          # 409, not 422: the request is well-formed and the participant did
+          # nothing wrong — the event simply has no terms to apply, so this
+          # needs a human. A validation error would misdescribe it.
+          render json: { error: result.error, code: "requires_organizer" }, status: :conflict
+        when :refund_failed
+          render json: { error: result.error, refund_cents: result.refund_cents }, status: :bad_gateway
+        else # :already_cancelled
+          render json: { error: result.error }, status: :unprocessable_entity
+        end
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Registration not found" }, status: :not_found
+      end
+
       def update
         registration = Registration.find(params[:id])
         event = registration.event
@@ -286,7 +335,16 @@ module Api
           payment_status: reg.payment_status,
           amount_paid_cents: reg.amount_paid_cents,
           created_at: reg.created_at,
-          checked_in_at: reg.checked_in_at
+          checked_in_at: reg.checked_in_at,
+          # The policy this participant agreed to at checkout, frozen then —
+          # deliberately not the event's current policy, which the host may
+          # have tightened since. nil for registrations made before a policy
+          # existed, and for events whose host never set one.
+          refund_policy: reg.refund_policy&.as_json,
+          # What they'd get back if they cancelled right now, in cents. nil
+          # when there's no policy to apply, which means "a human decides",
+          # not "nothing".
+          refund_entitlement_cents: reg.refund_entitlement_cents
         }
 
         # nil until an organizer (via Api::V1::ResultsController) records

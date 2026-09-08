@@ -27,6 +27,12 @@ class Organization < ApplicationRecord
   # User#discard! anonymizes rather than destroys.
   has_many :events, dependent: :restrict_with_error
 
+  # The running account between Rally and this organization under the
+  # platform payment model — see HostLedgerEntry. restrict_with_error for the
+  # same reason as :events: a financial history is not something deleting a
+  # row should be able to take with it.
+  has_many :host_ledger_entries, dependent: :restrict_with_error
+
   MAX_SLUG_LENGTH = 60
 
   # Anchored at BOTH ends, deliberately. Two things go wrong without `\z`:
@@ -260,6 +266,20 @@ class Organization < ApplicationRecord
 
   # ── PayWay predicates ────────────────────────────────────────────────────
   # Lifted verbatim from Profile (#331) — same semantics, new home.
+
+  # What Rally owes this host (positive) or this host owes Rally (negative),
+  # summed from the ledger rather than cached — see
+  # HostLedgerEntry.balance_cents for why.
+  def ledger_balance_cents
+    HostLedgerEntry.balance_cents(self)
+  end
+
+  # Owing Rally more than the threshold. The distinction that matters for
+  # Ticket F: a small negative balance nets off against the host's next
+  # event and needs no attention, while one that sits here is a debt.
+  def in_arrears?
+    ledger_balance_cents < -HostLedgerEntry::ARREARS_THRESHOLD_CENTS
+  end
 
   # True once this organization has connected its own PayWay account. When
   # true, its events' registration payments route through these credentials

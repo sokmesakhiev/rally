@@ -194,6 +194,26 @@ export interface ApiSurvey {
   updated_at: string;
 }
 
+/** One step of a refund policy: cancel at least `hours_before` hours ahead of
+ * the start and `refund_percent` comes back. Anything past the last tier gets
+ * nothing — that final step is implicit and never sent. */
+export interface RefundPolicyTier {
+  hours_before: number;
+  refund_percent: number;
+}
+
+export interface RefundPolicy {
+  /** Ordered from the earliest cutoff to the latest. Empty means the host
+   * explicitly offers no refunds, which is not the same as `refund_policy`
+   * itself being null (no policy set at all). */
+  tiers: RefundPolicyTier[];
+  /** Which named preset these tiers match ("flexible" | "standard" |
+   * "strict" | "non_refundable"), or null for a custom policy. Derived
+   * server-side from the tiers, never stored, so it can't drift out of sync
+   * with them. */
+  template_name: string | null;
+}
+
 export interface ApiRegistrationAnswer {
   survey_question_id: string;
   answer_text?: string;
@@ -271,6 +291,12 @@ export interface ApiEvent {
   suspended: boolean;
   suspension_reason: string | null;
   suspended_at: string | null;
+  /** The host's current refund policy. `null` means they never set one, so
+   * refunds stay a manual decision — deliberately different from a policy
+   * with an empty `tiers` array, which means "no refunds at any time".
+   * What an already-registered participant is owed comes from their own
+   * snapshot on the registration, not from here. */
+  refund_policy: RefundPolicy | null;
   brand_color: string;
   banner_url: string | null;
   logo_url: string | null;
@@ -315,6 +341,13 @@ export interface ApiRegistration {
   created_at: string;
   /** Null until an organizer scans/taps this registration in on event day. */
   checked_in_at: string | null;
+  /** The policy frozen at checkout — NOT the event's current one, which the
+   * host may have tightened since. Null when no policy was in force. */
+  refund_policy: RefundPolicy | null;
+  /** What this registration would get back if cancelled right now, in cents.
+   * Null means there is no policy to apply, so a human decides — it does not
+   * mean zero. Treat the two differently in the UI. */
+  refund_entitlement_cents: number | null;
   event?: ApiEvent;
   event_types: ApiEventType[];
   profile?: { display_name: string | null; avatar_url: string | null };
@@ -543,8 +576,7 @@ export const eventsApi = {
       // so a destroy entry can't accidentally be typo'd into a half-filled
       // update.
       event_types_attributes?: (
-        | (ApiEventTypeDraft & { id?: string })
-        | { id: string; _destroy: true }
+        (ApiEventTypeDraft & { id?: string }) | { id: string; _destroy: true }
       )[];
     },
   ) {
@@ -701,10 +733,7 @@ export const registrationsApi = {
    * authorization as forEvent(). Triggers a browser file download rather
    * than returning parsed data. */
   exportCsv(eventId: string) {
-    return downloadFile(
-      `/events/${eventId}/registrations/export`,
-      `registrations-${eventId}.csv`,
-    );
+    return downloadFile(`/events/${eventId}/registrations/export`, `registrations-${eventId}.csv`);
   },
 
   /** `guest` is only needed when the visitor isn't signed in (see
@@ -767,10 +796,9 @@ export const registrationsApi = {
 
   /** Sets (or, with `null`, clears) one participant's finish time. */
   setResult(id: string, finishTimeSeconds: number | null) {
-    return api.patch<{ result: { id: string; registration_id: string; finish_time_seconds: number | null } }>(
-      `/registrations/${id}/result`,
-      { result: { finish_time_seconds: finishTimeSeconds } },
-    );
+    return api.patch<{
+      result: { id: string; registration_id: string; finish_time_seconds: number | null };
+    }>(`/registrations/${id}/result`, { result: { finish_time_seconds: finishTimeSeconds } });
   },
 };
 
@@ -825,7 +853,9 @@ export const waitlistApi = {
   },
 
   myEntryForEvent(eventId: string) {
-    return waitlistApi.mine().then((r) => r.waitlist_entries.find((e) => e.event_id === eventId) ?? null);
+    return waitlistApi
+      .mine()
+      .then((r) => r.waitlist_entries.find((e) => e.event_id === eventId) ?? null);
   },
 
   join(eventId: string, opts?: { eventTypeIds?: string[] }) {
@@ -1158,7 +1188,9 @@ export const paymentsApi = {
   },
 
   status(paymentId: string, guestContact?: GuestContact) {
-    return api.get<{ payment: ApiPayment }>(`/payments/${paymentId}${guestContactQuery(guestContact)}`);
+    return api.get<{ payment: ApiPayment }>(
+      `/payments/${paymentId}${guestContactQuery(guestContact)}`,
+    );
   },
 };
 
@@ -1285,8 +1317,12 @@ export const adminApi = {
     return api.get<ApiAdminReports>(`/admin/reports?period=${period}`);
   },
 
-
-  users(opts?: { q?: string; status?: "all" | "active" | "suspended"; page?: number; perPage?: number }) {
+  users(opts?: {
+    q?: string;
+    status?: "all" | "active" | "suspended";
+    page?: number;
+    perPage?: number;
+  }) {
     const params = new URLSearchParams();
     if (opts?.q?.trim()) params.set("q", opts.q.trim());
     if (opts?.status && opts.status !== "all") params.set("status", opts.status);
@@ -1294,7 +1330,9 @@ export const adminApi = {
     if (opts?.perPage) params.set("per_page", String(opts.perPage));
 
     const qs = params.toString();
-    return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(`/admin/users${qs ? `?${qs}` : ""}`);
+    return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(
+      `/admin/users${qs ? `?${qs}` : ""}`,
+    );
   },
 
   /** Also unpublishes every event the user created — see User#suspend!. */

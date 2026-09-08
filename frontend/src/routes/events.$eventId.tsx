@@ -14,7 +14,7 @@ import {
   QrCode,
   Hourglass,
   Award,
-  Ban
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -35,6 +35,7 @@ import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
 import { PaymentPanel } from "@/components/payment-panel";
+import { RefundPolicyNotice } from "@/components/refund-policy-notice";
 import { ResultsLeaderboard } from "@/components/results-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -99,19 +100,20 @@ export const Route = createFileRoute("/events/$eventId")({
           }
         : undefined,
       image: imageUrl,
-      offers: event.price_cents > 0
-        ? {
-            "@type": "Offer",
-            price: (event.price_cents / 100).toFixed(2),
-            priceCurrency: event.currency.toUpperCase(),
-            availability: "https://schema.org/InStock",
-          }
-        : {
-            "@type": "Offer",
-            price: "0",
-            priceCurrency: event.currency.toUpperCase(),
-            availability: "https://schema.org/InStock",
-          },
+      offers:
+        event.price_cents > 0
+          ? {
+              "@type": "Offer",
+              price: (event.price_cents / 100).toFixed(2),
+              priceCurrency: event.currency.toUpperCase(),
+              availability: "https://schema.org/InStock",
+            }
+          : {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: event.currency.toUpperCase(),
+              availability: "https://schema.org/InStock",
+            },
     };
 
     return {
@@ -403,7 +405,7 @@ function EventDetail() {
 
   function handleJoinWaitlistForType(typeId: string) {
     setWaitlistPendingTypeId(typeId);
-    joinWaitlist.mutate({ eventTypeIds: [ typeId ] });
+    joinWaitlist.mutate({ eventTypeIds: [typeId] });
   }
 
   return (
@@ -679,9 +681,7 @@ function EventDetail() {
                 <div className="space-y-5">
                   <div>
                     <p className="font-medium">{t("eventDetail.confirmTitle")}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("eventDetail.confirmDesc")}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("eventDetail.confirmDesc")}</p>
                   </div>
 
                   <div className="space-y-3 rounded-xl border border-border bg-card p-4 text-sm">
@@ -697,10 +697,7 @@ function EventDetail() {
                       </span>
                       <span className="font-medium">
                         {user
-                          ? [
-                              user.phone,
-                              user.email_auto_generated ? null : user.email,
-                            ]
+                          ? [user.phone, user.email_auto_generated ? null : user.email]
                               .filter(Boolean)
                               .join(" · ") || t("eventDetail.confirmNoContact")
                           : [guestPhone.trim(), guestEmail.trim()].filter(Boolean).join(" · ")}
@@ -726,6 +723,12 @@ function EventDetail() {
                       </span>
                     </div>
                   </div>
+
+                  {/* The host's refund terms, shown before the charge rather
+                      than after it — a participant agrees to what's on screen
+                      here, and the server snapshots the same policy onto the
+                      registration so it can't be tightened afterwards. */}
+                  <RefundPolicyNotice policy={ev.refund_policy} />
 
                   <p className="rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
                     {t("eventDetail.nonRefundableNotice")}
@@ -893,7 +896,9 @@ function EventDetail() {
                     onClick={isFull ? () => joinWaitlist.mutate(undefined) : handleRegisterClick}
                     style={isFull ? undefined : { backgroundColor: brandColor }}
                     variant={isFull ? "outline" : undefined}
-                    className={isFull ? undefined : "text-white hover:opacity-90 disabled:opacity-50"}
+                    className={
+                      isFull ? undefined : "text-white hover:opacity-90 disabled:opacity-50"
+                    }
                   >
                     {(register.isPending || joinWaitlist.isPending) && (
                       <Loader2 className="h-4 w-4 animate-spin" />

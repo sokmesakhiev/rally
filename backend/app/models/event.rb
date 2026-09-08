@@ -49,6 +49,7 @@ class Event < ApplicationRecord
   validates :category, inclusion: { in: CATEGORIES }
   validates :payment_model, inclusion: { in: PAYMENT_MODELS }
   validate :payment_model_locked_once_committed, on: :update
+  validate :refund_policy_well_formed
   validates :start_at, presence: true
   validates :price_cents, numericality: { greater_than_or_equal_to: 0 }
   validates :plan, inclusion: { in: PLANS.keys }, allow_nil: true
@@ -169,6 +170,30 @@ class Event < ApplicationRecord
 
   def plan_details
     PLANS[plan]
+  end
+
+  # The event's refund policy as a value object, or nil when the host hasn't
+  # set one (refunds stay a manual decision — see the migration for why nil
+  # and [] are deliberately different things).
+  #
+  # Note this reads the *current* policy. What a given participant is
+  # entitled to comes from their own snapshot — Registration#refund_policy —
+  # not from here.
+  def refund_policy
+    RefundPolicy.from(refund_policy_tiers)
+  end
+
+  # Accepts a RefundPolicy, a raw tier array, or nil. nil is matched
+  # explicitly rather than duck-typed: NilClass#to_a returns [], so a
+  # respond_to?(:to_a) check here would quietly turn "no policy" into
+  # "non-refundable".
+  def refund_policy=(policy)
+    self.refund_policy_tiers =
+      case policy
+      when nil          then nil
+      when RefundPolicy then policy.to_a
+      else policy
+      end
   end
 
   # Rally collects the participant's payment and splits it — PlatformPayment.
@@ -323,6 +348,16 @@ class Event < ApplicationRecord
   # Both conditions are checked against the values being saved, so a single
   # update that publishes *and* switches models is refused — which is the safe
   # direction to fail.
+  # Folds RefundPolicy's own messages into the model's errors, so a bad
+  # policy comes back as one coherent 422 alongside any other validation
+  # failure rather than as a separate parse error.
+  def refund_policy_well_formed
+    policy = refund_policy
+    return if policy.nil? || policy.valid?
+
+    policy.errors.each { |message| errors.add(:refund_policy_tiers, message) }
+  end
+
   def payment_model_locked_once_committed
     return unless will_save_change_to_payment_model?
     return unless is_published? || registrations.exists?

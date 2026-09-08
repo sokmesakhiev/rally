@@ -472,6 +472,12 @@ module Api
           # suspension_reason/suspended_at stay the event's own values and are
           # nil for an inherited suspension.
           suspension_source: event.suspension_source,
+          # The *current* policy, for display on the event page and in the
+          # organizer's editor. What an already-registered participant is
+          # owed comes from their own snapshot on the registration, not from
+          # here. nil means the host set no policy, which is not the same as
+          # a policy of "no refunds" — see the migration that adds the column.
+          refund_policy: event.refund_policy&.as_json,
           brand_color: event.brand_color,
           banner_url: event.banner_url,
           logo_url: event.logo_url,
