@@ -19,6 +19,15 @@ default: &default
   password: postgres
   # For details on connection pooling, see Rails configuration guide
   # https://guides.rubyonrails.org/configuring.html#database-pooling
+  #
+  # `max_connections` is the canonical key as of Rails 8.1 — `pool` is now a
+  # deprecated alias for it, and setting both to different values raises
+  # outright (ActiveRecord::DatabaseConfigurations::HashConfig). Don't "fix"
+  # this back to `pool`.
+  #
+  # Pools are lazy and reaped: this is a ceiling on concurrent checkouts, not a
+  # set of connections held open. The production primary role overrides it
+  # below, because ActionCable's worker threads check out from that pool too.
   max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
 
@@ -104,6 +113,21 @@ production:
   primary: &primary_production
     <<: *default
     url: <%= ENV["DATABASE_URL"] %>
+    # Three separate consumers share this one pool inside a single Puma
+    # process: Puma's own request threads, ActionCable's worker pool (channel
+    # callbacks and broadcasts run there, and they touch application models),
+    # and whatever Solid Queue executes in-process via SOLID_QUEUE_IN_PUMA.
+    # Left at the `default` value of 5 while ActionCable was being enabled,
+    # checkouts would start timing out after the default 5-second wait —
+    # intermittently, only under concurrency.
+    #
+    # Sized from the same two env vars that drive the consumers themselves, so
+    # raising either one can't silently starve the pool. Headroom of 3 covers
+    # migrations on boot and a human on a console.
+    #
+    # Budget check: db.t3.micro (1 GiB) allows Postgres ~112 connections; this
+    # is 2 tasks x 10, plus the much smaller cache/queue/cable role pools.
+    max_connections: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + ENV.fetch("ACTION_CABLE_WORKER_POOL_SIZE", 4).to_i + 3 %>
   cache:
     <<: *default
     url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_cache\\1") %>

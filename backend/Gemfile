@@ -63,6 +63,12 @@ gem "importmap-rails"
 group :production do
   gem "solid_queue"
   gem "solid_cache"
+  # ActionCable's pub/sub backend, so a broadcast from one ECS task reaches
+  # subscribers connected to the other. config/cable.yml has named this adapter
+  # since `rails new` but the gem was never installed, because ActionCable
+  # itself wasn't loaded — development/test use the :async and :test adapters
+  # respectively and need nothing here.
+  gem "solid_cable"
 end
 
 gem "dry-validation"
