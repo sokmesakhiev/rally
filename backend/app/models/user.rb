@@ -15,6 +15,8 @@ class User < ApplicationRecord
   # PushSubscription. destroy, not restrict: a subscription is a delivery
   # address, not a record worth keeping once the account is gone.
   has_many :push_subscriptions, dependent: :destroy
+  # In-app notifications — the header bell. See Notification.
+  has_many :notifications, dependent: :destroy
   # Events this user helps run but did NOT create — see EventMembership.
   # Distinct from `events` above (which is creator_id): an organizer's own
   # events and the ones they've been invited onto are different lists, and

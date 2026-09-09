@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -192,6 +192,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
     t.check_constraint "amount_cents <> 0", name: "host_ledger_entries_amount_non_zero"
   end
 
+  create_table "notifications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "body"
+    t.datetime "created_at", null: false
+    t.uuid "event_id"
+    t.string "kind", null: false
+    t.datetime "read_at"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.uuid "user_id", null: false
+    t.index ["event_id"], name: "index_notifications_on_event_id"
+    t.index ["user_id", "created_at"], name: "index_notifications_on_user_id_and_created_at"
+    t.index ["user_id", "created_at"], name: "index_notifications_unread_by_user", where: "(read_at IS NULL)"
+  end
+
   create_table "organization_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "invited_by_id"
@@ -363,7 +378,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
-    t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true
+    t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true, where: "(deleted_at IS NULL)"
     t.index ["event_id"], name: "index_registrations_on_event_id"
     t.index ["user_id"], name: "index_registrations_on_user_id"
   end
@@ -464,6 +479,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "host_ledger_entries", "organizations"
+  add_foreign_key "notifications", "events"
+  add_foreign_key "notifications", "users"
   add_foreign_key "organization_memberships", "organizations"
   add_foreign_key "organization_memberships", "users"
   add_foreign_key "organization_memberships", "users", column: "invited_by_id"

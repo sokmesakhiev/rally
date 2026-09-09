@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/lib/use-auth";
 import { VerifyEmailBanner } from "@/components/verify-email-banner";
 import { AddRealEmailBanner } from "@/components/add-real-email-banner";
@@ -105,6 +106,10 @@ export function SiteHeader() {
 
           {user ? (
             <>
+              {/* Signed-in only — useNotifications disables its poll without a
+                  session, so an anonymous visitor never hits the endpoint. */}
+              <NotificationBell />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2 pl-2">

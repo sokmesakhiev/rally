@@ -152,7 +152,7 @@ module Api
             # unreadable placeholder. A push subscription has no such problem —
             # if they have one, it works — so a phone-only guest who enabled
             # notifications should still get this.
-            Notifications::RegistrationPush.confirmation(registration)
+            Notifications::RegistrationNotifier.confirmation(registration)
 
             # No auth token for a guest registration — see GuestCheckout's
             # class comment. The frontend keeps the guest's own contact info

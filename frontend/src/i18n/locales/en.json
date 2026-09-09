@@ -572,6 +572,20 @@
     "createOrganization": "Create organization",
     "errorPickOrganization": "Choose which organization is presenting this event"
   },
+  "notifications": {
+    "title": "Notifications",
+    "aria": "Notifications",
+    "ariaWithCount": "Notifications, {{count}} unread",
+    "empty": "Nothing new right now.",
+    "markAllRead": "Mark all read",
+    "justNow": "just now",
+    "minutesAgo_one": "{{count}} min ago",
+    "minutesAgo_other": "{{count}} mins ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago"
+  },
   "pushNotifications": {
     "title": "Get notified on this device",
     "body": "We'll let you know when your payment clears, a spot opens up, or event details change.",

@@ -38,6 +38,25 @@ self.addEventListener("push", (event) => {
 
   const title = payload.title || "Rally";
 
+  // Tell any open tab that something arrived, so the header bell updates now
+  // rather than on its next poll. This is the whole "real time" story for the
+  // badge: the push already travels server → browser, so a tab that's open
+  // just needs to hear about it.
+  //
+  // Best-effort by design. A tab that's closed, or a user who never granted
+  // notification permission, simply falls back to the 60s poll — which is why
+  // the poll exists rather than being replaced by this.
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          client.postMessage({ type: "rally:notification", tag: payload.tag });
+        }
+      })
+      .catch(() => {}),
+  );
+
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",

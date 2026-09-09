@@ -32,7 +32,18 @@ class Registration < ApplicationRecord
 
   validates :status, inclusion: { in: STATUSES }
   validates :payment_status, inclusion: { in: PAYMENT_STATUSES }
-  validates :user_id, uniqueness: { scope: :event_id, message: "already registered for this event" }
+  # Scoped to live rows, matching the partial unique index added in
+  # db/migrate/20260909010000_scope_registration_uniqueness_to_kept.rb.
+  # #discard! keeps the row (for its payment/refund history) but the person is
+  # no longer registered, so they must be able to sign up again — whether they
+  # were removed by an organizer or swept by Registrations::ReleaseAbandoned.
+  # Without the `conditions:`, the model would reject what the database now
+  # allows, which is the more confusing half of the bug.
+  validates :user_id, uniqueness: {
+    scope: :event_id,
+    conditions: -> { where(deleted_at: nil) },
+    message: "already registered for this event"
+  }
   validate :event_not_full, on: :create
 
   # Amount owed. `amount_owed_cents` is a snapshot taken once at creation
