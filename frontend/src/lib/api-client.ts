@@ -1405,3 +1405,43 @@ export const pushApi = {
     return api.post<void>("/push/unsubscribe", { endpoint });
   },
 };
+
+/** One in-app notification — what the header bell lists. */
+export interface ApiNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  event_id: string | null;
+  read: boolean;
+  created_at: string;
+}
+
+export const notificationsApi = {
+  /**
+   * Polled roughly once a minute by open tabs, and refetched immediately when
+   * the service worker reports a push (see usePushNotificationSignal).
+   *
+   * `unread_count` is capped at `max_count` server-side — render it as
+   * "{max_count}+" when it exceeds, rather than showing an exact number nobody
+   * acts on differently.
+   */
+  list() {
+    return api.get<{
+      notifications: ApiNotification[];
+      unread_count: number;
+      max_count: number;
+    }>("/notifications");
+  },
+
+  markRead(id: string) {
+    return api.post<{ notification: ApiNotification; unread_count: number }>(
+      `/notifications/${id}/read`,
+    );
+  },
+
+  markAllRead() {
+    return api.post<{ unread_count: number }>("/notifications/read_all");
+  },
+};

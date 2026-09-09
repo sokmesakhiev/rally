@@ -55,6 +55,12 @@ Rails.application.routes.draw do
       post   "registrations/:id/check_in", to: "registrations#check_in"
       delete "registrations/:id/check_in", to: "registrations#undo_check_in"
 
+      # In-app notifications — the header bell. #index is polled by every open
+      # tab, so it stays a single indexed query. See NotificationsController.
+      get  "notifications",           to: "notifications#index"
+      post "notifications/read_all",  to: "notifications#read_all"
+      post "notifications/:id/read",  to: "notifications#read"
+
       # Web push. #vapid_public_key is unauthenticated on purpose — it returns
       # a public key the browser needs before it can subscribe at all.
       #

@@ -16,6 +16,8 @@ class NotifyEventDetailsChangedJob < ApplicationJob
     return if changes.blank?
 
     event.registrations.kept.active.includes(:user).find_each do |registration|
+      Notifications::RegistrationNotifier.event_details_changed(registration)
+
       next unless registration.wants_notification?(:event_details_changed)
 
       RegistrationMailer.details_changed(registration, changes).deliver_later

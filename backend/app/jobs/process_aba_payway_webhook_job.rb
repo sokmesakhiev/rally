@@ -32,16 +32,38 @@ class ProcessAbaPaywayWebhookJob < ApplicationJob
 
     case payable
     when Payment
-      payable.update!(status: "approved", paid_at: Time.current, raw_response: response)
-      payable.registration.mark_paid_from_payment!(payable)
-      if payable.registration.wants_notification?(:payment_received)
-        RegistrationMailer.payment_received(payable.registration).deliver_later
-        Notifications::RegistrationPush.payment_received(payable.registration)
-      end
+      approve_payment!(payable, response)
     when EventPlanPayment
       payable.mark_paid!(raw_response: response)
     end
   rescue AbaPayway::Error => e
     Rails.logger.error("[aba_payway webhook job] check_transaction failed: #{e.message}")
+  end
+
+  private
+
+  # This job and PaymentsController#refresh_if_stale! both call
+  # check_transaction and can race each other for the same payment — the
+  # webhook fires, *and* the frontend's own poll lands, within the same few
+  # seconds. Both would otherwise see `pending?` true, both update! to
+  # "approved", and both fire the mailer/notifier: a real duplicate
+  # "payment received" email and bell entry, not just a harmless
+  # double-write. `with_lock` re-reads the row under `SELECT ... FOR UPDATE`,
+  # so whichever caller loses the race sees the already-"approved" status and
+  # `transitioned` comes back false.
+  def approve_payment!(payment, response)
+    transitioned = payment.with_lock do
+      next false unless payment.pending?
+
+      payment.update!(status: "approved", paid_at: Time.current, raw_response: response)
+      payment.registration.mark_paid_from_payment!(payment)
+      true
+    end
+    return unless transitioned
+
+    if payment.registration.wants_notification?(:payment_received)
+      RegistrationMailer.payment_received(payment.registration).deliver_later
+    end
+    Notifications::RegistrationNotifier.payment_received(payment.registration)
   end
 end

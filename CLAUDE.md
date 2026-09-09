@@ -98,6 +98,14 @@ Gateway credentials are two-tiered:
 - Related: the unique index on `registrations(event_id, user_id)` is **partial** (`WHERE deleted_at IS NULL`), and `Registration`'s uniqueness validation carries a matching `conditions:`. `#discard!` keeps the row for its payment history but the person is no longer registered, so they must be able to sign up again — this was a live bug before, reachable via `RegistrationsController#destroy`.
 - `app/jobs/` holds the real jobs (certificates, event-change notifications, the ABA webhook processor, push delivery, and the sweep above); mailers additionally use `deliver_later`, which exercises the same adapter.
 
+### Notifications: three channels, one notifier
+
+`Notifications::RegistrationNotifier` is the single place the wording of each participant-facing event lives. It writes an in-app `Notification` row (what the header bell counts) and enqueues a web push; the `RegistrationMailer` call stays at the trigger site. `payment_received` alone fires from two paths — the polling endpoint and the ABA webhook — which is why the copy isn't inlined at call sites.
+
+**Preferences diverge by channel, deliberately.** The notifier is called *outside* the caller's `wants_notification?` guard, unlike the mailer. Push respects `notify_*` exactly as email does — both are interruptions. The **in-app row is always written**: the bell is something you go and look at, and suppressing it would leave someone who muted payment emails with no way to discover their payment cleared. There's a spec pinning both halves.
+
+"Real time" for the badge is two mechanisms, not one: `public/sw.js` posts a `rally:notification` message to open tabs when a push arrives, which invalidates the react-query cache immediately, plus a 60-second poll for everyone who declined permission or is on a browser without push. **Deliberately not WebSockets or SSE** — production runs 3 Puma threads per task across 2 tasks (`RAILS_MAX_THREADS` is unset in `ecs.tf`, so `puma.rb`'s default applies) and Solid Queue shares those processes, so a held-open connection per user would saturate the API at single-digit concurrency. ActionCable isn't loaded at all.
+
 ### Frontend: Google Identity Services sign-in
 
 `GoogleSignInButton` (`src/components/google-sign-in-button.tsx`), rendered on `auth.tsx`, wraps Google's official Identity Services "Sign in with Google" button. Unlike the Google Maps integration, it loads Google's `<script src="https://accounts.google.com/gsi/client">` directly rather than an npm package — no new frontend dependency.

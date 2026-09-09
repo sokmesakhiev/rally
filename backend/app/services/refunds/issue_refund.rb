@@ -55,6 +55,7 @@ module Refunds
       if @payment.registration.wants_notification?(:refund_issued)
         RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
       end
+      Notifications::RegistrationNotifier.refund_issued(@payment.registration)
       Result.new(status: :succeeded, refund: refund)
     end
 
@@ -80,6 +81,7 @@ module Refunds
       if @payment.registration.wants_notification?(:refund_issued)
         RegistrationMailer.refund_issued(@payment.registration, refund).deliver_later
       end
+      Notifications::RegistrationNotifier.refund_issued(@payment.registration)
       Result.new(status: :succeeded, refund: refund)
     end
 
