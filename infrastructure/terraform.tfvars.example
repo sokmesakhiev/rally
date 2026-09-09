@@ -55,3 +55,6 @@ db_username       = "rally"
 ecs_task_cpu      = 512
 ecs_task_memory   = 1024
 ecs_desired_count = 1
+
+# ── SENTRY ─────────────────────────────────────────────────────────────────────
+sentry_dsn = "YOUR_SENTRY_DSN"
