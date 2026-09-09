@@ -567,6 +567,20 @@
     "createOrganization": "បង្កើតអង្គភាព",
     "errorPickOrganization": "សូមជ្រើសរើសអង្គភាពណាដែលបង្ហាញព្រឹត្តិការណ៍នេះ"
   },
+  "notifications": {
+    "title": "ការជូនដំណឹង",
+    "aria": "ការជូនដំណឹង",
+    "ariaWithCount": "ការជូនដំណឹង {{count}} មិនទាន់អាន",
+    "empty": "គ្មានអ្វីថ្មីទេឥឡូវនេះ។",
+    "markAllRead": "សម្គាល់ថាបានអានទាំងអស់",
+    "justNow": "ទើបតែឥឡូវ",
+    "minutesAgo_one": "{{count}} នាទីមុន",
+    "minutesAgo_other": "{{count}} នាទីមុន",
+    "hoursAgo_one": "{{count}} ម៉ោងមុន",
+    "hoursAgo_other": "{{count}} ម៉ោងមុន",
+    "daysAgo_one": "{{count}} ថ្ងៃមុន",
+    "daysAgo_other": "{{count}} ថ្ងៃមុន"
+  },
   "pushNotifications": {
     "title": "ទទួលការជូនដំណឹងនៅលើឧបករណ៍នេះ",
     "body": "យើងនឹងជូនដំណឹងដល់អ្នក នៅពេលការទូទាត់របស់អ្នកបានជោគជ័យ មានកន្លែងទំនេរ ឬព័ត៌មានព្រឹត្តិការណ៍ផ្លាស់ប្តូរ។",

@@ -111,12 +111,7 @@ module Api
         data = response[:data] || {}
         case data[:payment_status]
         when "APPROVED"
-          payment.update!(status: "approved", paid_at: Time.current, raw_response: response)
-          payment.registration.mark_paid_from_payment!(payment)
-          if payment.registration.wants_notification?(:payment_received)
-            RegistrationMailer.payment_received(payment.registration).deliver_later
-            Notifications::RegistrationPush.payment_received(payment.registration)
-          end
+          approve_payment!(payment, response)
         when "DECLINED"
           payment.update!(status: "declined", raw_response: response)
         when "CANCELLED"
@@ -124,6 +119,36 @@ module Api
         else
           payment.update!(raw_response: response) # still PENDING — just refresh the timestamp
         end
+      end
+
+      # This poller and ProcessAbaPaywayWebhookJob both call check_transaction
+      # and can race each other for the same payment (the webhook fires,
+      # *and* the frontend's own poll lands, within the same few seconds).
+      # Both would otherwise see `pending?` true, both update! to "approved",
+      # and both fire the mailer/notifier — a real duplicate "payment
+      # received" email and bell entry, not just a harmless double-write.
+      # `with_lock` re-reads the row under `SELECT ... FOR UPDATE`, so
+      # whichever caller loses the race sees the already-"approved" status
+      # and `transitioned` comes back false. The ABA API call itself stays
+      # outside the lock — it's a network round-trip and shouldn't hold a row
+      # lock the other path (or a future retry) is waiting on.
+      def approve_payment!(payment, response)
+        transitioned = payment.with_lock do
+          next false unless payment.pending?
+
+          payment.update!(status: "approved", paid_at: Time.current, raw_response: response)
+          payment.registration.mark_paid_from_payment!(payment)
+          true
+        end
+        return unless transitioned
+
+        if payment.registration.wants_notification?(:payment_received)
+          RegistrationMailer.payment_received(payment.registration).deliver_later
+        end
+        # Outside the guard on purpose: the notifier records the in-app row
+        # unconditionally and gates only the push on that preference. See
+        # Notifications::RegistrationNotifier.
+        Notifications::RegistrationNotifier.payment_received(payment.registration)
       end
 
       def payment_json(payment)
