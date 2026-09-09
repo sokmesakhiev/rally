@@ -115,6 +115,7 @@ module Api
           payment.registration.mark_paid_from_payment!(payment)
           if payment.registration.wants_notification?(:payment_received)
             RegistrationMailer.payment_received(payment.registration).deliver_later
+            Notifications::RegistrationPush.payment_received(payment.registration)
           end
         when "DECLINED"
           payment.update!(status: "declined", raw_response: response)

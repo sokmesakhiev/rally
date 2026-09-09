@@ -1,15 +1,55 @@
 name: AI PR Review (Claude Opus 5)
+
+# On demand only — comment `/review` on the pull request.
+#
+# This used to run on `pull_request: [opened, synchronize, ...]`. `synchronize`
+# fires on every push to the branch, so a PR that took ten pushes to get right
+# paid for ten reviews, most of them re-reading code that hadn't changed.
+#
+# NOTE: `issue_comment` workflows always run the copy of this file on the
+# DEFAULT BRANCH (main), never the copy on the PR branch. Two consequences:
+#   * this change does nothing until it's merged to main
+#   * you can't test edits to this file from a PR — the version on main is
+#     what runs, every time
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
 permissions:
   contents: read
   pull-requests: write
+
 jobs:
   review:
-    if: ${{ !github.event.pull_request.draft }}
+    # `issue_comment` fires for issues as well as pull requests, and for every
+    # comment on either. Three guards, all load-bearing:
+    #
+    #   1. issue.pull_request — present only on PR comments, so plain issues
+    #      don't trigger a review of nothing.
+    #   2. startsWith(...'/review') — the command itself. Must open the
+    #      comment; "please /review this" won't match, which is deliberate,
+    #      otherwise merely discussing the command would fire it.
+    #   3. author_association — every run spends Anthropic credit against your
+    #      key, so restrict it to people who can already write to the repo.
+    #      Without this, anyone who can comment on a public PR can spend your
+    #      money at will.
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/review') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     steps:
+      # Acknowledge immediately. The review itself takes a while, and without
+      # this there's no signal the command was even picked up — you'd be left
+      # wondering whether to comment again.
+      - name: React to the command
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes' --silent
+
       - uses: actions/checkout@v7
 
       - uses: sokmesakhiev/ai-pr-review@v0
@@ -19,3 +59,7 @@ jobs:
           model: 'claude-opus-5' # provider is inferred from the model id
           reasoning_effort: 'medium'
           post_mode: 'review'
+          # issue_comment carries no pull_request payload, so the action can't
+          # infer which PR to review — this is exactly what its pr_number input
+          # is for. On a PR comment the issue number IS the PR number.
+          pr_number: ${{ github.event.issue.number }}

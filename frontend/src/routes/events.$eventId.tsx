@@ -35,6 +35,7 @@ import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
 import { PaymentPanel } from "@/components/payment-panel";
+import { PushNotificationPrompt } from "@/components/push-notification-prompt";
 import { ResultsLeaderboard } from "@/components/results-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -773,6 +774,15 @@ function EventDetail() {
                 />
               ) : activeReg ? (
                 /* Already registered and paid (or free) */
+                <div className="space-y-4">
+                {/* The one moment the ask is concrete rather than abstract —
+                    they've just committed to an event and there's something
+                    specific to be told about. Renders nothing unless the
+                    browser supports push, the server has VAPID keys, and they
+                    haven't already subscribed or been denied. The permission
+                    prompt only fires on click, never on mount. */}
+                <PushNotificationPrompt brandColor={brandColor} />
+
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p
@@ -820,6 +830,7 @@ function EventDetail() {
                       <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
                     </Button>
                   </div>
+                </div>
                 </div>
               ) : waitlistQuery.data ? (
                 /* On the waitlist — not registered yet, waiting for a spot */

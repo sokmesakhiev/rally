@@ -19,11 +19,11 @@ gem "rack-attack", "~> 6.7"
 
 # Error tracking / performance monitoring — see config/initializers/sentry.rb.
 # Inert unless SENTRY_DSN is set, so local/CI runs send nothing.
-gem "sentry-ruby", "~> 6.7"
-gem "sentry-rails", "~> 6.7"
+gem "sentry-ruby", "~> 7.0"
+gem "sentry-rails", "~> 7.0"
 
 # File uploads
-gem "image_processing", "~> 2.0"
+gem "image_processing", "~> 2.1"
 gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 
 # Certificates of participation — an .odt is a zip of XML files; rubyzip lets
@@ -31,7 +31,7 @@ gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 # without needing LibreOffice just to read/write the template itself (only
 # the final ODT→PDF conversion shells out to `soffice`, in
 # Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
-gem "rubyzip", "~> 3.5", require: "zip"
+gem "rubyzip", "~> 3.6", require: "zip"
 
 # CSV results import (Results::ImportCsv) — "csv" moved from a Ruby default
 # gem to a bundled gem as of Ruby 3.4, so under Bundler it needs an explicit
@@ -66,6 +66,12 @@ group :production do
 end
 
 gem "dry-validation"
+
+# Web push (VAPID). Encrypting a push payload is ECDH + HKDF + AES-GCM against
+# the subscriber's key — not something to hand-roll. Only loaded when a VAPID
+# keypair is configured; see Notifications::Vapid and the Null adapter for the
+# unconfigured path, which is the default in development, test and CI.
+gem "web-push", "~> 3.0"
 
 gem "ruby-vips", ">= 2.3"
 

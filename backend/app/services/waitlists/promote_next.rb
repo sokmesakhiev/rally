@@ -77,6 +77,7 @@ module Waitlists
 
       if registration&.wants_notification?(:promoted_from_waitlist)
         RegistrationMailer.promoted_from_waitlist(registration).deliver_later
+        Notifications::RegistrationPush.promoted_from_waitlist(registration)
       end
       registration
     rescue ActiveRecord::RecordInvalid
