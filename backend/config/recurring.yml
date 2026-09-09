@@ -13,3 +13,16 @@ production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+
+  # Frees capacity held by paid-event registrations that were abandoned before
+  # payment. Hourly is deliberate rather than lazy: the grace period is an hour
+  # (Registrations::ReleaseAbandoned::GRACE_PERIOD), so a slot is released
+  # between one and two hours after abandonment. Running it more often would
+  # only narrow that window, not the grace period, which is where the real
+  # latency is.
+  #
+  # Offset from the cleanup job above so two sweeps aren't contending for the
+  # same in-Puma job threads at the top of every hour.
+  release_abandoned_registrations:
+    class: ReleaseAbandonedRegistrationsJob
+    schedule: every hour at minute 37

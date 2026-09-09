@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -363,7 +363,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_050000) do
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
-    t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true
+    t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true, where: "(deleted_at IS NULL)"
     t.index ["event_id"], name: "index_registrations_on_event_id"
     t.index ["user_id"], name: "index_registrations_on_user_id"
   end
