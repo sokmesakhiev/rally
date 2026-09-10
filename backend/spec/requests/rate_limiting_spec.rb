@@ -190,6 +190,34 @@ RSpec.describe "Rate limiting", type: :request, rack_attack: true do
     end
   end
 
+  describe "cable ticket throttling" do
+    let!(:user) { create(:user, password: password) }
+
+    # Keyed on the JWT's user_id, so one account can't dodge the limit by
+    # changing networks. Every call writes into the shared cache, which is what
+    # makes a loop here worth bounding beyond the generic req/ip backstop.
+    it "throttles per user once the limit is exceeded" do
+      headers = auth_headers(user)
+
+      31.times { post "/api/v1/cable/ticket", headers: headers }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(json["code"]).to eq("rate_limited")
+    end
+
+    it "leaves a second account unaffected" do
+      other = create(:user, password: password)
+      mine = auth_headers(user)
+      theirs = auth_headers(other)
+
+      31.times { post "/api/v1/cable/ticket", headers: mine }
+      expect(response).to have_http_status(:too_many_requests)
+
+      post "/api/v1/cable/ticket", headers: theirs
+      expect(response).to have_http_status(:created)
+    end
+  end
+
   describe "safelisted paths" do
     it "never throttles the ABA PayWay webhook" do
       # Well past every limit, including the blanket req/ip one.

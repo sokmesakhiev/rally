@@ -26,9 +26,17 @@ default: &default
   # this back to `pool`.
   #
   # Pools are lazy and reaped: this is a ceiling on concurrent checkouts, not a
-  # set of connections held open. The production primary role overrides it
-  # below, because ActionCable's worker threads check out from that pool too.
-  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  # set of connections held open. The production `primary` and `cache` roles
+  # override it below, because ActionCable's worker threads check out from both.
+  #
+  # Deliberately NOT keyed on RAILS_MAX_THREADS. It used to be, and that made
+  # this value a hidden function of Puma's thread count: the moment
+  # RAILS_MAX_THREADS was set explicitly in ecs.tf (3), every role inheriting
+  # this default silently dropped from 5 to 3 — including `queue`, where Solid
+  # Queue already runs 3 worker threads plus a dispatcher and a heartbeat. One
+  # knob, two unrelated meanings. RAILS_DB_POOL is the floor for roles that
+  # don't state their own.
+  max_connections: <%= ENV.fetch("RAILS_DB_POOL") { 5 } %>
 
 
 development:
@@ -125,13 +133,26 @@ production:
     # raising either one can't silently starve the pool. Headroom of 3 covers
     # migrations on boot and a human on a console.
     #
-    # Budget check: db.t3.micro (1 GiB) allows Postgres ~112 connections; this
-    # is 2 tasks x 10, plus the much smaller cache/queue/cable role pools.
+    # Budget check: db.t3.micro (1 GiB) allows Postgres ~112 connections.
+    # Ceilings per task are primary 10 + cache 8 + queue 5 + cable 5 = 28, so
+    # 56 across both tasks — and that's the ceiling, not the resting state,
+    # since pools open connections on demand and reap them after ~5 minutes
+    # idle. Leaves room for migrations on boot and a human on a console.
     max_connections: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + ENV.fetch("ACTION_CABLE_WORKER_POOL_SIZE", 4).to_i + 3 %>
   cache:
     <<: *default
     url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_cache\\1") %>
     migrations_paths: db/cache_migrate
+    # Sized like primary, and for the same reason: ActionCable's workers hit
+    # this pool too. Cable::Ticket#redeem is a Rails.cache read running on a
+    # cable worker thread, while Puma's request threads are concurrently using
+    # the same store for rack-attack's throttle counters.
+    #
+    # The load here is spikiest exactly when it's least affordable: every
+    # deploy severs every socket at once, so all clients redeem a ticket within
+    # the same second or two. A pool sized for steady state would fail only
+    # during reconnect storms, which is the worst possible time to find out.
+    max_connections: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + ENV.fetch("ACTION_CABLE_WORKER_POOL_SIZE", 4).to_i + 1 %>
   queue:
     <<: *default
     url: <%= ENV["DATABASE_URL"].to_s.sub(%r{/[^/?]+(\?.*)?\z}, "/backend_production_queue\\1") %>

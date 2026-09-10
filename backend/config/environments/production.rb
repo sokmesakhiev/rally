@@ -66,9 +66,29 @@ Rails.application.configure do
   # `.presence` rather than ENV.fetch defaults: an env var that is *set but
   # empty* would satisfy fetch and yield an empty allowlist, which refuses
   # every connection.
-  config.action_cable.allowed_request_origins =
+  cable_origins =
     (ENV["ACTION_CABLE_ALLOWED_ORIGINS"].presence || ENV["FRONTEND_URL"].presence || "")
       .split(",").map(&:strip).reject(&:empty?)
+  config.action_cable.allowed_request_origins = cable_origins
+
+  # An empty allowlist refuses 100% of WebSocket connections while every other
+  # part of the app looks perfectly healthy — the only symptom is a per-attempt
+  # "Request origin not allowed" line buried in the request log. Say so once,
+  # loudly, at boot.
+  #
+  # Deliberately logged rather than raised. Raising would refuse to boot the
+  # container, taking registrations, payments and sign-in down over a
+  # chat-only misconfiguration — a much larger outage than the one it prevents.
+  # Fail loud, not fatal.
+  if cable_origins.empty?
+    config.after_initialize do
+      Rails.logger.error(
+        "[actioncable] allowed_request_origins is empty — every WebSocket connection " \
+        "will be refused. Set ACTION_CABLE_ALLOWED_ORIGINS (or FRONTEND_URL) to the " \
+        "frontend origin. HTTP endpoints are unaffected."
+      )
+    end
+  end
 
   # Each of these threads checks out a connection from the primary pool while
   # running channel callbacks, which is why config/database.yml sizes that pool

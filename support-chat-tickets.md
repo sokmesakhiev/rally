@@ -368,9 +368,13 @@ notification badge already built:
 
 ### Proposed scope
 
-- Throttles in the existing `config/initializers/rack_attack.rb` (rack-attack is
-  already a dependency with a configured initializer and spec support): messages
-  per user per minute, conversation creation per user per hour.
+- **Message rate limiting must live in `ChatChannel`, not rack-attack.**
+  Rack::Attack is Rack middleware and ActionCable hijacks the socket at connect
+  time, so no message sent over an established WebSocket ever traverses the Rack
+  stack again — there is no middleware layer where a throttle could be added.
+  Only the HTTP endpoints (conversation creation, history fetches, and
+  `POST /api/v1/cable/ticket`) are reachable by the existing initializer.
+  Budget for a per-connection token bucket in the channel itself.
 - Server-side body length cap, enforced in the model as well as the schema.
 - Suspended accounts cannot open or post — `authenticate_user!` already rejects
   them, so confirm with a spec rather than new code.

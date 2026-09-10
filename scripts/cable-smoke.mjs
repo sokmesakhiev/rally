@@ -19,6 +19,12 @@
 // Credentials come from the environment, never argv, so they don't land in
 // shell history or another user's `ps` output.
 //
+// PREREQUISITE: PingChannel is disabled unless ENABLE_PING_CHANNEL=true is set
+// on the *server* — subscriptions are rejected otherwise, and this script will
+// report "subscription rejected" for every connection. Set it on the task
+// definition for the duration of the run, then remove it. It is deliberately
+// not set in infrastructure/ecs.tf; see the channel for why.
+//
 //   Setup:  npm install --prefix scripts
 //   Run:    API_URL=https://api.example.com \
 //           ORIGIN=https://app.example.com \
