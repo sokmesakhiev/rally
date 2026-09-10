@@ -13,5 +13,13 @@ production:
   connects_to:
     database:
       writing: cable
-  polling_interval: 0.1.seconds
+  # Solid Cable is a polled pub/sub: every process queries the cable database
+  # on this interval forever, whether or not anyone is connected. The scaffold
+  # default of 0.1s is 10 queries/second/process — 20/s across the two ECS
+  # tasks — bought purely to shave sub-second delivery latency.
+  #
+  # Support chat does not need 100ms fan-out; half a second between a staff
+  # reply and it appearing is imperceptible in a chat thread. This trades
+  # latency nobody will notice for a 5x cut in constant background load.
+  polling_interval: 0.5.seconds
   message_retention: 1.day

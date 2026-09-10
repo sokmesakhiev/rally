@@ -61,6 +61,29 @@ Rails.application.routes.draw do
       post "notifications/read_all",  to: "notifications#read_all"
       post "notifications/:id/read",  to: "notifications#read"
 
+      # Support chat, participant side. The staff side lives under the admin
+      # namespace below/elsewhere — see Api::V1::Support::BaseController.
+      #
+      # No :id anywhere on purpose: a participant has at most one live thread
+      # (enforced by a partial unique index), so "which conversation" is never
+      # theirs to choose and there's nothing to authorize per-record.
+      scope :support do
+        get  "conversation", to: "support/conversations#show"
+        post "conversation", to: "support/conversations#create"
+        post "read",         to: "support/conversations#read"
+        # ?after=<message id> is the reconnect catch-up — see
+        # Api::V1::Support::MessagesController and Message.after_id.
+        get  "messages",     to: "support/messages#index"
+        post "messages",     to: "support/messages#create"
+      end
+
+      # WebSocket auth. Browsers can't set headers on a WebSocket, and the JWT
+      # is valid for 30 days — far too long to put in a URL that lands in ALB
+      # access logs and browser history. Clients POST here (with the normal
+      # Bearer token) for a single-use, 30-second ticket instead, then connect
+      # to /cable?ticket=... See Cable::Ticket.
+      post "cable/ticket", to: "cable_tickets#create"
+
       # Web push. #vapid_public_key is unauthenticated on purpose — it returns
       # a public key the browser needs before it can subscribe at all.
       #
@@ -171,6 +194,20 @@ Rails.application.routes.draw do
       # surface doesn't advertise itself. Admin is granted from the console
       # only — there is deliberately no promote-to-admin endpoint.
       namespace :admin do
+        # Support chat, staff side. Unlike the participant routes every one of
+        # these takes an :id — staff read other people's conversations, which
+        # is why require_admin! is the whole authorization story here and why
+        # the state changes (assign/unassign/resolve) are written to
+        # admin_actions. Replies deliberately are not: the message row is
+        # already an attributed, permanent record.
+        get  "conversations",              to: "conversations#index"
+        get  "conversations/:id",          to: "conversations#show"
+        post "conversations/:id/messages", to: "conversations#reply"
+        post "conversations/:id/assign",   to: "conversations#assign"
+        post "conversations/:id/unassign", to: "conversations#unassign"
+        post "conversations/:id/resolve",  to: "conversations#resolve"
+        post "conversations/:id/read",     to: "conversations#read"
+
         get  "users",              to: "users#index"
         post "users/:id/suspend",   to: "users#suspend"
         post "users/:id/unsuspend", to: "users#unsuspend"

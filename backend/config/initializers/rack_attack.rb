@@ -179,6 +179,52 @@ class Rack::Attack
     req.ip if req.path.match?(%r{\A/api/v1/(registrations/[^/]+/payments|payments/[^/]+)\z})
   end
 
+  # ── WebSocket connection tickets ──
+  #
+  # Legitimate use is roughly one call per connection: on page load, and again
+  # on each reconnect. Reconnects cluster (every deploy severs every socket at
+  # once, and ActionCable retries with backoff), so the limit has to absorb a
+  # burst without permitting a loop — 30/5min is several times the worst honest
+  # case and still far below what would matter.
+  #
+  # Worth its own counter despite the generic "req/ip" backstop (300/5min):
+  # every call writes an entry into the shared Solid Cache, so this is a way to
+  # churn a resource the whole platform depends on, and the 300 budget is meant
+  # for ordinary browsing rather than one endpoint.
+  #
+  # Keyed per user, not per IP: a caller must already be authenticated to get
+  # here at all, so there's an identity to key on — and unlike an IP, it isn't
+  # shed by switching networks. Same reasoning as "uploads/user" above; falls
+  # through to "req/ip" for a request with no usable token, which
+  # authenticate_user! rejects anyway.
+  throttle("cable_ticket/user", limit: 30, period: 5.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/cable/ticket"
+  end
+
+  # ── Support chat ──
+  #
+  # These two are the *only* chat surfaces Rack can see. Once ActionCable
+  # hijacks the socket (Ticket D), messages sent over an established WebSocket
+  # never re-enter this stack, so anything sent that way has to be limited
+  # inside the channel instead. Throttling here still matters: the REST path
+  # stays available to any client, and is the one an abusive script would
+  # reach for first precisely because it needs no socket.
+  #
+  # 60 messages per 10 minutes is well past human typing speed for a support
+  # conversation while still bounding how fast one account can fill a thread —
+  # and every message is a row an agent has to read past.
+  throttle("support_messages/user", limit: 60, period: 10.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/support/messages"
+  end
+
+  # Conversation creation is idempotent (Conversations::Start returns the
+  # existing thread), so this isn't guarding against duplicate rows — the
+  # partial unique index does that. It's guarding the SELECT-then-INSERT
+  # underneath it, which a loop would otherwise run unbounded.
+  throttle("support_conversation/user", limit: 30, period: 10.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/support/conversation"
+  end
+
   ### Response ################################################################
 
   # JSON, not Rack::Attack's default text/plain body — every other error in

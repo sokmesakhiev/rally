@@ -56,6 +56,53 @@ Rails.application.configure do
   config.active_job.queue_adapter = :solid_queue
   config.solid_queue.connects_to = { database: { writing: :queue } }
 
+  # --- ActionCable (support chat) ---------------------------------------
+  #
+  # Origin allowlist. ActionCable rejects any connection whose Origin isn't
+  # listed, and the frontend is served from CloudFront on a *different* origin
+  # than this API — so leaving this unset refuses every real connection while
+  # development (permissive by default) looks perfectly healthy. Driven by env
+  # so it tracks the CloudFront domain instead of being baked into an image.
+  # `.presence` rather than ENV.fetch defaults: an env var that is *set but
+  # empty* would satisfy fetch and yield an empty allowlist, which refuses
+  # every connection.
+  cable_origins =
+    (ENV["ACTION_CABLE_ALLOWED_ORIGINS"].presence || ENV["FRONTEND_URL"].presence || "")
+      .split(",").map(&:strip).reject(&:empty?)
+  config.action_cable.allowed_request_origins = cable_origins
+
+  # An empty allowlist refuses 100% of WebSocket connections while every other
+  # part of the app looks perfectly healthy — the only symptom is a per-attempt
+  # "Request origin not allowed" line buried in the request log. Say so once,
+  # loudly, at boot.
+  #
+  # Deliberately logged rather than raised. Raising would refuse to boot the
+  # container, taking registrations, payments and sign-in down over a
+  # chat-only misconfiguration — a much larger outage than the one it prevents.
+  # Fail loud, not fatal.
+  if cable_origins.empty?
+    config.after_initialize do
+      Rails.logger.error(
+        "[actioncable] allowed_request_origins is empty — every WebSocket connection " \
+        "will be refused. Set ACTION_CABLE_ALLOWED_ORIGINS (or FRONTEND_URL) to the " \
+        "frontend origin. HTTP endpoints are unaffected."
+      )
+    end
+  end
+
+  # Each of these threads checks out a connection from the primary pool while
+  # running channel callbacks, which is why config/database.yml sizes that pool
+  # from this same variable. Changing it here without changing it there is the
+  # failure mode that config comment exists to prevent.
+  config.action_cable.worker_pool_size = ENV.fetch("ACTION_CABLE_WORKER_POOL_SIZE", 4).to_i
+
+  # Mounted in-process rather than as a standalone cable server: at this
+  # traffic level a second ECS service isn't worth its operational cost, and
+  # ActionCable hijacks the socket off Puma's request threads anyway (see
+  # support-chat-tickets.md, Ticket 0). Revisit if connection counts grow
+  # enough to compete with request handling for memory.
+  config.action_cable.mount_path = "/cable"
+
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
   config.action_mailer.raise_delivery_errors = true
