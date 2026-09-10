@@ -194,6 +194,20 @@ Rails.application.routes.draw do
       # surface doesn't advertise itself. Admin is granted from the console
       # only — there is deliberately no promote-to-admin endpoint.
       namespace :admin do
+        # Support chat, staff side. Unlike the participant routes every one of
+        # these takes an :id — staff read other people's conversations, which
+        # is why require_admin! is the whole authorization story here and why
+        # the state changes (assign/unassign/resolve) are written to
+        # admin_actions. Replies deliberately are not: the message row is
+        # already an attributed, permanent record.
+        get  "conversations",              to: "conversations#index"
+        get  "conversations/:id",          to: "conversations#show"
+        post "conversations/:id/messages", to: "conversations#reply"
+        post "conversations/:id/assign",   to: "conversations#assign"
+        post "conversations/:id/unassign", to: "conversations#unassign"
+        post "conversations/:id/resolve",  to: "conversations#resolve"
+        post "conversations/:id/read",     to: "conversations#read"
+
         get  "users",              to: "users#index"
         post "users/:id/suspend",   to: "users#suspend"
         post "users/:id/unsuspend", to: "users#unsuspend"
