@@ -37,6 +37,11 @@ module Conversations
       # Broadcast defers to the outermost commit and never fires on rollback.
       Broadcast.message_created(message)
 
+      # The other half of delivery: the socket reaches someone with the panel
+      # open, this reaches someone who closed the tab. No-ops for anything that
+      # isn't a staff reply — see SupportNotifier.
+      ::Notifications::SupportNotifier.staff_replied(message)
+
       message
     end
 

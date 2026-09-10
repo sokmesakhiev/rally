@@ -375,7 +375,13 @@ notification badge already built:
   **Do not extend `RegistrationNotifier`** — its whole surface takes a
   `registration`, and a support thread has none. Same shape, different subject.
 - Follow the established split: the in-app row is always written; push respects
-  the user's preference.
+  the user's preference. **Refined while building:** push here is
+  *unconditional*, with no `notify_support_reply` column. A reply is the answer
+  to a question this person asked, which puts it with the transactional
+  registration confirmation rather than with the announcements you might
+  reasonably mute — offering to mute the answer to your own question would be
+  strange, and it avoids a migration plus a profile toggle for a preference
+  nobody would sensibly set.
 - **Email fallback on a delay.** A job enqueued `perform_later(wait: 3.minutes)`
   that emails only if the participant still hasn't read the message. Chat without
   this is a black hole for anyone who walks away mid-conversation.
