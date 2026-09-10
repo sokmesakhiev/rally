@@ -23,19 +23,34 @@
 # database as fast as their connection allows, with nothing in the request path
 # able to stop them.
 #
-# So it stays disabled unless ENABLE_PING_CHANNEL is explicitly set — never in
-# infrastructure/ecs.tf. Turn it on for the duration of a smoke run and off
-# again afterwards.
+# So it is unreachable by ordinary accounts. Two ways in:
+#
+#   * **current_user.admin?** — the normal path, and how the smoke run
+#     authenticates. Admin is granted only from a console, and it's the same
+#     audience already trusted to suspend users and delete events; a
+#     diagnostic echo is not the sharpest tool they hold.
+#   * **ENABLE_PING_CHANNEL=true** — opens it to every authenticated user.
+#     Only needed for a load run large enough to need several non-admin
+#     accounts, because the cable-ticket throttle is keyed per user.
+#
+# The admin path exists because the env var turned out to be awkward *and*
+# weaker. Awkward: aws_ecs_task_definition.app carries
+# `ignore_changes = [container_definitions]`, so Terraform won't push env
+# changes at all, and scripts/deploy.sh only forces a new deployment of the
+# existing revision — setting it means hand-registering a task definition
+# revision and undoing it afterwards. Weaker: while it's on, every
+# authenticated user can reach this channel. The admin gate never widens the
+# surface at all.
 #
 # The same constraint applies to the real ChatChannel: message rate limiting
 # has to live *in the channel*, not in rack-attack. See Ticket H.
 class PingChannel < ApplicationCable::Channel
-  def self.enabled?
-    ENV["ENABLE_PING_CHANNEL"] == "true"
+  def self.enabled_for?(user)
+    user&.admin? || ENV["ENABLE_PING_CHANNEL"] == "true"
   end
 
   def subscribed
-    return reject unless self.class.enabled?
+    return reject unless self.class.enabled_for?(current_user)
 
     stream_from "ping:#{current_user.id}"
   end
@@ -45,11 +60,11 @@ class PingChannel < ApplicationCable::Channel
   # `transmit` would look identical while the adapter was misconfigured, which
   # is precisely the failure this is meant to catch.
   #
-  # Re-checks `enabled?` rather than trusting `subscribed` to have rejected:
-  # actions are dispatched per message, and a subscription established while
-  # the flag was on would otherwise keep working after it was turned off.
+  # Re-checks rather than trusting `subscribed` to have rejected: actions are
+  # dispatched per message, and a subscription opened while the flag was on —
+  # or before an admin flag was revoked — would otherwise keep working.
   def echo(data)
-    return unless self.class.enabled?
+    return unless self.class.enabled_for?(current_user)
 
     ActionCable.server.broadcast(
       "ping:#{current_user.id}",
