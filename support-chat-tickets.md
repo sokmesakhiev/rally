@@ -302,7 +302,13 @@ should land in v1, not "later".
 - Broadcast payloads carry the full message, so the happy path needs no follow-up
   fetch — but the client still reconciles against REST on reconnect.
 
-Delete the `PingChannel` scaffolding from Ticket 0 here.
+~~Delete the `PingChannel` scaffolding from Ticket 0 here.~~ **Deferred.**
+Ticket 0's cross-task fan-out check is still open: `terraform.tfvars` runs
+`ecs_desired_count = 1`, so the smoke run proved Solid Cable's write → poll →
+dispatch loop works (10,800 echoes delivered to all 30 subscribers) but could
+not observe delivery *between* tasks, because there is only one. PingChannel is
+the only tool that can answer that without posting real messages into real
+conversations. Delete it once the check has been run at `desired_count = 2`.
 
 ---
 
@@ -368,13 +374,14 @@ notification badge already built:
 
 ### Proposed scope
 
-- **Message rate limiting must live in `ChatChannel`, not rack-attack.**
-  Rack::Attack is Rack middleware and ActionCable hijacks the socket at connect
-  time, so no message sent over an established WebSocket ever traverses the Rack
-  stack again — there is no middleware layer where a throttle could be added.
-  Only the HTTP endpoints (conversation creation, history fetches, and
-  `POST /api/v1/cable/ticket`) are reachable by the existing initializer.
-  Budget for a per-connection token bucket in the channel itself.
+- ~~Message rate limiting must live in `ChatChannel`, not rack-attack.~~
+  **No longer needed — Ticket D made both channels receive-only.** Clients send
+  over REST and only *receive* over the socket, so there is no client-callable
+  channel action to rate limit and the existing rack-attack throttles
+  (`support_messages/user`, `support_conversation/user`) already cover every
+  write path. Specs assert `action_methods` is empty on both channels; if
+  anyone adds one, the throttling problem comes back with it and this budget
+  line becomes real again.
 - Server-side body length cap, enforced in the model as well as the schema.
 - Suspended accounts cannot open or post — `authenticate_user!` already rejects
   them, so confirm with a spec rather than new code.

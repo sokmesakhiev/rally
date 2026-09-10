@@ -212,52 +212,23 @@ module Api
           scope
         end
 
-        # `unread:` is passed in for a page (computed once for all rows) and
-        # falls back to the per-row query for a single conversation, where one
-        # extra query is cheaper than the plumbing to avoid it.
+        # Shapes live in Support::Serializers — shared with the participant
+        # controller and, since Ticket D, with the WebSocket broadcast.
+        #
+        # `unread:` is passed in for a page (computed once for all rows by
+        # Conversation.unread_ids_among) and falls back to the per-row query for
+        # a single conversation, where one extra query is cheaper than the
+        # plumbing to avoid it.
         def summary_json(conversation, unread: nil)
-          {
-            id: conversation.id,
-            status: conversation.status,
-            subject: conversation.subject,
-            unread: unread.nil? ? conversation.unread_for_staff? : unread,
-            assigned_admin_id: conversation.assigned_admin_id,
-            last_message_at: conversation.last_message_at,
-            created_at: conversation.created_at,
-            participant: {
-              id: conversation.user_id,
-              display_name: conversation.user.profile&.display_name,
-              email: conversation.user.email
-            }
-          }
+          ::Support::Serializers.staff_conversation(conversation, unread: unread)
         end
 
         def detail_json(conversation)
-          summary_json(conversation).merge(
-            staff_last_read_at: conversation.staff_last_read_at,
-            participant_last_read_at: conversation.participant_last_read_at
-          )
+          ::Support::Serializers.staff_conversation_detail(conversation)
         end
 
-        # Unlike the participant serializer, this one names names — an agent
-        # needs to know which colleague replied, and everyone reading it is
-        # already staff.
         def message_json(message)
-          {
-            id: message.id,
-            body: message.body,
-            sender_role: message.sender_role,
-            sender_id: message.sender_id,
-            sender_name: sender_name_for(message),
-            created_at: message.created_at
-          }
-        end
-
-        def sender_name_for(message)
-          return nil if message.system?
-          return "Deleted account" if message.orphaned_sender?
-
-          message.sender.profile&.display_name || message.sender.email
+          ::Support::Serializers.staff_message(message)
         end
 
         def participant_json(user)
