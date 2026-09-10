@@ -965,5 +965,21 @@
     "upcoming": "Upcoming events",
     "past": "Past events",
     "noUpcoming": "No upcoming events right now."
+  },
+  "supportChat": {
+    "title": "Chat with support",
+    "launcher": "Chat with support",
+    "launcherWithCount": "Chat with support, {{count}} unread",
+    "emptyTitle": "How can we help?",
+    "emptyHint": "Send a message and our team will reply here. You'll get a notification when they do.",
+    "placeholder": "Type your message…",
+    "send": "Send",
+    "connecting": "Connecting…",
+    "disconnected": "Not connected. Your messages will still send.",
+    "sendFailed": "Didn't send.",
+    "retry": "Retry",
+    "discard": "Discard",
+    "loadOlder": "Load earlier messages",
+    "loading": "Loading…"
   }
 }

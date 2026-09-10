@@ -19,6 +19,7 @@ import { AuthProvider } from "../lib/use-auth";
 import { applyStoredLanguage } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
 import { SiteFooter } from "../components/site-footer";
+import { SupportChat } from "../components/support-chat";
 import iconUrl from "@/assets/icon.png";
 
 function NotFoundComponent() {
@@ -153,6 +154,10 @@ function RootComponent() {
           <SiteFooter />
         </div>
         <Toaster />
+        {/* Inside AuthProvider and QueryClientProvider because it needs both.
+            Renders null for anonymous visitors — no bubble, no poll, no
+            socket, and no @rails/actioncable in their bundle. */}
+        <SupportChat />
       </AuthProvider>
     </QueryClientProvider>
   );

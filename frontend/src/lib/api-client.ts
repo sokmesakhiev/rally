@@ -1445,3 +1445,110 @@ export const notificationsApi = {
     return api.post<{ unread_count: number }>("/notifications/read_all");
   },
 };
+
+// ─── Support chat ─────────────────────────────────────────────────────────────
+
+/**
+ * One message in the participant's support thread.
+ *
+ * Shape mirrors `Support::Serializers.participant_message` exactly — the same
+ * payload arrives over REST and over the WebSocket, and the UI merges both into
+ * one list, so any drift would surface as messages rendering differently
+ * depending on how they arrived.
+ *
+ * Note there is no sender name: a participant needs to know which *side* spoke,
+ * not which employee, so staff messages render from `sender_role` alone.
+ */
+export interface ApiSupportMessage {
+  id: string;
+  body: string;
+  sender_role: "participant" | "staff" | "system";
+  created_at: string;
+}
+
+/** Mirrors `Support::Serializers.participant_conversation`. */
+export interface ApiSupportConversation {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  subject: string | null;
+  unread_count: number;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+export const supportApi = {
+  /**
+   * The caller's live thread, or `null` — which is the normal state for almost
+   * everyone, hence null rather than a 404. Polled by the launcher for its
+   * unread badge.
+   */
+  conversation() {
+    return api.get<{ conversation: ApiSupportConversation | null }>("/support/conversation");
+  },
+
+  /**
+   * Idempotent: returns the existing live thread if there is one. Not required
+   * before sending — `sendMessage` starts a thread on its own — but useful to
+   * pre-create one when the panel opens.
+   */
+  startConversation(subject?: string) {
+    return api.post<{ conversation: ApiSupportConversation }>(
+      "/support/conversation",
+      subject ? { subject } : undefined,
+    );
+  },
+
+  /**
+   * Three modes, and `has_more` answers the question belonging to each:
+   *   (none)   newest page, oldest-first. has_more => older history above.
+   *   after    everything since a known message — the reconnect catch-up.
+   *   before   scrolling back through history.
+   * `after` wins if both are given.
+   */
+  messages(params: { after?: string; before?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.after) query.set("after", params.after);
+    else if (params.before) query.set("before", params.before);
+    const suffix = query.toString() ? `?${query}` : "";
+
+    return api.get<{
+      conversation: ApiSupportConversation | null;
+      messages: ApiSupportMessage[];
+      has_more: boolean;
+    }>(`/support/messages${suffix}`);
+  },
+
+  sendMessage(body: string) {
+    return api.post<{ message: ApiSupportMessage; conversation: ApiSupportConversation }>(
+      "/support/messages",
+      { body },
+    );
+  },
+
+  markRead() {
+    return api.post<{ conversation: ApiSupportConversation | null }>("/support/read");
+  },
+};
+
+export const cableApi = {
+  /**
+   * A single-use, 30-second credential for opening the WebSocket.
+   *
+   * Browsers can't set headers on a WebSocket, and this app's JWT lasts 30
+   * days — far too long to put in a URL that lands in access logs and browser
+   * history. Every connection attempt needs its own ticket; they cannot be
+   * cached or reused.
+   */
+  ticket() {
+    return api.post<{ ticket: string; expires_in: number }>("/cable/ticket");
+  },
+};
+
+/**
+ * The `wss://` endpoint for a given ticket. Built here because this module owns
+ * the API origin, and getting it wrong is invisible until the socket silently
+ * fails to connect.
+ */
+export function cableUrl(ticket: string): string {
+  return `${RAW_API_URL.replace(/^http/, "ws")}/cable?ticket=${encodeURIComponent(ticket)}`;
+}

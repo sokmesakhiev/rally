@@ -325,6 +325,14 @@ conversations. Delete it once the check has been run at `desired_count = 2`.
   /messages?after=<last id>` and merge. Components never touch ActionCable
   directly. This is also the seam that makes a fallback to polling a one-file
   change if operational reality turns out worse than Ticket 0's staging numbers.
+
+  **Refinement made while building:** the socket opens when the *panel* opens,
+  not when the session starts. The badge runs off the same 60-second REST poll
+  the notification bell uses, so live sockets track people actively chatting
+  rather than people logged in — worth having on a single-task deployment. And
+  a consumer is rebuilt from scratch on every reconnect rather than letting
+  ActionCable replay its URL, because the ticket in that URL is single-use and
+  the built-in monitor would otherwise retry forever against a spent one.
 - Connection state must be *visible*: a quiet "reconnecting…" line beats a
   composer that silently swallows messages. Optimistic send with a failed state
   and retry.
