@@ -17,6 +17,29 @@ class User < ApplicationRecord
   has_many :push_subscriptions, dependent: :destroy
   # In-app notifications — the header bell. See Notification.
   has_many :notifications, dependent: :destroy
+
+  # Support chat (see Conversation). Three associations, because this user can
+  # appear in a conversation in three unrelated capacities:
+  #
+  #   conversations         — threads they opened, as the participant. destroy:
+  #                           their own support history is theirs, and goes
+  #                           with the account.
+  #   assigned_conversations— threads they've claimed as staff. nullify: the
+  #                           claim is a sticky note, and someone else's
+  #                           conversation must not vanish because the admin
+  #                           who picked it up left.
+  #   sent_messages         — individual messages, which mostly live inside
+  #                           *other people's* threads when this user is staff.
+  #                           The database nullifies sender_id on delete
+  #                           (ON DELETE SET NULL) so those replies survive as
+  #                           "deleted account" rather than tearing a hole in a
+  #                           participant's thread; declared here so the
+  #                           association doesn't try to restrict the delete.
+  has_many :conversations, dependent: :destroy
+  has_many :assigned_conversations, class_name: "Conversation",
+           foreign_key: :assigned_admin_id, dependent: :nullify, inverse_of: :assigned_admin
+  has_many :sent_messages, class_name: "Message",
+           foreign_key: :sender_id, dependent: :nullify, inverse_of: :sender
   # Events this user helps run but did NOT create — see EventMembership.
   # Distinct from `events` above (which is creator_id): an organizer's own
   # events and the ones they've been invited onto are different lists, and
