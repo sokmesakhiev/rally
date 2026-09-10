@@ -61,6 +61,22 @@ Rails.application.routes.draw do
       post "notifications/read_all",  to: "notifications#read_all"
       post "notifications/:id/read",  to: "notifications#read"
 
+      # Support chat, participant side. The staff side lives under the admin
+      # namespace below/elsewhere — see Api::V1::Support::BaseController.
+      #
+      # No :id anywhere on purpose: a participant has at most one live thread
+      # (enforced by a partial unique index), so "which conversation" is never
+      # theirs to choose and there's nothing to authorize per-record.
+      scope :support do
+        get  "conversation", to: "support/conversations#show"
+        post "conversation", to: "support/conversations#create"
+        post "read",         to: "support/conversations#read"
+        # ?after=<message id> is the reconnect catch-up — see
+        # Api::V1::Support::MessagesController and Message.after_id.
+        get  "messages",     to: "support/messages#index"
+        post "messages",     to: "support/messages#create"
+      end
+
       # WebSocket auth. Browsers can't set headers on a WebSocket, and the JWT
       # is valid for 30 days — far too long to put in a URL that lands in ALB
       # access logs and browser history. Clients POST here (with the normal

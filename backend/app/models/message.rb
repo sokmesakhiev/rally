@@ -52,6 +52,25 @@ class Message < ApplicationRecord
     where("(messages.created_at, messages.id) > (?, ?)", *cursor)
   }
 
+  # Scrolling back through history — the mirror of after_id, and the reason
+  # `has_more` on a first page is actionable rather than merely informative. A
+  # thread longer than one page would otherwise have a beginning the
+  # participant could never reach.
+  #
+  # Note the fallback differs from after_id's on purpose. There, an unplaceable
+  # cursor means a client that may have lost messages, so a full resync is the
+  # safe answer. Here it would mean silently serving the newest page again as
+  # though it were older history — an infinite scroll that never advances — so
+  # an unknown cursor returns nothing instead.
+  scope :before_id, lambda { |id|
+    next none if id.blank?
+
+    cursor = Message.where(id: id).pick(:created_at, :id)
+    next none if cursor.nil?
+
+    where("(messages.created_at, messages.id) < (?, ?)", *cursor)
+  }
+
   def from_participant?
     sender_role == PARTICIPANT
   end
