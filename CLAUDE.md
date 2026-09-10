@@ -117,6 +117,21 @@ Two things that follow from sockets being long-lived, both easy to get wrong:
 
 `Cable::Ticket` stores in `Rails.cache` because production's Solid Cache is Postgres-backed and therefore shared across ECS tasks — the task issuing a ticket is often not the task terminating the socket. Test uses `:null_store`, where writes vanish, so specs touching it need the `:with_cache` tag (`spec/support/cache_helpers.rb`).
 
+### Support chat: Conversation and Message
+
+Participant ↔ Rally staff only (`support-chat-tickets.md`). Organizer ↔ participant chat is explicitly out of scope, and nothing is built generically in anticipation of it.
+
+**Staff are not members of a conversation.** A `Conversation` belongs to one `user` — the participant — and any admin can read or answer any thread, since `Api::V1::Admin::BaseController`'s `require_admin!` is the whole gate. `assigned_admin` is a soft claim ("someone is looking at this"), not ownership, and is nullified rather than cascaded if that admin's account goes away.
+
+Four decisions that look arbitrary until they bite:
+
+- **One live thread per participant**, enforced by a partial unique index on `user_id WHERE status <> 'resolved'` *and* a matching `conditions:` on the model's uniqueness validation. Same shape and same reasoning as the registrations kept-index — a model that rejects what the database allows is the more confusing half of that bug. `open` and `pending` both count as live; only `resolved` frees the slot.
+- **Read state is two timestamps on the conversation** (`participant_last_read_at`, `staff_last_read_at`), not a join table. There is exactly one participant and staff act as a *pool*, so "has the participant seen this" and "has anyone on the team seen this" are the only questions asked. Unread always means unread *from the other side* — comparing against `last_message_at` would be cheaper and wrong, since your own reply is the newest message and must not light up your own badge. `Conversation.awaiting_staff` is the same predicate in SQL for the inbox, and a spec pins the two against each other.
+- **`messages.sender_role` is snapshotted at write time**, derived from *position in the thread* (`sender_id == conversation.user_id`), never from `users.admin`. An admin who opens their own support thread is the participant in it, and revoking someone's admin flag must not retroactively relabel months of their replies. Same reasoning as `Registration#snapshot_refund_policy`.
+- **`messages.sender_id` is nullable with `ON DELETE SET NULL`.** A staff reply lives inside some participant's thread and has to outlive the person who wrote it (`Message#orphaned_sender?` renders it as a deleted account). There is deliberately no CHECK requiring a sender on non-system messages — that constraint and `ON DELETE SET NULL` are mutually exclusive, and it would turn deleting a staff account into a foreign key error. The model enforces it `on: :create` instead, which is the only point where it can be true.
+
+`Message.after_id` is the reconnect catch-up and compares the `(created_at, id)` pair, not `created_at` alone: timestamps collide, and a plain `>` would drop one of a colliding pair forever while `>=` would replay it. An unrecognised cursor falls back to the full thread — a resync is recoverable, an empty result looks like data loss.
+
 ### Notifications: three channels, one notifier
 
 `Notifications::RegistrationNotifier` is the single place the wording of each participant-facing event lives. It writes an in-app `Notification` row (what the header bell counts) and enqueues a web push; the `RegistrationMailer` call stays at the trigger site. `payment_received` alone fires from two paths — the polling endpoint and the ABA webhook — which is why the copy isn't inlined at call sites.

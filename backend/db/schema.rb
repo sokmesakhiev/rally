@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_10_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -61,6 +61,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
     t.uuid "registration_id", null: false
     t.datetime "updated_at", null: false
     t.index ["registration_id"], name: "index_certificates_on_registration_id", unique: true
+  end
+
+  create_table "conversations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "assigned_admin_id"
+    t.datetime "created_at", null: false
+    t.datetime "last_message_at"
+    t.datetime "participant_last_read_at"
+    t.datetime "staff_last_read_at"
+    t.string "status", default: "open", null: false
+    t.string "subject"
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["assigned_admin_id"], name: "index_conversations_on_assigned_admin_id", where: "(assigned_admin_id IS NOT NULL)"
+    t.index ["status", "last_message_at"], name: "index_conversations_on_status_and_last_message_at", order: { last_message_at: :desc }
+    t.index ["user_id", "created_at"], name: "index_conversations_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_conversations_one_live_per_user", unique: true, where: "((status)::text <> 'resolved'::text)"
+    t.check_constraint "status::text = ANY (ARRAY['open'::character varying, 'pending'::character varying, 'resolved'::character varying]::text[])", name: "conversations_status_valid"
   end
 
   create_table "event_activities", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -190,6 +207,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
     t.index ["organization_id", "created_at"], name: "index_host_ledger_entries_on_organization_id_and_created_at"
     t.index ["source_type", "source_id"], name: "index_host_ledger_entries_on_source_type_and_source_id"
     t.check_constraint "amount_cents <> 0", name: "host_ledger_entries_amount_non_zero"
+  end
+
+  create_table "messages", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.text "body", null: false
+    t.uuid "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.uuid "sender_id"
+    t.string "sender_role", null: false
+    t.datetime "updated_at", null: false
+    t.index ["conversation_id", "created_at"], name: "index_messages_on_conversation_id_and_created_at"
+    t.check_constraint "btrim(body) <> ''::text", name: "messages_body_not_blank"
+    t.check_constraint "char_length(body) <= 5000", name: "messages_body_length"
+    t.check_constraint "sender_role::text = ANY (ARRAY['participant'::character varying, 'staff'::character varying, 'system'::character varying]::text[])", name: "messages_sender_role_valid"
   end
 
   create_table "notifications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -465,6 +495,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "admin_actions", "users", column: "admin_id"
   add_foreign_key "certificates", "registrations"
+  add_foreign_key "conversations", "users"
+  add_foreign_key "conversations", "users", column: "assigned_admin_id", on_delete: :nullify
   add_foreign_key "event_activities", "events"
   add_foreign_key "event_activities", "users", column: "actor_id"
   add_foreign_key "event_invitations", "events"
@@ -479,6 +511,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "host_ledger_entries", "organizations"
+  add_foreign_key "messages", "conversations"
+  add_foreign_key "messages", "users", column: "sender_id", on_delete: :nullify
   add_foreign_key "notifications", "events"
   add_foreign_key "notifications", "users"
   add_foreign_key "organization_memberships", "organizations"
