@@ -219,7 +219,10 @@ console.log(`
   hosts seen     ${[...stats.hosts].join(", ") || "none"}
   fan-out        ${
     stats.hosts.size < 2
-      ? "INCONCLUSIVE — only one task published; rerun with more connections"
+      ? "INCONCLUSIVE — only one task published. Check `desiredCount` on the " +
+        "ECS service first: infrastructure/terraform.tfvars sets 1, and with a " +
+        "single task there is no cross-task delivery to observe. More " +
+        "connections won't help until at least two are running."
       : stats.socketsSeeingBothTasks > 0
         ? `OK — ${stats.socketsSeeingBothTasks} socket(s) received echoes from both tasks`
         : "FAILED — two tasks published, but no single socket heard both. " +

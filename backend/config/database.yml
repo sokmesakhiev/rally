@@ -134,10 +134,12 @@ production:
     # migrations on boot and a human on a console.
     #
     # Budget check: db.t3.micro (1 GiB) allows Postgres ~112 connections.
-    # Ceilings per task are primary 10 + cache 8 + queue 5 + cable 5 = 28, so
-    # 56 across both tasks — and that's the ceiling, not the resting state,
-    # since pools open connections on demand and reap them after ~5 minutes
-    # idle. Leaves room for migrations on boot and a human on a console.
+    # Ceilings per task are primary 10 + cache 8 + queue 5 + cable 5 = 28.
+    # infrastructure/terraform.tfvars currently runs ecs_desired_count = 1, so
+    # 28 total; at the variables.tf default of 2 it would be 56. Either way
+    # that's the ceiling, not the resting state — pools open connections on
+    # demand and reap them after ~5 minutes idle. Leaves room for migrations on
+    # boot and a human on a console.
     max_connections: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + ENV.fetch("ACTION_CABLE_WORKER_POOL_SIZE", 4).to_i + 3 %>
   cache:
     <<: *default

@@ -1,0 +1,8 @@
+Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,
+
+Our support team replied to your message.
+
+Open Rally and click the chat button to read it and carry on the conversation:
+<%= @chat_url %>
+
+— The Rally team

@@ -32,6 +32,16 @@ module Conversations
         conversation.update!(changes) if changes.any?
       end
 
+      # Safe to call here even though `with_lock` has already committed, and
+      # safe if a caller wrapped this whole thing in their own transaction:
+      # Broadcast defers to the outermost commit and never fires on rollback.
+      Broadcast.message_created(message)
+
+      # The other half of delivery: the socket reaches someone with the panel
+      # open, this reaches someone who closed the tab. No-ops for anything that
+      # isn't a staff reply — see SupportNotifier.
+      ::Notifications::SupportNotifier.staff_replied(message)
+
       message
     end
 

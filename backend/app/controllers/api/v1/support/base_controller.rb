@@ -21,34 +21,17 @@ module Api
           @live_conversation ||= current_user.conversations.live.first
         end
 
+        # Shapes live in Support::Serializers, not here, because the WebSocket
+        # broadcast (Ticket D) sends the same payloads. A socket payload that
+        # drifts from the REST one is nasty to debug: the client merges both
+        # into one list, so the mismatch shows up as messages rendering
+        # differently depending on whether they arrived live or after a refresh.
         def conversation_json(conversation)
-          return nil if conversation.nil?
-
-          {
-            id: conversation.id,
-            status: conversation.status,
-            subject: conversation.subject,
-            unread_count: conversation.unread_count_for_participant,
-            last_message_at: conversation.last_message_at,
-            created_at: conversation.created_at
-          }
+          ::Support::Serializers.participant_conversation(conversation)
         end
 
-        # Deliberately carries no sender name.
-        #
-        # A participant needs to know which side spoke, not which employee did.
-        # Staff messages render from `sender_role` as "Rally Support", so an
-        # admin's display name never reaches an arbitrary user, and a message
-        # whose sender was deleted needs no special case. The staff-side
-        # serializer (Ticket C) is a different one and does show the
-        # participant, which is the direction that matters for context.
         def message_json(message)
-          {
-            id: message.id,
-            body: message.body,
-            sender_role: message.sender_role,
-            created_at: message.created_at
-          }
+          ::Support::Serializers.participant_message(message)
         end
       end
     end

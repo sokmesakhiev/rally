@@ -1445,3 +1445,230 @@ export const notificationsApi = {
     return api.post<{ unread_count: number }>("/notifications/read_all");
   },
 };
+
+// ─── Support chat ─────────────────────────────────────────────────────────────
+
+/**
+ * One message in the participant's support thread.
+ *
+ * Shape mirrors `Support::Serializers.participant_message` exactly — the same
+ * payload arrives over REST and over the WebSocket, and the UI merges both into
+ * one list, so any drift would surface as messages rendering differently
+ * depending on how they arrived.
+ *
+ * Note there is no sender name: a participant needs to know which *side* spoke,
+ * not which employee, so staff messages render from `sender_role` alone.
+ */
+export interface ApiSupportMessage {
+  id: string;
+  body: string;
+  sender_role: "participant" | "staff" | "system";
+  created_at: string;
+}
+
+/** Mirrors `Support::Serializers.participant_conversation`. */
+export interface ApiSupportConversation {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  subject: string | null;
+  unread_count: number;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+export const supportApi = {
+  /**
+   * The caller's live thread, or `null` — which is the normal state for almost
+   * everyone, hence null rather than a 404. Polled by the launcher for its
+   * unread badge.
+   */
+  conversation() {
+    return api.get<{ conversation: ApiSupportConversation | null }>("/support/conversation");
+  },
+
+  /**
+   * Idempotent: returns the existing live thread if there is one. Not required
+   * before sending — `sendMessage` starts a thread on its own — but useful to
+   * pre-create one when the panel opens.
+   */
+  startConversation(subject?: string) {
+    return api.post<{ conversation: ApiSupportConversation }>(
+      "/support/conversation",
+      subject ? { subject } : undefined,
+    );
+  },
+
+  /**
+   * Three modes, and `has_more` answers the question belonging to each:
+   *   (none)   newest page, oldest-first. has_more => older history above.
+   *   after    everything since a known message — the reconnect catch-up.
+   *   before   scrolling back through history.
+   * `after` wins if both are given.
+   */
+  messages(params: { after?: string; before?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.after) query.set("after", params.after);
+    else if (params.before) query.set("before", params.before);
+    const suffix = query.toString() ? `?${query}` : "";
+
+    return api.get<{
+      conversation: ApiSupportConversation | null;
+      messages: ApiSupportMessage[];
+      has_more: boolean;
+    }>(`/support/messages${suffix}`);
+  },
+
+  sendMessage(body: string) {
+    return api.post<{ message: ApiSupportMessage; conversation: ApiSupportConversation }>(
+      "/support/messages",
+      { body },
+    );
+  },
+
+  markRead() {
+    return api.post<{ conversation: ApiSupportConversation | null }>("/support/read");
+  },
+};
+
+export const cableApi = {
+  /**
+   * A single-use, 30-second credential for opening the WebSocket.
+   *
+   * Browsers can't set headers on a WebSocket, and this app's JWT lasts 30
+   * days — far too long to put in a URL that lands in access logs and browser
+   * history. Every connection attempt needs its own ticket; they cannot be
+   * cached or reused.
+   */
+  ticket() {
+    return api.post<{ ticket: string; expires_in: number }>("/cable/ticket");
+  },
+};
+
+/**
+ * The `wss://` endpoint for a given ticket. Built here because this module owns
+ * the API origin, and getting it wrong is invisible until the socket silently
+ * fails to connect.
+ */
+export function cableUrl(ticket: string): string {
+  return `${RAW_API_URL.replace(/^http/, "ws")}/cable?ticket=${encodeURIComponent(ticket)}`;
+}
+
+// ─── Admin: support chat ──────────────────────────────────────────────────────
+
+/** Mirrors `Support::Serializers.staff_conversation`. Unlike the participant
+ *  shape this names the participant and carries the assignment. */
+export interface ApiAdminConversation {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  subject: string | null;
+  unread: boolean;
+  assigned_admin_id: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  participant: { id: string; display_name: string | null; email: string };
+}
+
+export interface ApiAdminConversationDetail extends ApiAdminConversation {
+  staff_last_read_at: string | null;
+  participant_last_read_at: string | null;
+}
+
+/** Mirrors `Support::Serializers.staff_message` — names the colleague who
+ *  replied, which the participant-facing shape deliberately does not. */
+export interface ApiAdminSupportMessage {
+  id: string;
+  body: string;
+  sender_role: "participant" | "staff" | "system";
+  sender_id: string | null;
+  sender_name: string | null;
+  created_at: string;
+}
+
+/** The context that justifies building this rather than embedding a widget:
+ *  what this person actually registered for, and whether they paid. */
+export interface ApiSupportParticipant {
+  id: string;
+  email: string;
+  display_name: string | null;
+  suspended: boolean;
+  created_at: string;
+  registrations: Array<{
+    id: string;
+    event_title: string | null;
+    status: string;
+    payment_status: string;
+    amount_paid_cents: number;
+    refunded_cents: number;
+    created_at: string;
+  }>;
+}
+
+export const adminSupportApi = {
+  /**
+   * `awaiting_count` is counted independently of the current filter — it means
+   * "how much is waiting on us", not "how many rows are on this screen".
+   */
+  conversations(opts?: {
+    status?: "all" | "live" | "open" | "pending" | "resolved";
+    assignment?: "any" | "mine" | "unassigned";
+    unread?: boolean;
+    page?: number;
+    perPage?: number;
+  }) {
+    const query = new URLSearchParams();
+    if (opts?.status) query.set("status", opts.status);
+    if (opts?.assignment) query.set("assignment", opts.assignment);
+    if (opts?.unread) query.set("unread", "true");
+    if (opts?.page) query.set("page", String(opts.page));
+    if (opts?.perPage) query.set("per_page", String(opts.perPage));
+    const suffix = query.toString() ? `?${query}` : "";
+
+    return api.get<{
+      conversations: ApiAdminConversation[];
+      meta: { page: number; per_page: number; total_count: number; total_pages: number };
+      awaiting_count: number;
+    }>(`/admin/conversations${suffix}`);
+  },
+
+  conversation(id: string) {
+    return api.get<{
+      conversation: ApiAdminConversationDetail;
+      participant: ApiSupportParticipant;
+      messages: ApiAdminSupportMessage[];
+    }>(`/admin/conversations/${id}`);
+  },
+
+  reply(id: string, body: string) {
+    return api.post<{
+      message: ApiAdminSupportMessage;
+      conversation: ApiAdminConversationDetail;
+    }>(`/admin/conversations/${id}/messages`, { body });
+  },
+
+  /** A soft claim, self-only. Refused on a resolved thread — there's no work
+   *  left to claim — while `unassign` is allowed, so a stale claim on a thread
+   *  resolved out from under it can still be cleared. */
+  assign(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/assign`,
+    );
+  },
+
+  unassign(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/unassign`,
+    );
+  },
+
+  resolve(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/resolve`,
+    );
+  },
+
+  markRead(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/read`,
+    );
+  },
+};

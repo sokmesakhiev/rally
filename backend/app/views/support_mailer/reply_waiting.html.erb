@@ -1,0 +1,10 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>Our support team replied to your message.</p>
+
+<p>
+  <a href="<%= @chat_url %>">Open Rally</a> and click the chat button to read it
+  and carry on the conversation.
+</p>
+
+<p>— The Rally team</p>

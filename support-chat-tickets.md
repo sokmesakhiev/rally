@@ -302,7 +302,13 @@ should land in v1, not "later".
 - Broadcast payloads carry the full message, so the happy path needs no follow-up
   fetch — but the client still reconciles against REST on reconnect.
 
-Delete the `PingChannel` scaffolding from Ticket 0 here.
+~~Delete the `PingChannel` scaffolding from Ticket 0 here.~~ **Deferred.**
+Ticket 0's cross-task fan-out check is still open: `terraform.tfvars` runs
+`ecs_desired_count = 1`, so the smoke run proved Solid Cable's write → poll →
+dispatch loop works (10,800 echoes delivered to all 30 subscribers) but could
+not observe delivery *between* tasks, because there is only one. PingChannel is
+the only tool that can answer that without posting real messages into real
+conversations. Delete it once the check has been run at `desired_count = 2`.
 
 ---
 
@@ -319,6 +325,14 @@ Delete the `PingChannel` scaffolding from Ticket 0 here.
   /messages?after=<last id>` and merge. Components never touch ActionCable
   directly. This is also the seam that makes a fallback to polling a one-file
   change if operational reality turns out worse than Ticket 0's staging numbers.
+
+  **Refinement made while building:** the socket opens when the *panel* opens,
+  not when the session starts. The badge runs off the same 60-second REST poll
+  the notification bell uses, so live sockets track people actively chatting
+  rather than people logged in — worth having on a single-task deployment. And
+  a consumer is rebuilt from scratch on every reconnect rather than letting
+  ActionCable replay its URL, because the ticket in that URL is single-use and
+  the built-in monitor would otherwise retry forever against a spent one.
 - Connection state must be *visible*: a quiet "reconnecting…" line beats a
   composer that silently swallows messages. Optimistic send with a failed state
   and retry.
@@ -337,7 +351,13 @@ Delete the `PingChannel` scaffolding from Ticket 0 here.
   a `Tabs` layout with `overview` / `users` / `events` — the shape is there.
 - Two-pane: conversation list (filters: open / mine / unassigned / resolved) and
   the selected thread with the participant-context sidebar from Ticket C.
-- Subscribes to `support:inbox` for new-thread arrival; per-thread subscribe on open.
+- ~~Subscribes to `support:inbox` for new-thread arrival; per-thread subscribe on
+  open.~~ **One subscription, no per-thread streams** — Ticket D settled on a
+  single shared `support:inbox` rather than `conversation:<id>` streams, so
+  there is nothing to subscribe to per thread. `useSupportInbox` treats every
+  broadcast as a signal and invalidates the queries rather than splicing
+  payloads into the list and the open thread by hand, which would mean
+  reimplementing the server's filtering and ordering client-side.
 - At 723 lines, `admin.tsx` should not absorb this inline — extract the tab into
   its own component file and, if it's cheap, lift the existing tabs out too.
 
@@ -355,7 +375,13 @@ notification badge already built:
   **Do not extend `RegistrationNotifier`** — its whole surface takes a
   `registration`, and a support thread has none. Same shape, different subject.
 - Follow the established split: the in-app row is always written; push respects
-  the user's preference.
+  the user's preference. **Refined while building:** push here is
+  *unconditional*, with no `notify_support_reply` column. A reply is the answer
+  to a question this person asked, which puts it with the transactional
+  registration confirmation rather than with the announcements you might
+  reasonably mute — offering to mute the answer to your own question would be
+  strange, and it avoids a migration plus a profile toggle for a preference
+  nobody would sensibly set.
 - **Email fallback on a delay.** A job enqueued `perform_later(wait: 3.minutes)`
   that emails only if the participant still hasn't read the message. Chat without
   this is a black hole for anyone who walks away mid-conversation.
@@ -368,13 +394,14 @@ notification badge already built:
 
 ### Proposed scope
 
-- **Message rate limiting must live in `ChatChannel`, not rack-attack.**
-  Rack::Attack is Rack middleware and ActionCable hijacks the socket at connect
-  time, so no message sent over an established WebSocket ever traverses the Rack
-  stack again — there is no middleware layer where a throttle could be added.
-  Only the HTTP endpoints (conversation creation, history fetches, and
-  `POST /api/v1/cable/ticket`) are reachable by the existing initializer.
-  Budget for a per-connection token bucket in the channel itself.
+- ~~Message rate limiting must live in `ChatChannel`, not rack-attack.~~
+  **No longer needed — Ticket D made both channels receive-only.** Clients send
+  over REST and only *receive* over the socket, so there is no client-callable
+  channel action to rate limit and the existing rack-attack throttles
+  (`support_messages/user`, `support_conversation/user`) already cover every
+  write path. Specs assert `action_methods` is empty on both channels; if
+  anyone adds one, the throttling problem comes back with it and this budget
+  line becomes real again.
 - Server-side body length cap, enforced in the model as well as the schema.
 - Suspended accounts cannot open or post — `authenticate_user!` already rejects
   them, so confirm with a spec rather than new code.
