@@ -25,7 +25,7 @@ module Conversations
     def call(conversation:)
       return false if conversation.resolved?
 
-      resolved = false
+      notice = nil
 
       # `next`, not `break`: exiting a transaction block with break/return has
       # meant different things across Rails versions (commit in one, rollback
@@ -34,15 +34,19 @@ module Conversations
         next if conversation.resolved?
 
         conversation.update!(status: ::Conversation::RESOLVED)
-        conversation.messages.create!(
+        notice = conversation.messages.create!(
           sender: nil,
           sender_role: ::Message::SYSTEM,
           body: RESOLVED_NOTICE
         )
-        resolved = true
       end
 
-      resolved
+      # The notice goes out over the socket like any other message, which is
+      # what tells an open chat panel the thread just closed — the payload
+      # carries the conversation with its new status alongside it.
+      Broadcast.message_created(notice) if notice
+
+      notice.present?
     end
   end
 end

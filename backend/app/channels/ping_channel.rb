@@ -49,16 +49,13 @@ class PingChannel < ApplicationCable::Channel
     user&.admin? || ENV["ENABLE_PING_CHANNEL"] == "true"
   end
 
-  def subscribed
-    return reject unless self.class.enabled_for?(current_user)
-
-    stream_from "ping:#{current_user.id}"
-  end
-
   # Round-trips through the pub/sub adapter rather than replying directly, so a
   # successful echo proves Solid Cable is actually working — a direct
   # `transmit` would look identical while the adapter was misconfigured, which
   # is precisely the failure this is meant to catch.
+  #
+  # Public because it *is* meant to be client-callable; this is the one channel
+  # in the app that accepts an action.
   #
   # Re-checks rather than trusting `subscribed` to have rejected: actions are
   # dispatched per message, and a subscription opened while the flag was on —
@@ -70,5 +67,17 @@ class PingChannel < ApplicationCable::Channel
       "ping:#{current_user.id}",
       { sent_at: data["sent_at"], echoed_at: Time.current.to_f, from: Socket.gethostname }
     )
+  end
+
+  private
+
+  # Private, matching ActionCable::Channel::Base's own visibility — see the
+  # note in ChatChannel. A public `subscribed` lands in `action_methods` and
+  # becomes remotely callable, and each call stacks another `stream_from`
+  # handler.
+  def subscribed
+    return reject unless self.class.enabled_for?(current_user)
+
+    stream_from "ping:#{current_user.id}"
   end
 end

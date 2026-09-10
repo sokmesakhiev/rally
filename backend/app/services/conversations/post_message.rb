@@ -32,6 +32,11 @@ module Conversations
         conversation.update!(changes) if changes.any?
       end
 
+      # Safe to call here even though `with_lock` has already committed, and
+      # safe if a caller wrapped this whole thing in their own transaction:
+      # Broadcast defers to the outermost commit and never fires on rollback.
+      Broadcast.message_created(message)
+
       message
     end
 
