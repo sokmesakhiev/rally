@@ -19,11 +19,20 @@
 // Credentials come from the environment, never argv, so they don't land in
 // shell history or another user's `ps` output.
 //
-// PREREQUISITE: PingChannel is disabled unless ENABLE_PING_CHANNEL=true is set
-// on the *server* — subscriptions are rejected otherwise, and this script will
-// report "subscription rejected" for every connection. Set it on the task
-// definition for the duration of the run, then remove it. It is deliberately
-// not set in infrastructure/ecs.tf; see the channel for why.
+// PREREQUISITE: sign in as an **admin** account. PingChannel rejects everyone
+// else, and this script will report "subscription rejected" for every
+// connection. (`User.find_by(email: ...).update!(admin: true)` from a console.)
+//
+// The ENABLE_PING_CHANNEL=true env var opens the channel to any authenticated
+// user, but it's only worth the trouble for a load run needing several
+// non-admin accounts — the cable-ticket throttle is keyed per user, so ~30
+// connections per account is the ceiling. See the channel for why the env var
+// is awkward to set on ECS.
+//
+// NOTE ON --connections: config/initializers/rack_attack.rb throttles
+// POST /api/v1/cable/ticket to 30 per 5 minutes per user, and this script
+// takes one ticket per connection. Asking for more than 30 from one account
+// gets the excess back as `ticket 429`.
 //
 //   Setup:  npm install --prefix scripts
 //   Run:    API_URL=https://api.example.com \
@@ -94,12 +103,22 @@ const stats = {
   subscribed: 0,
   rtts: [],
   hosts: new Set(),
+  // Sockets that received echoes published by more than one host. This, not
+  // the global `hosts` set, is what actually proves cross-task fan-out: a
+  // global count of 2 is equally consistent with each task talking only to
+  // its own subscribers, which is the failure this run exists to detect.
+  socketsSeeingBothTasks: 0,
   errors: new Map(),
 };
 
 const noteError = (why) => stats.errors.set(why, (stats.errors.get(why) ?? 0) + 1);
 
 function openOne(ticket) {
+  // Per-socket, because "did *this* connection hear from the other task" is
+  // the question. Every connection subscribes to the same stream, so if
+  // fan-out works each one should see echoes from both hosts.
+  const hostsSeenHere = new Set();
+
   return new Promise((resolve) => {
     // `origin` is the entire point of using `ws` rather than Node's built-in
     // WebSocket, which gives no way to set it.
@@ -144,6 +163,11 @@ function openOne(ticket) {
       if (msg.message?.echoed_at) {
         stats.rtts.push(Date.now() - msg.message.sent_at);
         stats.hosts.add(msg.message.from);
+
+        if (!hostsSeenHere.has(msg.message.from)) {
+          hostsSeenHere.add(msg.message.from);
+          if (hostsSeenHere.size === 2) stats.socketsSeeingBothTasks++;
+        }
       }
     });
   });
@@ -192,10 +216,14 @@ console.log(`
   subscribed     ${stats.subscribed}
   echoes         ${stats.rtts.length}
   rtt p50/p95    ${percentile(sorted, 50)}ms / ${percentile(sorted, 95)}ms
-  hosts seen     ${[...stats.hosts].join(", ") || "none"}${
+  hosts seen     ${[...stats.hosts].join(", ") || "none"}
+  fan-out        ${
     stats.hosts.size < 2
-      ? "\n                 (<2 hosts: inconclusive on cross-task fan-out — rerun with more connections)"
-      : ""
+      ? "INCONCLUSIVE — only one task published; rerun with more connections"
+      : stats.socketsSeeingBothTasks > 0
+        ? `OK — ${stats.socketsSeeingBothTasks} socket(s) received echoes from both tasks`
+        : "FAILED — two tasks published, but no single socket heard both. " +
+          "Solid Cable is not fanning out; each task is talking only to itself."
   }
   errors         ${
     stats.errors.size ? [...stats.errors].map(([k, v]) => `${k} x${v}`).join(", ") : "none"
