@@ -54,7 +54,7 @@ sandbox PayWay base URL) — nothing in `.env.example` is required to boot.
 `dotenv-rails` gem; production never loads it and gets its config exclusively
 from real ENV vars injected by ECS. `JWT_SECRET` is the only one worth
 setting for a stable dev session (see the comment in `.env.example` for why);
-see [ABA_PAYWAY_SETUP.md](./ABA_PAYWAY_SETUP.md) for `ABA_PAYWAY_MERCHANT_ID`
+see [ABA_PAYWAY_SETUP.md](./docs/ABA_PAYWAY_SETUP.md) for `ABA_PAYWAY_MERCHANT_ID`
 / `ABA_PAYWAY_API_KEY` (needed to exercise the payment flow locally) and
 `MAILER_FROM_EMAIL` if you want outgoing mail (SES) configured. If you'd
 rather not add a gem dependency, exporting the same vars via your shell or
@@ -151,5 +151,5 @@ every `apply`.
 
 - [`CLAUDE.md`](./CLAUDE.md) — architecture notes: auth, domain model,
   payments (ABA PayWay), i18n, and CI/CD internals
-- [`ABA_PAYWAY_SETUP.md`](./ABA_PAYWAY_SETUP.md) — one-time account setup for
+- [`ABA_PAYWAY_SETUP.md`](./docs/ABA_PAYWAY_SETUP.md) — one-time account setup for
   KHQR payments and transactional email
