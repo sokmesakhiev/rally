@@ -61,6 +61,13 @@ Rails.application.routes.draw do
       post "notifications/read_all",  to: "notifications#read_all"
       post "notifications/:id/read",  to: "notifications#read"
 
+      # WebSocket auth. Browsers can't set headers on a WebSocket, and the JWT
+      # is valid for 30 days — far too long to put in a URL that lands in ALB
+      # access logs and browser history. Clients POST here (with the normal
+      # Bearer token) for a single-use, 30-second ticket instead, then connect
+      # to /cable?ticket=... See Cable::Ticket.
+      post "cable/ticket", to: "cable_tickets#create"
+
       # Web push. #vapid_public_key is unauthenticated on purpose — it returns
       # a public key the browser needs before it can subscribe at all.
       #

@@ -68,6 +68,19 @@ resource "aws_ecs_task_definition" "app" {
       # (config/puma.rb) rather than a separate worker task/service — the
       # supported single-server pattern, appropriate at this app's job volume.
       { name = "SOLID_QUEUE_IN_PUMA",    value = "true" },
+      # Puma's thread count per task. Previously unset, so the whole system ran
+      # on config/puma.rb's default of 3 by accident rather than by decision —
+      # and that same fallback silently sized the Active Record pool. Now that
+      # ActionCable's workers contend for that pool too (see
+      # backend/config/database.yml, which derives max_connections from this
+      # and ACTION_CABLE_WORKER_POOL_SIZE), it needs to be explicit.
+      { name = "RAILS_MAX_THREADS",      value = "3" },
+      # ActionCable's worker pool: where channel callbacks and broadcasts run.
+      { name = "ACTION_CABLE_WORKER_POOL_SIZE", value = "4" },
+      # ActionCable refuses connections from any origin not listed here, and
+      # the frontend is a different origin than this API. Comma-separated;
+      # falls back to FRONTEND_URL in production.rb if unset.
+      { name = "ACTION_CABLE_ALLOWED_ORIGINS", value = local.custom_frontend_domain ? "https://${var.frontend_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}" },
       # Error tracking. Not a secret — a Sentry DSN is a write-only ingest
       # endpoint and is embedded in client bundles by design. Empty leaves
       # Sentry uninitialized and every Sentry call a no-op (see

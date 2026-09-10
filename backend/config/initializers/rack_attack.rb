@@ -179,6 +179,28 @@ class Rack::Attack
     req.ip if req.path.match?(%r{\A/api/v1/(registrations/[^/]+/payments|payments/[^/]+)\z})
   end
 
+  # ── WebSocket connection tickets ──
+  #
+  # Legitimate use is roughly one call per connection: on page load, and again
+  # on each reconnect. Reconnects cluster (every deploy severs every socket at
+  # once, and ActionCable retries with backoff), so the limit has to absorb a
+  # burst without permitting a loop — 30/5min is several times the worst honest
+  # case and still far below what would matter.
+  #
+  # Worth its own counter despite the generic "req/ip" backstop (300/5min):
+  # every call writes an entry into the shared Solid Cache, so this is a way to
+  # churn a resource the whole platform depends on, and the 300 budget is meant
+  # for ordinary browsing rather than one endpoint.
+  #
+  # Keyed per user, not per IP: a caller must already be authenticated to get
+  # here at all, so there's an identity to key on — and unlike an IP, it isn't
+  # shed by switching networks. Same reasoning as "uploads/user" above; falls
+  # through to "req/ip" for a request with no usable token, which
+  # authenticate_user! rejects anyway.
+  throttle("cable_ticket/user", limit: 30, period: 5.minutes) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/cable/ticket"
+  end
+
   ### Response ################################################################
 
   # JSON, not Rack::Attack's default text/plain body — every other error in

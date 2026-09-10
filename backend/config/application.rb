@@ -5,6 +5,11 @@ require "active_model/railtie"
 require "active_job/railtie"
 require "active_record/railtie"
 require "active_storage/engine"
+# ActionCable ships as an Engine, not a Railtie — `action_cable/engine` is what
+# `rails/all` itself requires. Loaded for support chat (see
+# support-chat-tickets.md); `config.api_only = true` is no obstacle, since
+# ActionCable needs no Action View.
+require "action_cable/engine"
 require "action_controller/railtie"
 require "action_mailer/railtie"
 require "action_view/railtie"

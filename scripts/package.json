@@ -1,0 +1,9 @@
+{
+  "name": "rally-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway operational harnesses. Kept out of frontend/package.json so a one-off diagnostic never becomes a dependency of the deployed bundle.",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
