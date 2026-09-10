@@ -846,7 +846,8 @@
     "toastEventSuspended": "Event suspended — the organizer has been emailed",
     "toastEventUnsuspended": "Event unsuspended",
     "toastEventDeleted": "Event deleted",
-    "paginationLabel": "Table pagination"
+    "paginationLabel": "Table pagination",
+    "tabSupport": "Support"
   },
   "legal": {
     "draftNotice": "Draft — pending legal review. This placeholder copy is not yet reviewed legal text and should not be relied on as binding.",
@@ -981,5 +982,45 @@
     "discard": "Discard",
     "loadOlder": "Load earlier messages",
     "loading": "Loading…"
+  },
+  "adminSupport": {
+    "filterLive": "Live",
+    "filterOpen": "Open",
+    "filterPending": "Waiting on them",
+    "filterResolved": "Resolved",
+    "filterAll": "All",
+    "filterUnread": "Unread only",
+    "assignmentAny": "Anyone",
+    "assignmentMine": "Mine",
+    "assignmentUnassigned": "Unclaimed",
+    "awaitingCount_one": "{{count}} waiting on us",
+    "awaitingCount_other": "{{count}} waiting on us",
+    "emptyList": "No conversations match these filters.",
+    "selectPrompt": "Select a conversation to read it.",
+    "status": {
+      "open": "Open",
+      "pending": "Waiting",
+      "resolved": "Resolved"
+    },
+    "claim": "Claim",
+    "release": "Release",
+    "resolve": "Resolve",
+    "replyPlaceholder": "Write a reply…",
+    "send": "Send",
+    "replyFailed": "Couldn't send that reply.",
+    "actionFailed": "That didn't work.",
+    "participant": "Participant",
+    "deletedAccount": "Deleted account",
+    "contextTitle": "Rally activity",
+    "suspended": "Suspended",
+    "noRegistrations": "No registrations yet.",
+    "untitledEvent": "Untitled event",
+    "refunded": "{{amount}} refunded",
+    "paymentStatus": {
+      "unpaid": "Unpaid",
+      "paid": "Paid",
+      "refunded": "Refunded",
+      "partially_refunded": "Partly refunded"
+    }
   }
 }

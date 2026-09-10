@@ -838,7 +838,8 @@
     "toastEventSuspended": "កម្មវិធីត្រូវបានផ្អាក — អ្នករៀបចំត្រូវបានផ្ញើអ៊ីមែលហើយ",
     "toastEventUnsuspended": "បានដកការផ្អាកកម្មវិធី",
     "toastEventDeleted": "បានលុបកម្មវិធី",
-    "paginationLabel": "ការបែងចែកទំព័រតារាង"
+    "paginationLabel": "ការបែងចែកទំព័រតារាង",
+    "tabSupport": "ជំនួយ"
   },
   "legal": {
     "draftNotice": "សេចក្តីព្រាង — រង់ចាំការពិនិត្យផ្នែកច្បាប់។ អត្ថបទបណ្តោះអាសន្ននេះមិនទាន់ត្រូវបានពិនិត្យឡើងវិញតាមផ្លូវច្បាប់ទេ ហើយមិនត្រូវយកមកធ្វើជាមូលដ្ឋានច្បាប់ដែលមានកាតព្វកិច្ចនោះឡើយ។",
@@ -973,5 +974,44 @@
     "discard": "លុបចោល",
     "loadOlder": "ផ្ទុកសារមុនៗ",
     "loading": "កំពុងផ្ទុក…"
+  },
+  "adminSupport": {
+    "filterLive": "កំពុងដំណើរការ",
+    "filterOpen": "បើក",
+    "filterPending": "រង់ចាំពួកគេ",
+    "filterResolved": "បានដោះស្រាយ",
+    "filterAll": "ទាំងអស់",
+    "filterUnread": "មិនទាន់អានតែប៉ុណ្ណោះ",
+    "assignmentAny": "នរណាក៏បាន",
+    "assignmentMine": "របស់ខ្ញុំ",
+    "assignmentUnassigned": "មិនទាន់មានអ្នកទទួល",
+    "awaitingCount_other": "{{count}} កំពុងរង់ចាំយើង",
+    "emptyList": "គ្មានការសន្ទនាត្រូវនឹងតម្រងទាំងនេះទេ។",
+    "selectPrompt": "ជ្រើសរើសការសន្ទនាដើម្បីអាន។",
+    "status": {
+      "open": "បើក",
+      "pending": "រង់ចាំ",
+      "resolved": "បានដោះស្រាយ"
+    },
+    "claim": "ទទួលយក",
+    "release": "លែងទទួល",
+    "resolve": "ដោះស្រាយ",
+    "replyPlaceholder": "សរសេរការឆ្លើយតប…",
+    "send": "ផ្ញើ",
+    "replyFailed": "មិនអាចផ្ញើការឆ្លើយតបបានទេ។",
+    "actionFailed": "វាមិនដំណើរការទេ។",
+    "participant": "អ្នកចូលរួម",
+    "deletedAccount": "គណនីដែលបានលុប",
+    "contextTitle": "សកម្មភាព Rally",
+    "suspended": "ត្រូវបានផ្អាក",
+    "noRegistrations": "មិនទាន់មានការចុះឈ្មោះទេ។",
+    "untitledEvent": "ព្រឹត្តិការណ៍គ្មានចំណងជើង",
+    "refunded": "បានសងប្រាក់ {{amount}}",
+    "paymentStatus": {
+      "unpaid": "មិនទាន់បង់",
+      "paid": "បានបង់",
+      "refunded": "បានសងប្រាក់",
+      "partially_refunded": "បានសងប្រាក់ខ្លះ"
+    }
   }
 }

@@ -351,7 +351,13 @@ conversations. Delete it once the check has been run at `desired_count = 2`.
   a `Tabs` layout with `overview` / `users` / `events` — the shape is there.
 - Two-pane: conversation list (filters: open / mine / unassigned / resolved) and
   the selected thread with the participant-context sidebar from Ticket C.
-- Subscribes to `support:inbox` for new-thread arrival; per-thread subscribe on open.
+- ~~Subscribes to `support:inbox` for new-thread arrival; per-thread subscribe on
+  open.~~ **One subscription, no per-thread streams** — Ticket D settled on a
+  single shared `support:inbox` rather than `conversation:<id>` streams, so
+  there is nothing to subscribe to per thread. `useSupportInbox` treats every
+  broadcast as a signal and invalidates the queries rather than splicing
+  payloads into the list and the open thread by hand, which would mean
+  reimplementing the server's filtering and ordering client-side.
 - At 723 lines, `admin.tsx` should not absorb this inline — extract the tab into
   its own component file and, if it's cheap, lift the existing tabs out too.
 

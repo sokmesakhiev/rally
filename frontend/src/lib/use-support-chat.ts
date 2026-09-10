@@ -75,6 +75,7 @@ export function useSupportChat({ open }: { open: boolean }) {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptRef = useRef(0);
   const teardownRef = useRef(false);
+  const generationRef = useRef(0);
 
   /** The badge. Polls only while signed in; stops entirely when signed out. */
   const conversationQuery = useQuery({
@@ -153,6 +154,10 @@ export function useSupportChat({ open }: { open: boolean }) {
     const scheduleReconnect = () => {
       if (teardownRef.current) return;
 
+      // Cleared first so two retries can't stack into concurrent connects,
+      // each burning its own single-use ticket.
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** attemptRef.current, RECONNECT_MAX_MS);
       attemptRef.current += 1;
       setConnection("reconnecting");
@@ -162,6 +167,12 @@ export function useSupportChat({ open }: { open: boolean }) {
     const connect = async () => {
       if (teardownRef.current) return;
 
+      // Bumped per attempt so callbacks from a superseded consumer no-op rather
+      // than scheduling a competing retry. See the note in use-support-inbox.ts:
+      // relying on ActionCable's unsubscribe-before-disconnect ordering happens
+      // to work, but the failure mode is a self-feeding ticket loop.
+      const mine = ++generationRef.current;
+
       // A spent ticket can never be reused, so every attempt starts from a
       // brand new consumer rather than letting ActionCable's own monitor
       // replay a dead URL. See openCableConsumer.
@@ -170,7 +181,7 @@ export function useSupportChat({ open }: { open: boolean }) {
 
       try {
         const consumer = await openCableConsumer();
-        if (teardownRef.current) {
+        if (teardownRef.current || mine !== generationRef.current) {
           consumer.disconnect();
           return;
         }
@@ -178,6 +189,7 @@ export function useSupportChat({ open }: { open: boolean }) {
 
         subscriptionRef.current = consumer.subscriptions.create("ChatChannel", {
           connected() {
+            if (mine !== generationRef.current) return;
             attemptRef.current = 0;
             setConnection("connected");
             // Ask for everything missed *after* the socket is live, so nothing
@@ -185,14 +197,17 @@ export function useSupportChat({ open }: { open: boolean }) {
             void catchUp();
           },
           disconnected() {
+            if (mine !== generationRef.current) return;
             scheduleReconnect();
           },
           rejected() {
+            if (mine !== generationRef.current) return;
             // Not retryable by reconnecting: the ticket was refused, which
             // means the session is no longer valid.
             setConnection("failed");
           },
           received(data: unknown) {
+            if (mine !== generationRef.current) return;
             const payload = data as { message?: ApiSupportMessage; conversation?: ApiSupportConversation };
             if (payload.message) mergeMessages([payload.message]);
             if (payload.conversation) {
@@ -203,6 +218,7 @@ export function useSupportChat({ open }: { open: boolean }) {
           },
         });
       } catch {
+        if (mine !== generationRef.current) return;
         scheduleReconnect();
       }
     };

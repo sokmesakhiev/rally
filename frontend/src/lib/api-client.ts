@@ -1552,3 +1552,123 @@ export const cableApi = {
 export function cableUrl(ticket: string): string {
   return `${RAW_API_URL.replace(/^http/, "ws")}/cable?ticket=${encodeURIComponent(ticket)}`;
 }
+
+// ─── Admin: support chat ──────────────────────────────────────────────────────
+
+/** Mirrors `Support::Serializers.staff_conversation`. Unlike the participant
+ *  shape this names the participant and carries the assignment. */
+export interface ApiAdminConversation {
+  id: string;
+  status: "open" | "pending" | "resolved";
+  subject: string | null;
+  unread: boolean;
+  assigned_admin_id: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  participant: { id: string; display_name: string | null; email: string };
+}
+
+export interface ApiAdminConversationDetail extends ApiAdminConversation {
+  staff_last_read_at: string | null;
+  participant_last_read_at: string | null;
+}
+
+/** Mirrors `Support::Serializers.staff_message` — names the colleague who
+ *  replied, which the participant-facing shape deliberately does not. */
+export interface ApiAdminSupportMessage {
+  id: string;
+  body: string;
+  sender_role: "participant" | "staff" | "system";
+  sender_id: string | null;
+  sender_name: string | null;
+  created_at: string;
+}
+
+/** The context that justifies building this rather than embedding a widget:
+ *  what this person actually registered for, and whether they paid. */
+export interface ApiSupportParticipant {
+  id: string;
+  email: string;
+  display_name: string | null;
+  suspended: boolean;
+  created_at: string;
+  registrations: Array<{
+    id: string;
+    event_title: string | null;
+    status: string;
+    payment_status: string;
+    amount_paid_cents: number;
+    refunded_cents: number;
+    created_at: string;
+  }>;
+}
+
+export const adminSupportApi = {
+  /**
+   * `awaiting_count` is counted independently of the current filter — it means
+   * "how much is waiting on us", not "how many rows are on this screen".
+   */
+  conversations(opts?: {
+    status?: "all" | "live" | "open" | "pending" | "resolved";
+    assignment?: "any" | "mine" | "unassigned";
+    unread?: boolean;
+    page?: number;
+    perPage?: number;
+  }) {
+    const query = new URLSearchParams();
+    if (opts?.status) query.set("status", opts.status);
+    if (opts?.assignment) query.set("assignment", opts.assignment);
+    if (opts?.unread) query.set("unread", "true");
+    if (opts?.page) query.set("page", String(opts.page));
+    if (opts?.perPage) query.set("per_page", String(opts.perPage));
+    const suffix = query.toString() ? `?${query}` : "";
+
+    return api.get<{
+      conversations: ApiAdminConversation[];
+      meta: { page: number; per_page: number; total_count: number; total_pages: number };
+      awaiting_count: number;
+    }>(`/admin/conversations${suffix}`);
+  },
+
+  conversation(id: string) {
+    return api.get<{
+      conversation: ApiAdminConversationDetail;
+      participant: ApiSupportParticipant;
+      messages: ApiAdminSupportMessage[];
+    }>(`/admin/conversations/${id}`);
+  },
+
+  reply(id: string, body: string) {
+    return api.post<{
+      message: ApiAdminSupportMessage;
+      conversation: ApiAdminConversationDetail;
+    }>(`/admin/conversations/${id}/messages`, { body });
+  },
+
+  /** A soft claim, self-only. Refused on a resolved thread — there's no work
+   *  left to claim — while `unassign` is allowed, so a stale claim on a thread
+   *  resolved out from under it can still be cleared. */
+  assign(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/assign`,
+    );
+  },
+
+  unassign(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/unassign`,
+    );
+  },
+
+  resolve(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/resolve`,
+    );
+  },
+
+  markRead(id: string) {
+    return api.post<{ conversation: ApiAdminConversationDetail }>(
+      `/admin/conversations/${id}/read`,
+    );
+  },
+};

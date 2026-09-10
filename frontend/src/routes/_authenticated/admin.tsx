@@ -35,6 +35,7 @@ import { adminApi, type ApiAdminUser, type ApiAdminEvent } from "@/lib/api-clien
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { AdminOverview } from "@/components/admin-overview";
+import { AdminSupport } from "@/components/admin-support";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -94,6 +95,7 @@ function AdminConsole() {
             </TabsTrigger>
             <TabsTrigger value="users">{t("admin.tabUsers")}</TabsTrigger>
             <TabsTrigger value="events">{t("admin.tabEvents")}</TabsTrigger>
+            <TabsTrigger value="support">{t("admin.tabSupport")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
@@ -104,6 +106,11 @@ function AdminConsole() {
           </TabsContent>
           <TabsContent value="events" className="mt-6">
             <EventsPanel />
+          </TabsContent>
+          {/* Extracted like AdminOverview rather than inlined — this file is
+              already ~700 lines of moderation tables. */}
+          <TabsContent value="support" className="mt-6">
+            <AdminSupport />
           </TabsContent>
         </Tabs>
       </main>
