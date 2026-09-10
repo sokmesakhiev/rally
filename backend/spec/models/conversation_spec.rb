@@ -136,6 +136,17 @@ RSpec.describe Conversation, type: :model do
       expect(described_class.awaiting_staff).not_to include(closed)
     end
 
+    # A thread can be closed with the participant's last message still unread,
+    # and an agent wants to see that — so the bare predicate must not carry
+    # awaiting_staff's live constraint.
+    it "is narrower than the bare unread predicate, which includes resolved threads" do
+      closed = create(:conversation, :resolved, user: create(:user))
+      create(:message, conversation: closed, sender: closed.user)
+
+      expect(described_class.awaiting_staff).not_to include(closed)
+      expect(described_class.with_unread_from_participant).to include(closed)
+    end
+
     # Same result as the per-row predicate, computed in SQL. If these two ever
     # disagree the inbox and the thread view start contradicting each other.
     it "agrees with #unread_for_staff?" do

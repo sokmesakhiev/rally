@@ -40,14 +40,27 @@ class Conversation < ApplicationRecord
   scope :assigned_to, ->(admin) { where(assigned_admin: admin) }
   scope :unassigned, -> { where(assigned_admin_id: nil) }
 
-  # The staff inbox's "needs us" filter, as one SQL predicate rather than a
-  # per-row Ruby check — an inbox is a list, and doing this in Ruby would mean
-  # a query per conversation on every poll.
+  # "Has this participant said something nobody on the team has read yet", as
+  # one SQL predicate — an inbox is a list, and asking it per row in Ruby would
+  # mean a query per conversation on every poll.
   #
-  # NOT EXISTS rather than `where.not(id: subquery)`: the latter compiles to
-  # NOT IN, which a single NULL in the subquery turns into "no rows" silently.
-  scope :awaiting_staff, lambda {
-    where(status: LIVE_STATUSES).where(
+  # The role is a bind parameter rather than interpolated. That isn't
+  # superstition: an earlier version built this string with `#{...}` and fed it
+  # to `select`, which Brakeman flagged as possible SQL injection. It was a
+  # false positive — the only interpolated value was our own frozen constant —
+  # but "safe because of where the value happens to come from" is exactly the
+  # reasoning that stops being true after a refactor. Binding removes the
+  # question.
+  #
+  # EXISTS rather than an IN subquery: `where.not(id: …)` compiles to NOT IN,
+  # which a single NULL in the subquery turns into "no rows" silently.
+  #
+  # Deliberately *not* constrained to live threads. A thread can be resolved
+  # with the participant's last message still unread, and an agent wants to see
+  # that. `awaiting_staff` adds the live constraint for the inbox's "needs
+  # action" sense.
+  scope :with_unread_from_participant, lambda {
+    where(
       "EXISTS (
          SELECT 1 FROM messages
          WHERE messages.conversation_id = conversations.id
@@ -58,6 +71,22 @@ class Conversation < ApplicationRecord
       participant: Message::PARTICIPANT
     )
   }
+
+  # The inbox's "needs us" filter.
+  scope :awaiting_staff, -> { live.with_unread_from_participant }
+
+  # Which of these conversations have unread participant messages, as one
+  # query for a whole page rather than one per row.
+  #
+  # Returns a Set of ids. The caller renders the flag from it, so the dot the
+  # agent sees and the filter that put the row there are computed by the same
+  # scope — if those ever drift, nobody reports it, the page just looks wrong.
+  def self.unread_ids_among(conversations)
+    ids = Array(conversations).map(&:id)
+    return Set.new if ids.empty?
+
+    with_unread_from_participant.where(id: ids).pluck(:id).to_set
+  end
 
   def live?
     status != RESOLVED
