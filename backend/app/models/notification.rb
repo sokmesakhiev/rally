@@ -22,6 +22,7 @@ class Notification < ApplicationRecord
     promoted_from_waitlist
     refund_issued
     event_details_changed
+    support_reply
   ].freeze
 
   # How many the bell shows before giving up on precision. A badge reading
