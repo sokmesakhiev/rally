@@ -71,11 +71,18 @@ class Conversation < ApplicationRecord
   # against `last_message_at` would be cheaper but wrong: your own reply is the
   # newest message in the thread, and it must not light up your own badge.
   def unread_for_participant?
-    unread_from?(Message::STAFF, participant_last_read_at)
+    unread_from(Message::STAFF, participant_last_read_at).exists?
   end
 
   def unread_for_staff?
-    unread_from?(Message::PARTICIPANT, staff_last_read_at)
+    unread_from(Message::PARTICIPANT, staff_last_read_at).exists?
+  end
+
+  # What the chat launcher's badge shows. `exists?` above is the cheaper
+  # question and is what the inbox asks; this one is for the one conversation
+  # already being rendered.
+  def unread_count_for_participant
+    unread_from(Message::STAFF, participant_last_read_at).count
   end
 
   def mark_read_for_participant!
@@ -92,12 +99,13 @@ class Conversation < ApplicationRecord
 
   private
 
-  # Strictly greater than, not >=: `mark_read_*!` stamps Time.current, and a
-  # message written in that same instant should count as seen rather than
-  # immediately re-flagging the thread as unread.
-  def unread_from?(role, read_at)
+  # Strictly greater than, not >=: `mark_read_*!` stamps Time.current and
+  # Conversations::PostMessage stamps the message's own created_at, so a
+  # message at exactly the read instant is one the reader has seen — `>=`
+  # would leave every sender's own reply flagged unread to themselves.
+  def unread_from(role, read_at)
     scope = messages.where(sender_role: role)
     scope = scope.where("messages.created_at > ?", read_at) if read_at
-    scope.exists?
+    scope
   end
 end
