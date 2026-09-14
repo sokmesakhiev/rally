@@ -206,13 +206,13 @@ jobs:
           docker push "$REGISTRY/$REPOSITORY:$IMAGE_TAG"
           docker push "$REGISTRY/$REPOSITORY:latest"
 
-      # The ECS task definition always points at the ":latest" tag (see
-      # infrastructure/ecs.tf, var.rails_image_tag) and Terraform ignores
-      # container_definitions after the first apply — so a deploy is just
+      # The ECS task definitions always point at the ":latest" tag (see
+      # infrastructure/ecs.tf, var.rails_image_tag) — so a deploy is just
       # "push a new :latest and tell the service to re-pull it", the same
       # thing scripts/deploy.sh does for manual/local deploys. Migrations
-      # run automatically on boot via bin/docker-entrypoint (db:prepare).
-      - name: Deploy to ECS
+      # run automatically on boot via bin/docker-entrypoint (db:prepare),
+      # on the web task only.
+      - name: Deploy to ECS (web)
         env:
           ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
           ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
@@ -227,6 +227,44 @@ jobs:
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE"
+
+      # Solid Queue runs in its own service off the same image, so it needs its
+      # own force-new-deployment — without this it keeps serving jobs from the
+      # previous build indefinitely, and nothing surfaces that.
+      #
+      # This step runs after the web service is stable on purpose: the web task
+      # is the one that runs migrations, so finishing it first means the worker
+      # starts new code against a schema that already matches.
+      #
+      # The empty-secret branch exists because this secret was introduced with
+      # the worker service — a repo that hasn't added it yet should get a loud
+      # annotation rather than a red build on an otherwise-good deploy, but it
+      # must be loud: a silently skipped worker deploy is the exact failure
+      # this step is here to prevent. Set it to the ecs_worker_service_name
+      # Terraform output ("<app>-<env>-worker").
+      - name: Deploy to ECS (jobs)
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_WORKER_SERVICE: ${{ secrets.ECS_WORKER_SERVICE }}
+        run: |
+          if [ -z "$ECS_WORKER_SERVICE" ]; then
+            echo "::warning title=Worker not deployed::ECS_WORKER_SERVICE is unset, so the Solid Queue worker still runs the PREVIOUS image. Set it to the ecs_worker_service_name Terraform output."
+            exit 0
+          fi
+
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_WORKER_SERVICE" \
+            --force-new-deployment \
+            --output json > /dev/null
+
+          # No health check on the worker task (nothing listens on a port), so
+          # this proves the supervisor booted and stayed up — not that jobs are
+          # being processed. See infrastructure/ecs.tf for why.
+          echo "Waiting for the worker service to stabilise..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_WORKER_SERVICE"
 
       - name: Notify Telegram — success
         if: success()

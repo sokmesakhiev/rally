@@ -22,7 +22,13 @@ production:
   # latency is.
   #
   # Offset from the cleanup job above so two sweeps aren't contending for the
-  # same in-Puma job threads at the top of every hour.
+  # worker's three job threads at the top of every hour.
+  #
+  # Note these run wherever the Solid Queue scheduler runs, which since the
+  # worker split is the jobs service — so `ecs_worker_desired_count = 0` stops
+  # them. Scaling the other way is safe: solid_queue_recurring_executions is
+  # uniquely indexed on (task_key, run_at), so N schedulers enqueue each
+  # occurrence exactly once.
   release_abandoned_registrations:
     class: ReleaseAbandonedRegistrationsJob
     schedule: every hour at minute 37

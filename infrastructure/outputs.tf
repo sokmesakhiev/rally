@@ -92,6 +92,15 @@ output "ecs_service_name" {
   value       = aws_ecs_service.app.name
 }
 
+# The Solid Queue worker service. A backend deploy must force a new deployment
+# on this too, or the worker keeps running the previous image while the API
+# runs the new one — and set the GitHub Actions ECS_WORKER_SERVICE secret to
+# this value so CD does the same (see .github/workflows/deploy.yml).
+output "ecs_worker_service_name" {
+  description = "ECS service name for the Solid Queue worker. Deploy it alongside the API service."
+  value       = aws_ecs_service.worker.name
+}
+
 output "cloudwatch_log_group" {
   description = "CloudWatch log group for the backend container. Tail after a deploy: aws logs tail <this> --follow --since 10m"
   value       = aws_cloudwatch_log_group.app.name

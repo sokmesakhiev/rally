@@ -133,18 +133,32 @@ Gemfile's `group :production`. Development caches to `:memory_store`, test to
 `:null_store` with the `:test` job adapter. Nothing extra is needed to run
 specs or a local server, and there's no queue database to set up.
 
-In production the Solid Queue supervisor runs *inside* the Puma process
-(`SOLID_QUEUE_IN_PUMA`, set in `infrastructure/ecs.tf`) rather than as a
-separate worker service. See CLAUDE.md for when that tradeoff should be
-revisited.
+In production the Solid Queue supervisor runs in its **own ECS service**
+(`aws_ecs_service.worker`), booting the same image with `./bin/jobs`. It used
+to run inside the Puma process via `SOLID_QUEUE_IN_PUMA`; that variable is now
+deliberately unset in `infrastructure/ecs.tf` and exists only for running
+everything in one process locally. `config/recurring.yml`'s hourly sweeps run
+on the worker too. See CLAUDE.md for the consequences.
+
+To run jobs in a separate process locally:
+
+```
+bin/jobs            # Solid Queue supervisor (production-like)
+```
+
+— though in development the job adapter is in-memory, so this is only useful
+when deliberately reproducing production's queue behaviour.
 
 ## Deployment
 
 Deploys run from `.github/workflows/deploy.yml` on push to `main`, gated by
 path filters so a frontend-only change doesn't redeploy the API. The image is
 built for `linux/amd64`, pushed to ECR, and ECS is forced to re-pull.
-Migrations run automatically on container boot via `bin/docker-entrypoint`
-(`db:prepare`), not as a separate step.
+
+Both backend services run that same image, so a deploy redeploys **two**: the
+API first, waited to stable, then the worker. Migrations run automatically on
+container boot via `bin/docker-entrypoint` (`db:prepare`) — on the web task
+only, which is why the order matters — not as a separate step.
 
 `scripts/deploy.sh --backend-only` is the manual equivalent.
 
