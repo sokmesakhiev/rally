@@ -102,6 +102,36 @@ variable "ecs_desired_count" {
   }
 }
 
+# ── ECS / Fargate: Solid Queue worker ─────────────────────────────────────────
+# A second service running the same image with `./bin/jobs`. Sized separately
+# from the web service on purpose — that is the entire point of splitting it
+# out. Certificates::RenderPdf shells out to LibreOffice, so this is the side
+# that wants headroom, and raising it no longer means paying for more web
+# capacity you don't need.
+
+variable "ecs_worker_task_cpu" {
+  description = "Fargate CPU units for the Solid Queue worker task (256, 512, 1024, 2048, 4096). Starts equal to the web task; LibreOffice PDF rendering is the workload most likely to want more."
+  type        = number
+  default     = 512
+}
+
+variable "ecs_worker_task_memory" {
+  description = "Fargate memory in MB for the Solid Queue worker task. Solid Queue forks a dispatcher, a scheduler and each worker into separate processes, so this covers several copies of the Rails boot (copy-on-write shares most of it) plus whatever soffice needs to convert a document."
+  type        = number
+  default     = 1024
+}
+
+variable "ecs_worker_desired_count" {
+  description = "Number of Solid Queue worker tasks. 1 is enough at this app's job volume; raise it to process more jobs concurrently (preferred over raising JOB_CONCURRENCY inside one small task). 0 is allowed for a maintenance window, but note it stops the hourly recurring sweeps too — including ReleaseAbandonedRegistrationsJob, which is what frees capacity held by abandoned registrations."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ecs_worker_desired_count >= 0
+    error_message = "ecs_worker_desired_count cannot be negative."
+  }
+}
+
 variable "rails_image_tag" {
   description = "Docker image tag to deploy. Updated by the deploy script, not Terraform."
   type        = string

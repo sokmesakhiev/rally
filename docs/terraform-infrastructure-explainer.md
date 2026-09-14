@@ -81,6 +81,7 @@ flowchart TB
         end
         subgraph Priv["Private subnets (2 AZs)"]
             ECS["ECS Fargate\nRails API tasks"]
+            JOBS["ECS Fargate\nSolid Queue worker\n(same image, ./bin/jobs)"]
             RDS[("RDS PostgreSQL")]
         end
     end
@@ -98,12 +99,17 @@ flowchart TB
     ECS --> S3U
     ECS -.-> SES
     ECS --> NAT
+    JOBS --> RDS
+    JOBS --> S3U
+    JOBS -.-> SES
+    JOBS -.->|same image| ECR
+    JOBS --> NAT
 ```
 
 Walking it top to bottom:
 
 - **Networking** (`networking.tf`, `security_groups.tf`) — one VPC, split into public subnets (where the load balancer and NAT gateway live) and private subnets (where the actual application and database live, unreachable directly from the internet). Firewall rules are chained: the internet can reach the ALB, the ALB can reach ECS, ECS can reach RDS — nothing skips a link in that chain. One NAT gateway (not one per AZ) is a deliberate cost tradeoff, called out in a comment (~$32/month; the alternative is VPC interface endpoints).
-- **Compute** (`ecs.tf`) — the Rails API runs as an ECS Fargate service (no EC2 instances to patch), behind an Application Load Balancer. The task definition wires in environment variables and secrets, a health check against Rails 8's built-in `/up` endpoint, and a **deployment circuit breaker** that automatically rolls back if new tasks keep failing to start.
+- **Compute** (`ecs.tf`) — **two** ECS Fargate services (no EC2 instances to patch) from one Docker image. The Rails API sits behind an Application Load Balancer; its task definition wires in environment variables and secrets, a health check against Rails 8's built-in `/up` endpoint, and a **deployment circuit breaker** that automatically rolls back if new tasks keep failing to start. The second runs background jobs (`command = ["./bin/jobs"]`) with no port mapping and no load balancer, so a slow PDF render can't take CPU from request handling and the two can be sized independently. Shared environment and secrets live in `locals` used by both, because two hand-maintained copies would drift. Worth calling out in a talk: this is the standard shape of "same code, different entry point," and the only genuinely tricky part is deciding which of the two owns database migrations.
 - **Database** (`database.tf`) — RDS PostgreSQL, private (no public IP), encrypted storage, 7-day automated backups, deletion protection on, and a `multi_az` flag that's a variable rather than hardcoded — on (synchronous standby, automatic failover) for production, off for a cheaper staging environment.
 - **Container registry** (`ecr.tf`) — where the CI pipeline pushes the built Rails Docker image. A lifecycle policy auto-deletes anything past the 10 most recent images, so storage cost doesn't grow forever.
 - **Frontend hosting** (`frontend.tf`) — the built React app is static files in a private S3 bucket, served through CloudFront. The bucket has no public access at all; CloudFront reaches it through an **Origin Access Control**, and a bucket policy scoped to that specific CloudFront distribution's ARN is the only thing allowed to read it.
@@ -124,29 +130,25 @@ The interesting part for the talk: **the code also supports a domain hosted some
 
 This is the single most important distinction to land in the presentation, because it's the one people most often get backwards.
 
-**Terraform provisions infrastructure. It does not deploy application code**, and it's barely involved once the infrastructure exists. Two things make this explicit in the code itself:
+**Terraform provisions infrastructure. It does not deploy application code**, and it's barely involved once the infrastructure exists:
 
 ```hcl
 # ecs.tf
-resource "aws_ecs_task_definition" "app" {
-  # ...
-  lifecycle {
-    # Image tag is managed by the deploy script, not Terraform.
-    # Running `terraform apply` won't roll back a deploy.
-    ignore_changes = [container_definitions]
-  }
-}
-
 resource "aws_ecs_service" "app" {
   # ...
   lifecycle {
-    # task_definition and desired_count are managed by the deploy script
-    ignore_changes = [task_definition, desired_count]
+    # Scaled out of band (console, autoscaling, an incident) — Terraform
+    # shouldn't pull it back to the variable's value on the next apply.
+    ignore_changes = [desired_count]
   }
 }
 ```
 
-`ignore_changes` tells Terraform "don't treat a difference here as drift to fix." Every deploy — whether a push to `main` triggers `.github/workflows/deploy.yml`, or someone runs `scripts/deploy.sh` by hand — pushes a new Docker image and points the ECS service at it *directly through the AWS API*, without ever calling `terraform apply`. If Terraform didn't ignore those two fields, the next `terraform apply` would see "the real task definition doesn't match what I created" and try to revert the app back to whatever image tag was last in the `.tf` files — undoing every deploy since.
+`ignore_changes` tells Terraform "don't treat a difference here as drift to fix." Every deploy — whether a push to `main` triggers `.github/workflows/deploy.yml`, or someone runs `scripts/deploy.sh` by hand — pushes a new Docker image and tells ECS to re-pull it *directly through the AWS API*, without ever calling `terraform apply`.
+
+**This section used to be longer, and the extra part was wrong** — worth keeping in the talk, because the mistake is the instructive bit. The task definition also carried `ignore_changes = [container_definitions]`, and the service `ignore_changes = [task_definition]`, justified as "the image tag is managed by the deploy script, so an apply would roll back a deploy." That reasoning describes a real and common pattern, but not this repo. Here `var.rails_image_tag` defaults to `"latest"` — a *mutable* tag — and neither deploy path ever registers a task definition; both just call `update-service --force-new-deployment`, which re-runs the revision the service already points at. The `.tf` files and the live task definition therefore said the same thing at all times. There was no drift to ignore.
+
+What the ignores did instead was quietly make ECS environment variables unmanageable. Every `terraform apply` reported no changes to the container, so adding or removing one had no effect and the only way to change task env was to hand-register a revision through the AWS CLI. That's what stalled removing `SOLID_QUEUE_IN_PUMA` when Solid Queue moved to its own service (see `docs/solid-queue-worker-split.md`), and it's a good illustration of the general hazard: `ignore_changes` is a claim that something *else* owns a field, and if nothing actually does, you've just made that field unownable.
 
 ```mermaid
 flowchart LR

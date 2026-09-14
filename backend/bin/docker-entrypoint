@@ -1,7 +1,39 @@
 #!/bin/bash -e
 
-# If running the rails server then create or migrate existing database
-if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
+# Migrations have exactly one owner: the web task.
+#
+# The API service and the Solid Queue worker service boot from this same image
+# and a backend deploy rolls both. Until this split there was one service, so
+# "prepare the database on boot" was unambiguous; with two, having each of them
+# run db:prepare means N concurrent migration runs on every deploy, where N
+# grows with desired_count on either service. Rails takes an advisory lock
+# around migrations so that can't corrupt anything — but the losers block on
+# the winner, and on the web side that blocking is spent inside the ECS health
+# check's startPeriod, for a migration the task isn't even the one running.
+#
+# So the web task migrates and the worker doesn't. The cost is a window on
+# deploys that add a migration, where a worker running new code can see an
+# un-migrated schema. Two things keep it small: scripts/deploy.sh and the CD
+# workflow roll the API service to completion before touching the worker, so in
+# the normal case the schema is already current when the worker starts; and a
+# job that does hit it fails and is retried by Solid Queue rather than lost.
+#
+# RUN_DB_PREPARE forces the decision either way ("true"/"false") — set it to
+# true on a one-off `aws ecs run-task` if you ever want to migrate without
+# deploying, or false on the web task to hold migrations back from a deploy.
+should_prepare_db() {
+  case "${RUN_DB_PREPARE:-auto}" in
+    true)  return 0 ;;
+    false) return 1 ;;
+  esac
+
+  # auto: the image's default CMD is ./bin/thrust ./bin/rails server, so
+  # matching the last two arguments identifies the web task. The worker's
+  # command is ./bin/jobs and falls through to false.
+  [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]
+}
+
+if should_prepare_db "$@"; then
   ./bin/rails db:prepare
 fi
 
