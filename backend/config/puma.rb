@@ -34,7 +34,17 @@ port ENV.fetch("PORT", 3000)
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart
 
-# Run the Solid Queue supervisor inside of Puma for single-server deployments.
+# Solid Queue runs as a separate process for independent scaling — in
+# production that's its own ECS service running `./bin/jobs`
+# (infrastructure/ecs.tf, aws_ecs_service.worker), so SOLID_QUEUE_IN_PUMA is
+# deliberately unset there. This comment described the intent long before the
+# split existed; it is now literally true.
+#
+# Set SOLID_QUEUE_IN_PUMA=true to run the supervisor inside Puma instead, for
+# single-server deployments or to reproduce the old behaviour locally. Don't
+# set it in production: it would run a second supervisor alongside the worker
+# service, which is safe (job claims are uniquely indexed) but pointless, and
+# puts LibreOffice renders back in the process serving requests.
 plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]
 
 # Specify the PID file. Defaults to tmp/pids/server.pid in development.

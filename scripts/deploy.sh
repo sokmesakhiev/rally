@@ -46,6 +46,11 @@ tf_output() { terraform output -raw "$1" 2>/dev/null || die "Terraform output '$
 ECR_URL=$(tf_output ecr_repository_url)
 ECS_CLUSTER=$(tf_output ecs_cluster_name)
 ECS_SERVICE=$(tf_output ecs_service_name)
+# The Solid Queue worker service. Both services run the same image, so a
+# backend deploy that only redeploys the API leaves jobs running the previous
+# build — silently, and for as long as nobody notices. If this output doesn't
+# exist yet, `terraform apply` first: it was added with the worker service.
+ECS_WORKER_SERVICE=$(tf_output ecs_worker_service_name)
 FRONTEND_BUCKET=$(tf_output frontend_bucket_name)
 CLOUDFRONT_ID=$(tf_output cloudfront_distribution_id)
 # Sourced from Terraform's own "api_url" output (which always includes the
@@ -75,7 +80,7 @@ info "Deployment summary"
 echo "  Region:    $AWS_REGION"
 echo "  Image tag: ${IMAGE_TAG:-n/a}"
 echo "  Cluster:   $ECS_CLUSTER"
-echo "  Service:   $ECS_SERVICE"
+echo "  Services:  $ECS_SERVICE (web), $ECS_WORKER_SERVICE (jobs)"
 echo ""
 
 # ── Backend ───────────────────────────────────────────────────────────────────
@@ -97,7 +102,12 @@ if $DEPLOY_BACKEND; then
   docker push "$ECR_URL:latest"
   success "Image pushed: $ECR_URL:$IMAGE_TAG"
 
-  info "Triggering ECS rolling deploy..."
+  # The web service goes first and is waited on to completion before the
+  # worker is touched, and the order is load-bearing rather than cosmetic:
+  # bin/docker-entrypoint runs db:prepare only on the web task, so this is
+  # what applies the migrations. Rolling the worker first would start new job
+  # code against the old schema.
+  info "Triggering ECS rolling deploy (web)..."
   aws ecs update-service \
     --cluster "$ECS_CLUSTER" \
     --service "$ECS_SERVICE" \
@@ -160,6 +170,32 @@ if $DEPLOY_BACKEND; then
       die "ECS reports the service stable, but neither $API_URL/up nor http://$ALB_DNS/up returned 200 after retrying. This looks like a real app problem, not a DNS issue. Check logs: aws logs tail $LOG_GROUP --follow --since 10m --region $AWS_REGION"
     fi
   fi
+
+  # ── Solid Queue worker ──────────────────────────────────────────────────
+  # Same image, different command (./bin/jobs). Reached only now that the web
+  # service is stable, which means migrations have already run.
+  info "Triggering ECS rolling deploy (jobs)..."
+  aws ecs update-service \
+    --cluster "$ECS_CLUSTER" \
+    --service "$ECS_WORKER_SERVICE" \
+    --force-new-deployment \
+    --region "$AWS_REGION" \
+    --output json > /dev/null
+
+  info "Waiting for the worker service to stabilise..."
+  # The worker task has no health check — nothing listens on a port, and the
+  # supervisor runs as PID 1, so "still RUNNING" is the whole signal ECS has.
+  # This waiter therefore proves the process booted and stayed up; it does not
+  # prove jobs are being picked up. For that, check that heartbeats are fresh:
+  #   aws ecs execute-command --cluster "$ECS_CLUSTER" --task <id> \
+  #     --container worker --interactive --command \
+  #     "bin/rails runner 'pp SolidQueue::Process.pluck(:kind, :last_heartbeat_at)'"
+  aws ecs wait services-stable \
+    --cluster "$ECS_CLUSTER" \
+    --services "$ECS_WORKER_SERVICE" \
+    --region "$AWS_REGION"
+
+  success "Worker deployed ✔ (tail: aws logs tail $LOG_GROUP --follow --since 10m --region $AWS_REGION | grep worker/)"
 fi
 
 # ── Frontend ──────────────────────────────────────────────────────────────────

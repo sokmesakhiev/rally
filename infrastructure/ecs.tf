@@ -26,7 +26,55 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   }
 }
 
-# ── Task Definition ───────────────────────────────────────────────────────────
+# ── Shared container configuration ────────────────────────────────────────────
+# The web service and the jobs service run the *same image* and differ only in
+# the command they run and a handful of process-sizing variables. Everything
+# they must agree on lives here exactly once — two hand-maintained copies of
+# this list would drift, and the failure mode is a job that behaves differently
+# from the request that enqueued it, which is miserable to diagnose.
+
+locals {
+  # Static environment variables (non-sensitive) common to both services.
+  app_environment = [
+    { name = "RAILS_ENV", value = "production" },
+    { name = "RAILS_LOG_TO_STDOUT", value = "true" },
+    { name = "RAILS_SERVE_STATIC_FILES", value = "false" },
+    { name = "AWS_REGION", value = var.aws_region },
+    { name = "AWS_BUCKET", value = aws_s3_bucket.uploads.bucket },
+    { name = "FRONTEND_URL", value = local.custom_frontend_domain ? "https://${var.frontend_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}" },
+    { name = "BACKEND_URL", value = local.custom_api_domain ? "https://${var.api_domain}" : "http://${aws_lb.main.dns_name}" },
+    { name = "ABA_PAYWAY_BASE_URL", value = var.aba_payway_base_url },
+    { name = "MAILER_FROM_EMAIL", value = var.mailer_from_email },
+    # Google's OAuth Client ID is not a secret — it's compiled into the
+    # frontend JS bundle anyway. The backend only needs it to check the
+    # `aud` claim on ID tokens (see AuthController#google).
+    { name = "GOOGLE_CLIENT_ID", value = var.google_client_id },
+    # Error tracking. Not a secret — a Sentry DSN is a write-only ingest
+    # endpoint and is embedded in client bundles by design. Empty leaves
+    # Sentry uninitialized and every Sentry call a no-op (see
+    # backend/config/initializers/sentry.rb).
+    { name = "SENTRY_DSN", value = var.sentry_dsn },
+    { name = "SENTRY_ENVIRONMENT", value = var.environment },
+  ]
+
+  # Secrets injected at task startup from Secrets Manager.
+  # The ECS agent fetches these using the execution role, so they are never
+  # visible in the task definition or AWS console.
+  #
+  # Both services get the full set. The worker needs more of it than it looks:
+  # RAILS_MASTER_KEY decrypts organizers' PayWay credentials on Profile, and
+  # the ABA keys are used by jobs that poll and reconcile payments.
+  app_secrets = [
+    { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
+    { name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
+    { name = "RAILS_MASTER_KEY", valueFrom = aws_secretsmanager_secret.rails_master_key.arn },
+    { name = "ABA_PAYWAY_MERCHANT_ID", valueFrom = aws_secretsmanager_secret.aba_payway_merchant_id.arn },
+    { name = "ABA_PAYWAY_API_KEY", valueFrom = aws_secretsmanager_secret.aba_payway_api_key.arn },
+    { name = "RECAPTCHA_SECRET_KEY", valueFrom = aws_secretsmanager_secret.recaptcha_secret_key.arn },
+  ]
+}
+
+# ── Task Definition: web ──────────────────────────────────────────────────────
 
 resource "aws_ecs_task_definition" "app" {
   family                   = "${local.prefix}-api"
@@ -43,63 +91,39 @@ resource "aws_ecs_task_definition" "app" {
     image     = "${aws_ecr_repository.app.repository_url}:${var.rails_image_tag}"
     essential = true
 
+    # No `command` — the image's own CMD (./bin/thrust ./bin/rails server) is
+    # what bin/docker-entrypoint pattern-matches on to decide that *this* task
+    # is the one that runs migrations. See the worker task definition below.
+
     portMappings = [{
       containerPort = local.app_port
       protocol      = "tcp"
     }]
 
-    # Static environment variables (non-sensitive)
-    environment = [
-      { name = "RAILS_ENV",              value = "production" },
-      { name = "RAILS_LOG_TO_STDOUT",    value = "true" },
-      { name = "RAILS_SERVE_STATIC_FILES", value = "false" },
-      { name = "PORT",                   value = tostring(local.app_port) },
-      { name = "AWS_REGION",             value = var.aws_region },
-      { name = "AWS_BUCKET",             value = aws_s3_bucket.uploads.bucket },
-      { name = "FRONTEND_URL",           value = local.custom_frontend_domain ? "https://${var.frontend_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}" },
-      { name = "BACKEND_URL",            value = local.custom_api_domain ? "https://${var.api_domain}" : "http://${aws_lb.main.dns_name}" },
-      { name = "ABA_PAYWAY_BASE_URL",    value = var.aba_payway_base_url },
-      { name = "MAILER_FROM_EMAIL",      value = var.mailer_from_email },
-      # Google's OAuth Client ID is not a secret — it's compiled into the
-      # frontend JS bundle anyway. The backend only needs it to check the
-      # `aud` claim on ID tokens (see AuthController#google).
-      { name = "GOOGLE_CLIENT_ID",       value = var.google_client_id },
-      # Runs the Solid Queue supervisor inside the same Puma process
-      # (config/puma.rb) rather than a separate worker task/service — the
-      # supported single-server pattern, appropriate at this app's job volume.
-      { name = "SOLID_QUEUE_IN_PUMA",    value = "true" },
+    environment = concat(local.app_environment, [
+      { name = "PORT", value = tostring(local.app_port) },
       # Puma's thread count per task. Previously unset, so the whole system ran
       # on config/puma.rb's default of 3 by accident rather than by decision —
       # and that same fallback silently sized the Active Record pool. Now that
       # ActionCable's workers contend for that pool too (see
       # backend/config/database.yml, which derives max_connections from this
       # and ACTION_CABLE_WORKER_POOL_SIZE), it needs to be explicit.
-      { name = "RAILS_MAX_THREADS",      value = "3" },
+      { name = "RAILS_MAX_THREADS", value = "3" },
       # ActionCable's worker pool: where channel callbacks and broadcasts run.
       { name = "ACTION_CABLE_WORKER_POOL_SIZE", value = "4" },
       # ActionCable refuses connections from any origin not listed here, and
       # the frontend is a different origin than this API. Comma-separated;
       # falls back to FRONTEND_URL in production.rb if unset.
       { name = "ACTION_CABLE_ALLOWED_ORIGINS", value = local.custom_frontend_domain ? "https://${var.frontend_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}" },
-      # Error tracking. Not a secret — a Sentry DSN is a write-only ingest
-      # endpoint and is embedded in client bundles by design. Empty leaves
-      # Sentry uninitialized and every Sentry call a no-op (see
-      # backend/config/initializers/sentry.rb).
-      { name = "SENTRY_DSN",             value = var.sentry_dsn },
-      { name = "SENTRY_ENVIRONMENT",     value = var.environment },
-    ]
+      # SOLID_QUEUE_IN_PUMA is deliberately absent. It used to be "true", which
+      # ran Solid Queue's supervisor inside this Puma process; jobs now run in
+      # the separate worker service below, so that a slow LibreOffice render
+      # can't take CPU away from request handling and so the two can be sized
+      # and scaled independently. config/puma.rb only loads the plugin when the
+      # variable is set, so removing it here is the entire app-side switch.
+    ])
 
-    # Secrets injected at task startup from Secrets Manager
-    # The ECS agent fetches these using the execution role, so they are never
-    # visible in the task definition or AWS console.
-    secrets = [
-      { name = "DATABASE_URL",             valueFrom = aws_secretsmanager_secret.database_url.arn },
-      { name = "JWT_SECRET",               valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
-      { name = "RAILS_MASTER_KEY",         valueFrom = aws_secretsmanager_secret.rails_master_key.arn },
-      { name = "ABA_PAYWAY_MERCHANT_ID",   valueFrom = aws_secretsmanager_secret.aba_payway_merchant_id.arn },
-      { name = "ABA_PAYWAY_API_KEY",       valueFrom = aws_secretsmanager_secret.aba_payway_api_key.arn },
-      { name = "RECAPTCHA_SECRET_KEY",     valueFrom = aws_secretsmanager_secret.recaptcha_secret_key.arn },
-    ]
+    secrets = local.app_secrets
 
     # Health check — Rails 8 ships the /up endpoint out of the box
     healthCheck = {
@@ -124,12 +148,93 @@ resource "aws_ecs_task_definition" "app" {
       initProcessEnabled = true
     }
   }])
+}
 
-  lifecycle {
-    # Image tag is managed by the deploy script, not Terraform.
-    # Running `terraform apply` won't roll back a deploy.
-    ignore_changes = [container_definitions]
-  }
+# ── Task Definition: Solid Queue worker ───────────────────────────────────────
+# Same image, different command. Everything about this task exists so that job
+# execution and request handling stop competing: Certificates::RenderPdf shells
+# out to LibreOffice, which is slow and memory-hungry, and until now it did that
+# inside the Puma process serving the API.
+
+resource "aws_ecs_task_definition" "worker" {
+  family                   = "${local.prefix}-worker"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.ecs_worker_task_cpu
+  memory                   = var.ecs_worker_task_memory
+
+  execution_role_arn = aws_iam_role.ecs_execution.arn
+  # Deliberately the same task role as the web service, not a narrower one.
+  # Jobs write certificate PDFs to the uploads bucket and send mail through
+  # SES — the same permissions the web task already holds, because these jobs
+  # were running inside the web task until now. Splitting the role would be a
+  # separate change with its own blast radius; doing it here would mean this
+  # deploy could fail for a reason unrelated to the split itself.
+  task_role_arn = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([{
+    name      = "worker"
+    image     = "${aws_ecr_repository.app.repository_url}:${var.rails_image_tag}"
+    essential = true
+
+    # bin/jobs boots Rails and hands off to SolidQueue::Cli, which reads
+    # config/queue.yml (dispatcher + workers) and config/recurring.yml
+    # (the hourly sweeps). Both of those now run *here* rather than in Puma.
+    command = ["./bin/jobs"]
+
+    # No portMappings: nothing connects to this task. It reaches out to
+    # Postgres, S3 and SES and is never reached from outside.
+
+    environment = concat(local.app_environment, [
+      # config/database.yml's `default:` block keys its max_connections on this
+      # variable, which is what sizes the `queue` role. Solid Queue's own
+      # estimate (Configuration#estimated_database_pool_size) is the worker's
+      # thread count plus two — one for its polling thread, one for the
+      # heartbeat — so 3 threads needs 5, and it prints a warning at boot if
+      # the pool is smaller. 6 is that with one spare. Note the supervisor
+      # forks the dispatcher and each worker into separate processes, so this
+      # is a ceiling *per process*, not for the task as a whole.
+      { name = "RAILS_DB_POOL", value = "6" },
+      # RAILS_MAX_THREADS is deliberately unset: nothing here serves requests,
+      # and Solid Queue's concurrency comes from config/queue.yml instead.
+      # Scale job throughput by raising ecs_worker_desired_count, not by
+      # raising JOB_CONCURRENCY inside a 0.5 vCPU task.
+    ])
+
+    secrets = local.app_secrets
+
+    # No healthCheck, and that is a decision rather than an omission. The
+    # supervisor is this container's main process (under the init below), so if
+    # it dies the container exits and ECS replaces the task — a liveness probe
+    # would only be re-asking a question the exit status already answers. If a
+    # *forked* worker dies, the supervisor replaces it without help. The failure
+    # a probe can't see either — supervisor alive but wedged — is detectable
+    # only from solid_queue_processes.last_heartbeat_at going stale, which
+    # belongs in a CloudWatch alarm, not a container command.
+    #
+    # One consequence worth knowing: with no health check, ECS's deployment
+    # circuit breaker treats "reached RUNNING" as success, so it catches a
+    # crash-on-boot but not a worker that boots and then fails every job.
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        # Same log group as the API, different stream prefix — one place to
+        # look when tracing a request into the job it enqueued.
+        "awslogs-group"         = aws_cloudwatch_log_group.app.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "worker"
+      }
+    }
+
+    # An init process reaps the supervisor's forked children and forwards
+    # SIGTERM to it on deploy, which is how Solid Queue gets to shut down
+    # gracefully rather than being killed mid-job. Also what makes
+    # `aws ecs execute-command` usable here.
+    linuxParameters = {
+      initProcessEnabled = true
+    }
+  }])
 }
 
 # ── Application Load Balancer ─────────────────────────────────────────────────
@@ -278,7 +383,26 @@ resource "aws_route53_record" "api" {
   }
 }
 
-# ── ECS Service ───────────────────────────────────────────────────────────────
+# ── ECS Services ──────────────────────────────────────────────────────────────
+#
+# Both task definitions above used to carry `ignore_changes =
+# [container_definitions]`, and the web service `ignore_changes =
+# [task_definition]`, on the stated grounds that "the deploy script manages
+# these". It doesn't: scripts/deploy.sh and .github/workflows/deploy.yml both
+# only run `aws ecs update-service --force-new-deployment`, which re-runs the
+# revision the service already points at. Nothing outside Terraform ever
+# registers a revision, and var.rails_image_tag is the mutable ":latest", so
+# container_definitions never actually drifted — the ignores were guarding
+# against drift this pipeline doesn't produce.
+#
+# What they *did* do was make every environment change unappliable: Terraform
+# would refuse to update the definition, and even if it had, the service would
+# have stayed pinned to the old revision. That is why SOLID_QUEUE_IN_PUMA could
+# not simply be deleted, and why ENABLE_PING_CHANNEL was awkward to set. With
+# the ignores gone, `terraform apply` registers a revision and rolls the
+# service, which is what one would have assumed it did all along.
+#
+# desired_count stays ignored on both: that is genuinely adjusted out of band.
 
 resource "aws_ecs_service" "app" {
   name            = "${local.prefix}-api"
@@ -318,7 +442,52 @@ resource "aws_ecs_service" "app" {
   ]
 
   lifecycle {
-    # task_definition and desired_count are managed by the deploy script
-    ignore_changes = [task_definition, desired_count]
+    # Scaled out of band (console, autoscaling, an incident) — Terraform
+    # shouldn't pull it back to the variable's value on the next apply.
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_ecs_service" "worker" {
+  name            = "${local.prefix}-worker"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.worker.arn
+  desired_count   = var.ecs_worker_desired_count
+  launch_type     = "FARGATE"
+
+  enable_execute_command = true
+
+  # Matches the web service, and Solid Queue is built for it: workers claim
+  # jobs by inserting into solid_queue_claimed_executions, which has a unique
+  # index on job_id, so an old and a new supervisor overlapping during a deploy
+  # split the work rather than duplicating it. The recurring sweeps are safe for
+  # the same reason — solid_queue_recurring_executions is uniquely indexed on
+  # (task_key, run_at), so N schedulers still enqueue each occurrence once.
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+
+  network_configuration {
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = false
+  }
+
+  # No load_balancer block: this service has nothing listening. It reuses the
+  # ECS security group, whose ALB ingress rule is simply unused here — a
+  # dedicated egress-only group would be tidier but buys no isolation, since
+  # both services already talk to the same database with the same credentials.
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Deliberately does not depend on aws_lb_listener.http — jobs do not need the
+  # load balancer to exist, and coupling them would mean an ALB problem could
+  # block a worker deploy.
+  depends_on = [aws_iam_role_policy_attachment.ecs_execution_managed]
+
+  lifecycle {
+    ignore_changes = [desired_count]
   }
 }
