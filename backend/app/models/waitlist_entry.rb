@@ -15,6 +15,14 @@ class WaitlistEntry < ApplicationRecord
   }
   validate :not_already_registered, on: :create
   validate :event_or_requested_types_actually_full, on: :create
+  # A closed event accepts nothing — not a registration, not a waitlist entry.
+  # The waitlist exists to catch people when an event is *full*, i.e. when
+  # spots might still free up; once the organizer has closed sign-ups there is
+  # nothing to wait for, and collecting names would promise something the
+  # organizer has just said they aren't doing. Same `on: :create` reasoning as
+  # Registration: an entry that already exists can still be promoted, so
+  # closing doesn't strand people who were queueing before it happened.
+  validate :registration_is_open, on: :create
 
   scope :waiting, -> { where(status: "waiting") }
 
@@ -35,6 +43,12 @@ class WaitlistEntry < ApplicationRecord
   end
 
   private
+
+  def registration_is_open
+    return if event.nil? || event.accepting_signups?
+
+    errors.add(:base, :registration_closed, message: "Registration for this event is closed")
+  end
 
   def not_already_registered
     return unless event && user

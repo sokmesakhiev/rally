@@ -1,7 +1,16 @@
 module Api
   module V1
     class EventsController < BaseController
-      before_action :authenticate_user!, only: [ :create, :update, :destroy, :my_events, :unpublish, :activity ]
+      # Three `only:` lists below have to agree, and disagreeing between them
+      # fails in a way that points at the wrong thing. An action missing here
+      # but present in authorize_creator! leaves current_user nil, so
+      # event_role_for returns nil and the caller gets a flat 403 — reading as
+      # "you lack permission" when the truth is "nobody ever authenticated
+      # you". The reverse pairing is the dangerous one: authenticated but
+      # never authorized means any signed-in user can act on anyone's event.
+      before_action :authenticate_user!,
+                    only: [ :create, :update, :destroy, :my_events, :unpublish, :activity,
+                            :close_registration, :reopen_registration ]
       # #show stays public (no bare authenticate_user!) — anyone can view a
       # published event page without an account. This just populates
       # current_user *when* a valid, live token is present, so event_role_for
@@ -16,8 +25,15 @@ module Api
       # current_user simply stays nil for an anonymous viewer or a
       # suspended/deleted one, same as before this field existed.
       before_action :identify_current_user!, only: [ :show ]
-      before_action :set_event, only: [ :show, :update, :destroy, :unpublish ]
-      before_action :authorize_creator!, only: [ :update, :destroy, :unpublish ]
+      # Must list every action authorize_creator! covers. authorize_event!
+      # resolves the caller's role *from the event*, so a nil @event yields a
+      # nil role and a blanket 403 — which reads as a permissions bug rather
+      # than the missing lookup it actually is.
+      before_action :set_event,
+                    only: [ :show, :update, :destroy, :unpublish,
+                            :close_registration, :reopen_registration ]
+      before_action :authorize_creator!,
+                    only: [ :update, :destroy, :unpublish, :close_registration, :reopen_registration ]
 
       # GET /api/v1/events — public, published, upcoming
       #
@@ -226,6 +242,31 @@ module Api
         render json: { event: event_json(@event, include_types: true) }
       end
 
+      # POST /api/v1/events/:id/close_registration
+      #
+      # Stops new sign-ups without hiding the event. Deliberately separate
+      # from #unpublish, which is the wrong tool for this: unpublishing takes
+      # the page away from the people who already registered and still need
+      # the date, the venue, and later their results. A closed event stays
+      # fully visible and simply won't take anyone new.
+      #
+      # Idempotent — closing an already-closed event is not an error, since
+      # two managers pressing the button is a normal thing to happen.
+      def close_registration
+        @event.close_registration! unless @event.registration_closed_at.present?
+        render json: { event: event_json(@event, include_types: true) }
+      end
+
+      # POST /api/v1/events/:id/reopen_registration
+      #
+      # Clears the deadline as well as the manual close — reopening while a
+      # passed deadline stayed set would re-close the event immediately, which
+      # reads as the button being broken.
+      def reopen_registration
+        @event.reopen_registration!
+        render json: { event: event_json(@event, include_types: true) }
+      end
+
       private
 
       # Only these two are logged today — see EventActivity::ACTIONS'
@@ -273,6 +314,11 @@ module Api
       # accident of them sharing a filter.
       ACTION_CAPABILITIES = {
         "update" => :update_event,
+        # Closing is an edit to the event, not a publish-level decision, so it
+        # sits with :update_event (owner + manager) rather than the owner-only
+        # :unpublish_event. A manager who can change the date can close sign-ups.
+        "close_registration" => :update_event,
+        "reopen_registration" => :update_event,
         "destroy" => :delete_event,
         "unpublish" => :unpublish_event
       }.freeze
@@ -463,6 +509,13 @@ module Api
           price_cents: event.price_cents,
           currency: event.currency,
           is_published: event.is_published,
+          # Two separate facts, not one. `registration_closed` is what the
+          # register button branches on; `registration_closes_at` is shown to
+          # participants *before* it passes so they know there's a deadline,
+          # and to the organizer so the manage page can say when.
+          registration_closed: event.registration_closed?,
+          registration_closed_at: event.registration_closed_at,
+          registration_closes_at: event.registration_closes_at,
           suspended: event.suspended?,
           suspension_reason: event.suspension_reason,
           suspended_at: event.suspended_at,

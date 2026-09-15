@@ -252,6 +252,14 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** True when the organizer closed sign-ups, or a deadline they set has
+   *  passed. Distinct from "full": a closed event may have plenty of spots,
+   *  and unlike a full one it offers no waitlist. */
+  registration_closed: boolean;
+  registration_closed_at: string | null;
+  /** An announced deadline. Shown to participants *before* it passes so they
+   *  know to hurry, and it stays meaningful afterwards as the reason. */
+  registration_closes_at: string | null;
   /** The organization presenting this event — distinct from creator_id, which
    * is the individual who set it up. Required when creating. */
   organization_id: string;
@@ -557,6 +565,21 @@ export const eventsApi = {
   /** Takes a published event down. Keeps its plan — republishing later is free. */
   unpublish(id: string) {
     return api.post<{ event: ApiEvent }>(`/events/${id}/unpublish`);
+  },
+
+  /**
+   * Stops new sign-ups without hiding the event — deliberately not
+   * `unpublish`, which takes the page away from people who already registered
+   * and still need the date, the venue and later their results. Idempotent.
+   */
+  closeRegistration(id: string) {
+    return api.post<{ event: ApiEvent }>(`/events/${id}/close_registration`);
+  },
+
+  /** Clears the deadline as well as the manual close, so a passed deadline
+   *  can't immediately re-close the event. */
+  reopenRegistration(id: string) {
+    return api.post<{ event: ApiEvent }>(`/events/${id}/reopen_registration`);
   },
 
   /** Organizer-only history of participant removals and price/date changes

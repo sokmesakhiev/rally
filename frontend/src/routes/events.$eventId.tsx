@@ -311,6 +311,10 @@ function EventDetail() {
   const hasSurvey = !!ev?.survey?.questions?.length;
   const registeredCount = ev?.registrations_count ?? 0;
   const isFull = !!ev?.capacity && registeredCount >= ev.capacity;
+  // Deliberately separate from isFull. Closed means the organizer stopped
+  // taking sign-ups — there may be plenty of spots, and unlike a full event
+  // there is no waitlist to offer, so both the copy and the affordance differ.
+  const isClosed = !!ev?.registration_closed;
   const brandColor = ev?.brand_color ?? "#6366f1";
 
   // What the current selection actually costs — the flat event price, or
@@ -848,6 +852,20 @@ function EventDetail() {
                     {leaveWaitlist.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                     {t("eventDetail.leaveWaitlist")}
                   </Button>
+                </div>
+              ) : isClosed ? (
+                /* Closed beats full: an event can be both, and "the organizer
+                   closed registration" is the more accurate thing to say. No
+                   waitlist here — a closed event isn't waiting for anything,
+                   and collecting names would promise something the organizer
+                   has just said they aren't doing. */
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium">{t("eventDetail.registrationClosed")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("eventDetail.registrationClosedDesc")}
+                    </p>
+                  </div>
                 </div>
               ) : isFull && !user && !loading ? (
                 /* Event full — joining the waitlist still requires an

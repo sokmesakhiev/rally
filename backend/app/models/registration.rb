@@ -45,6 +45,14 @@ class Registration < ApplicationRecord
     message: "already registered for this event"
   }
   validate :event_not_full, on: :create
+  # `on: :create` is the whole design of the "let in-flight registrations
+  # finish" decision. A paid registration's row is written *before* the KHQR
+  # payment succeeds (see RegistrationsController#create), so validating this
+  # on every save would mean an organizer closing registration while someone
+  # is at the payment screen causes the ABA webhook to fail when it tries to
+  # mark them paid — taking their money and then refusing the spot. Closing
+  # stops *new* sign-ups; it does not reach backwards.
+  validate :registration_is_open, on: :create
 
   # Amount owed. `amount_owed_cents` is a snapshot taken once at creation
   # time (see Api::V1::RegistrationsController#compute_amount and
@@ -127,6 +135,17 @@ class Registration < ApplicationRecord
     types = event_types.to_a
     return event.price_cents if types.empty?
     types.sum(&:effective_price_cents)
+  end
+
+  # :registration_closed is a machine-readable code, same contract as
+  # :event_full below — RegistrationsController maps it to `code:` in the JSON
+  # so the frontend can render "the organizer closed registration" rather than
+  # string-matching a sentence, and so it can tell that apart from "full"
+  # (which offers the waitlist; this does not).
+  def registration_is_open
+    return if event.nil? || event.accepting_signups?
+
+    errors.add(:base, :registration_closed, message: "Registration for this event is closed")
   end
 
   def event_not_full

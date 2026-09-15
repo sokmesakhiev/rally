@@ -181,6 +181,43 @@ class Event < ApplicationRecord
     capacity.present? && registrations.active.count >= capacity
   end
 
+  # Whether the organizer has stopped taking sign-ups, independently of
+  # capacity. Deliberately **not** folded into #full? — they mean different
+  # things to a participant ("no spots left" vs "the organizer closed this")
+  # and the UI says so, and folding them would make an event look full when
+  # it has 200 free places.
+  #
+  # Closed when either the organizer pressed Close *or* a deadline they set
+  # has passed. Evaluated rather than stored, so a deadline takes effect the
+  # moment it passes with no scheduled job and no window where the flag lags
+  # reality — see the migration.
+  def registration_closed?(now = Time.current)
+    registration_closed_at.present? ||
+      (registration_closes_at.present? && registration_closes_at <= now)
+  end
+
+  # "Can anyone sign up at all right now" — the single question both
+  # Registration and WaitlistEntry ask, so the two can't drift into disagreeing
+  # about what closed means. Capacity is deliberately *not* part of it: a full
+  # event still accepts waitlist entries, a closed one accepts nothing.
+  def accepting_signups?(now = Time.current)
+    !registration_closed?(now)
+  end
+
+  # Closing is a stored timestamp rather than a boolean so the manage page can
+  # say *when*, and so an accidental close followed by a reopen leaves no
+  # misleading "closed" state behind.
+  def close_registration!(now = Time.current)
+    update!(registration_closed_at: now)
+  end
+
+  # Clears the deadline as well as the manual flag. Reopening while a passed
+  # deadline stayed set would re-close the event instantly, which reads as the
+  # button not working.
+  def reopen_registration!
+    update!(registration_closed_at: nil, registration_closes_at: nil)
+  end
+
   # Does registering for this event cost money? Checks BOTH the event's own
   # price and each type's, because EventType#effective_price_cents falls back
   # to the parent event's price — so an event with price_cents: 0 is still a

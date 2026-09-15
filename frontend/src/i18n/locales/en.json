@@ -324,7 +324,9 @@
     "confirmSelectedTypes": "Selected",
     "confirmTotal": "Total due",
     "nonRefundableNotice": "Registrations aren't refundable for details entered incorrectly (wrong name, email, phone, or event type) — please double-check everything above before continuing.",
-    "confirmAndRegister": "Confirm & register"
+    "confirmAndRegister": "Confirm & register",
+    "registrationClosed": "Registration is closed",
+    "registrationClosedDesc": "The organizer has stopped taking sign-ups for this event."
   },
   "dashboard": {
     "title": "Your dashboard",
@@ -522,7 +524,21 @@
     "certificateTitle": "Certificate of participation",
     "certificateDesc": "Optional. Upload a .odt (OpenDocument Text) design and Rally will automatically generate a personalized PDF certificate for every confirmed, paid participant once the event ends — no check-in required, so this covers everyone registered, not just people who actually showed up.",
     "saveCertificate": "Save certificate template",
-    "toastCertificateSaved": "Certificate template saved"
+    "toastCertificateSaved": "Certificate template saved",
+    "tabRegistration": "Registration",
+    "registrationTitle": "Registration status",
+    "registrationDesc": "Stop taking sign-ups without hiding the event. Everyone already registered keeps access to the event page, the date and their results — unlike unpublishing.",
+    "registrationIsOpen": "Registration is open",
+    "registrationIsClosed": "Registration is closed",
+    "registrationClosesOn": "Closes automatically on {{date}}",
+    "closeRegistration": "Close registration",
+    "reopenRegistration": "Reopen registration",
+    "registrationDeadlineLabel": "Close automatically on",
+    "registrationDeadlineHint": "Optional. Leave empty for no deadline. Reopening clears this.",
+    "saveDeadline": "Save deadline",
+    "toastRegistrationClosed": "Registration closed",
+    "toastRegistrationReopened": "Registration reopened",
+    "toastDeadlineSaved": "Deadline saved"
   },
   "eventForm": {
     "title": "Create an event",

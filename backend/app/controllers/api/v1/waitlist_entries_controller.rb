@@ -73,6 +73,8 @@ module Api
             "already_registered"
           elsif details.any? { |d| d[:error] == NOT_FULL_CODE }
             "not_full"
+          elsif details.any? { |d| d[:error] == :registration_closed }
+            "registration_closed"
           end
         { error: record.errors.full_messages.join(", "), code: code }.compact
       end

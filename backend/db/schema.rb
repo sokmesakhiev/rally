@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -191,6 +191,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_010000) do
     t.string "plan"
     t.integer "price_cents", default: 0, null: false
     t.jsonb "refund_policy_tiers"
+    t.datetime "registration_closed_at"
+    t.datetime "registration_closes_at"
     t.string "route_map_url"
     t.datetime "start_at", null: false
     t.uuid "survey_id"
@@ -204,6 +206,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_010000) do
     t.index ["is_published", "start_at"], name: "index_events_on_is_published_and_start_at"
     t.index ["is_published"], name: "index_events_on_is_published"
     t.index ["organization_id"], name: "index_events_on_organization_id"
+    t.index ["registration_closes_at"], name: "index_events_on_registration_closes_at", where: "(registration_closes_at IS NOT NULL)"
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
     t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
