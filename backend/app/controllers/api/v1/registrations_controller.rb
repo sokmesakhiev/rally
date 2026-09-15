@@ -30,15 +30,63 @@ module Api
       end
 
       # GET /api/v1/events/:event_id/registrations — organizer view of participants
+      # Paginated and searchable. It previously returned every registration,
+      # which the dashboard then filtered and summed client-side — fine at
+      # twenty participants, ruinous at three thousand, and it meant opening
+      # the page serialised every row plus its user, profile, types,
+      # certificate and result whichever tab you were actually looking at.
+      #
+      # The aggregate figures moved to #summary. They had to: a paginated list
+      # cannot answer "how much revenue" without lying about it.
       def event_registrations
         event = find_authorized_event!(params[:event_id], :view_participants)
-        regs = event.registrations.kept
-          .includes({ user: :profile }, :event_types, :certificate, :result)
-          .order(created_at: :asc)
 
-        render json: {
-          registrations: regs.map { |r| registration_json(r, include_profile: true, include_types: true) }
-        }
+        validate_params_with_schema(EventRegistrationsIndexRequestSchema) do |validated_params|
+          page     = validated_params[:page] || 1
+          per_page = validated_params[:per_page] || EventRegistrationsIndexRequestSchema::DEFAULT_PER_PAGE
+
+          scope = event.registrations.kept.search(validated_params[:q])
+
+          # Counted before the includes below: a COUNT against an eager-loaded
+          # relation builds a join it doesn't need. `.distinct` because
+          # Registration.search LEFT JOINs users/profiles — one row each today,
+          # but a count that silently depends on that staying true is the kind
+          # of thing that breaks quietly later.
+          total = scope.distinct.count
+
+          registrations = scope
+            .includes({ user: :profile }, :event_types, :certificate, :result)
+            .order(created_at: :asc)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+
+          render json: {
+            registrations: registrations.map { |r|
+              registration_json(r, include_profile: true, include_types: true)
+            },
+            meta: {
+              page: page,
+              per_page: per_page,
+              total_count: total,
+              total_pages: total.zero? ? 0 : (total.to_f / per_page).ceil
+            }
+          }
+        end
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
+      # GET /api/v1/events/:event_id/registrations/summary
+      #
+      # The counts and revenue the dashboard's stat cards show. Separate from
+      # the list because those cards sit *above* the tabs and are visible
+      # whichever one is open — so they can't be a by-product of loading a
+      # page of the table, and they must stay correct when the table is only
+      # showing twenty-five of three thousand people.
+      def summary
+        event = find_authorized_event!(params[:event_id], :view_participants)
+
+        render json: { summary: Registrations::Summary.call(event).as_json }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Event not found" }, status: :not_found
       end

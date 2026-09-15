@@ -538,7 +538,11 @@
     "saveDeadline": "Save deadline",
     "toastRegistrationClosed": "Registration closed",
     "toastRegistrationReopened": "Registration reopened",
-    "toastDeadlineSaved": "Deadline saved"
+    "toastDeadlineSaved": "Deadline saved",
+    "tabSetup": "Setup",
+    "tabMore": "More",
+    "searchParticipants": "Search by name or email",
+    "noParticipantsMatch": "Nobody matches “{{query}}”."
   },
   "eventForm": {
     "title": "Create an event",
@@ -1055,5 +1059,11 @@
       "refunded": "Refunded",
       "partially_refunded": "Partly refunded"
     }
+  },
+  "pagination": {
+    "showing": "{{first}}–{{last}} of {{total}}",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

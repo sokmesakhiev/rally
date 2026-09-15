@@ -101,7 +101,7 @@ RSpec.describe "Registration closing", type: :request do
 
       post "/api/v1/events/#{event.id}/registrations", headers: auth_headers(participant)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("registration_closed")
     end
 
@@ -112,7 +112,7 @@ RSpec.describe "Registration closing", type: :request do
 
       post "/api/v1/events/#{event.id}/waitlist_entries", headers: auth_headers(participant)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("registration_closed")
     end
 

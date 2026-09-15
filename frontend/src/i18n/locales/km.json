@@ -533,7 +533,11 @@
     "saveDeadline": "រក្សាទុកកំណត់ពេល",
     "toastRegistrationClosed": "បានបិទការចុះឈ្មោះ",
     "toastRegistrationReopened": "បានបើកការចុះឈ្មោះឡើងវិញ",
-    "toastDeadlineSaved": "បានរក្សាទុកកំណត់ពេល"
+    "toastDeadlineSaved": "បានរក្សាទុកកំណត់ពេល",
+    "tabSetup": "ការកំណត់",
+    "tabMore": "ច្រើនទៀត",
+    "searchParticipants": "ស្វែងរកតាមឈ្មោះ ឬអ៊ីមែល",
+    "noParticipantsMatch": "គ្មាននរណាម្នាក់ត្រូវនឹង “{{query}}” ទេ។"
   },
   "eventForm": {
     "title": "បង្កើតព្រឹត្តិការណ៍",
@@ -1046,5 +1050,11 @@
       "refunded": "បានសងប្រាក់",
       "partially_refunded": "បានសងប្រាក់ខ្លះ"
     }
+  },
+  "pagination": {
+    "showing": "{{first}}–{{last}} ក្នុងចំណោម {{total}}",
+    "pageOf": "ទំព័រ {{page}} ក្នុងចំណោម {{pages}}",
+    "previous": "មុន",
+    "next": "បន្ទាប់"
   }
 }

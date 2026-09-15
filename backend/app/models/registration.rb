@@ -30,6 +30,28 @@ class Registration < ApplicationRecord
   scope :kept, -> { where(deleted_at: nil) }
   scope :discarded, -> { where.not(deleted_at: nil) }
 
+  # Free-text search over who the participant is, for the organizer's list and
+  # the check-in desk. Same shape as Event.search — `sanitize_sql_like` so a
+  # name containing "%" or "_" searches for those characters rather than acting
+  # as a wildcard, and the pattern bound rather than interpolated.
+  #
+  # Joins rather than subqueries because both tables are needed for display
+  # anyway. `left_joins(user: :profile)`: a profile is auto-created with every
+  # user (User#after_create) so an inner join would work today, but a LEFT JOIN
+  # means a registration can never vanish from an organizer's list because of a
+  # missing associated row — losing a paying participant from the view is a
+  # far worse failure than showing one with a blank name.
+  scope :search, ->(term) {
+    query = term.to_s.strip
+    next all if query.blank?
+
+    pattern = "%#{sanitize_sql_like(query)}%"
+    left_joins(user: :profile).where(
+      "profiles.display_name ILIKE :pattern OR users.email ILIKE :pattern",
+      pattern: pattern
+    )
+  }
+
   validates :status, inclusion: { in: STATUSES }
   validates :payment_status, inclusion: { in: PAYMENT_STATUSES }
   # Scoped to live rows, matching the partial unique index added in

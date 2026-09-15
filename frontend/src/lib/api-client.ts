@@ -200,6 +200,27 @@ export interface ApiRegistrationAnswer {
   answer_options?: string[];
 }
 
+/** Pagination envelope returned alongside paginated lists. */
+export interface ApiPageMeta {
+  page: number;
+  per_page: number;
+  total_count: number;
+  total_pages: number;
+}
+
+/** Registrations::Summary on the backend — counts and revenue over the whole
+ *  event, independent of whichever page of the list is on screen. */
+export interface ApiRegistrationSummary {
+  total: number;
+  paid: number;
+  unpaid: number;
+  checked_in: number;
+  revenue_cents: number;
+  /** event_type id -> registered count, with every type present (zero when
+   *  nobody has picked it), so callers needn't guard for missing keys. */
+  by_event_type: Record<string, number>;
+}
+
 export interface ApiEventType {
   id: string;
   event_id: string;
@@ -710,11 +731,36 @@ export const registrationsApi = {
     return api.get<{ registrations: ApiRegistration[] }>("/registrations");
   },
 
-  // Organizer-only — the count of participants for one of *their* events.
-  // For public capacity display, use the event's own `registrations_count`
-  // (returned by eventsApi.get, no auth required) instead.
-  forEvent(eventId: string) {
-    return api.get<{ registrations: ApiRegistration[] }>(`/events/${eventId}/registrations`);
+  /**
+   * Organizer-only, **paginated**. Returns one page of participants plus
+   * `meta` — it used to return every registration, which is what made the
+   * manage page load thousands of rows just to render a stat card.
+   *
+   * For public capacity display use the event's own `registrations_count`
+   * (from eventsApi.get, no auth); for totals and revenue use `summary()`
+   * below, never the length of this array.
+   */
+  forEvent(eventId: string, params: { page?: number; perPage?: number; q?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.perPage) qs.set("per_page", String(params.perPage));
+    // Only sent when non-empty: a blank q is "no filter", and omitting it
+    // keeps the URL (and so the react-query cache key) stable.
+    if (params.q?.trim()) qs.set("q", params.q.trim());
+    const suffix = qs.toString() ? `?${qs}` : "";
+
+    return api.get<{ registrations: ApiRegistration[]; meta: ApiPageMeta }>(
+      `/events/${eventId}/registrations${suffix}`,
+    );
+  },
+
+  /**
+   * Aggregate figures computed in SQL. The stat cards read these rather than
+   * summing a page of the list — a paginated list can't answer "how much
+   * revenue" without under-reporting it.
+   */
+  summary(eventId: string) {
+    return api.get<{ summary: ApiRegistrationSummary }>(`/events/${eventId}/registrations/summary`);
   },
 
   /** Downloads the participant list as a CSV (name, email, event type(s),

@@ -50,6 +50,10 @@ Rails.application.routes.draw do
       get    "registrations",                  to: "registrations#index"
       post   "events/:event_id/registrations", to: "registrations#create"
       get    "events/:event_id/registrations", to: "registrations#event_registrations"
+      # Aggregates for the dashboard's stat cards. Declared before the
+      # /export route for readability only — neither collides, since both are
+      # literal segments rather than an :id that "summary" could match.
+      get    "events/:event_id/registrations/summary", to: "registrations#summary"
       get    "events/:event_id/registrations/export", to: "registrations#export"
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
