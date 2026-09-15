@@ -44,6 +44,12 @@ class EventUpdateRequestSchema < ApplicationRequestSchema
       optional(:banner_url).maybe(:string)
       optional(:logo_url).maybe(:string)
       optional(:certificate_template_url).maybe(:string)
+      # The "registration closes at" deadline. Nullable so clearing it is
+      # expressible. `registration_closed_at` is deliberately NOT here — that
+      # one is set by the close/reopen endpoints, never by a general update,
+      # so the audit-ish "when was this closed" can't be back-dated by anyone
+      # editing the event form.
+      optional(:registration_closes_at).maybe(:string)
       # events.survey_id is a uuid column (see db/schema.rb), not an integer.
       optional(:survey_id).maybe(:string)
       optional(:event_types_attributes).array(:hash) do

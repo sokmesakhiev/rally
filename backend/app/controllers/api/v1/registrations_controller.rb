@@ -13,6 +13,10 @@ module Api
       # (or event type) has reached capacity" — see
       # Registration#event_not_full and RegistrationEventType#event_type_not_full.
       FULL_ERROR_CODES = [ :event_full, :event_type_full ].freeze
+      # Kept distinct from "full" on purpose: a full event offers the waitlist,
+      # a closed one has nothing to offer, and the participant-facing wording
+      # differs ("no spots left" vs "the organizer closed registration").
+      CLOSED_ERROR_CODE = :registration_closed
 
       # GET /api/v1/registrations — current user's registrations with event data
       def index
@@ -271,8 +275,15 @@ module Api
       # codes) so the frontend can react distinctly instead of string-matching.
       def capacity_error_json(record)
         details = record.errors.details[:base] || []
-        is_full = details.any? { |d| FULL_ERROR_CODES.include?(d[:error]) }
-        { error: record.errors.full_messages.join(", "), code: is_full ? "full" : nil }.compact
+        code =
+          # Closed is checked first: a closed event can *also* be full, and
+          # "the organizer closed this" is the more accurate thing to say.
+          if details.any? { |d| d[:error] == CLOSED_ERROR_CODE }
+            "registration_closed"
+          elsif details.any? { |d| FULL_ERROR_CODES.include?(d[:error]) }
+            "full"
+          end
+        { error: record.errors.full_messages.join(", "), code: code }.compact
       end
 
       # Sum the effective price of each selected type; fall back to event price if no types

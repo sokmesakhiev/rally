@@ -35,6 +35,10 @@ Rails.application.routes.draw do
       patch  "events/:id",           to: "events#update"
       delete "events/:id",           to: "events#destroy"
       post   "events/:id/unpublish", to: "events#unpublish"
+      # Stop/resume sign-ups without hiding the event — see
+      # EventsController#close_registration for why this isn't unpublish.
+      post   "events/:id/close_registration",  to: "events#close_registration"
+      post   "events/:id/reopen_registration", to: "events#reopen_registration"
       get    "events/:id/activity",  to: "events#activity"
 
       # Pricing plans (organizer pays to publish — see Event::PLANS)
