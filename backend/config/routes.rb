@@ -188,6 +188,12 @@ Rails.application.routes.draw do
       # File uploads
       post "uploads", to: "uploads#create"
 
+      # Certificate template preview. Singular and id-less: one preview per
+      # organizer per event, so there is nothing for a caller to choose
+      # between. POST enqueues a render and returns 202; GET polls it.
+      post "events/:event_id/certificate_preview", to: "certificate_previews#create"
+      get  "events/:event_id/certificate_preview", to: "certificate_previews#show"
+
       # ── Admin / moderation ──────────────────────────────────────────────
       # Requires an authenticated, non-suspended user with `admin` set (see
       # Api::V1::Admin::BaseController). Non-admins get 404, not 403, so this

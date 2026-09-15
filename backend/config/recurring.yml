@@ -32,3 +32,12 @@ production:
   release_abandoned_registrations:
     class: ReleaseAbandonedRegistrationsJob
     schedule: every hour at minute 37
+
+  # Certificate previews are scratch renders an organizer looked at once.
+  # Each re-preview orphans the previous PDF in S3 (the row keeps only the
+  # newest URL), so without this they accumulate unreferenced and invisible.
+  # Offset again from the two sweeps above rather than sharing their minute —
+  # all three compete for the same worker threads.
+  sweep_certificate_previews:
+    command: "Certificates::SweepPreviews.call"
+    schedule: every hour at minute 52

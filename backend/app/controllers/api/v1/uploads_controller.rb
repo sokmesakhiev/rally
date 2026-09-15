@@ -37,13 +37,42 @@ module Api
           return
         end
 
+        # Inspect certificate templates *before* storing, so a file that isn't
+        # really an ODT never becomes a blob. The content-type check above only
+        # tests what the browser claimed; this one opens the archive.
+        report = nil
+        if upload_type == "certificate_template"
+          report = Certificates::InspectTemplate.call(file)
+
+          unless report.valid_odt
+            render json: {
+              error: "That file could not be read as an OpenDocument Text (.odt) document.",
+              code: report.error
+            }, status: :unprocessable_entity
+            return
+          end
+        end
+
         blob = ActiveStorage::Blob.create_and_upload!(
           io: file,
           filename: "#{current_user.id}/#{upload_type}-#{Time.current.to_i}#{File.extname(file.original_filename)}",
           content_type: file.content_type
         )
 
-        render json: { url: url_for(blob) }, status: :created
+        body = { url: url_for(blob) }
+        # signed_id lets the certificate-preview endpoint name this blob
+        # directly instead of being handed a URL to go and fetch. An endpoint
+        # that takes a URL and downloads it is an SSRF hole; a signed id can
+        # only ever resolve to a blob this application stored.
+        body[:signed_id] = blob.signed_id if upload_type == "certificate_template"
+        # A split token is reported, not rejected. It is a strong signal but a
+        # heuristic one, and an organizer blocked by a false positive would
+        # have no way around it — whereas a warning they can act on costs
+        # nothing if it is wrong. An unreadable archive, above, is certain and
+        # is refused.
+        body[:template_check] = report.as_json if report
+
+        render json: body, status: :created
       end
 
       private

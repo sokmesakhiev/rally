@@ -1299,6 +1299,7 @@ function ManageEvent() {
                   <CertificateTemplateUpload
                     value={certificateTemplateUrl ?? null}
                     onChange={setCertificateTemplateUrl}
+                    eventId={eventId}
                   />
 
                   <Button

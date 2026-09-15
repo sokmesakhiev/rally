@@ -1047,16 +1047,80 @@ export const organizerApi = {
 
 // ─── Uploads ──────────────────────────────────────────────────────────────────
 
+/**
+ * What Certificates::InspectTemplate found in an uploaded .odt.
+ *
+ * `split` is the one that matters: those tokens exist in the document but are
+ * broken across formatting runs, so MergeOdt's literal substitution won't
+ * match them and the braces will print on every certificate. `missing` is
+ * informational — an organizer may simply not want that field.
+ */
+export interface CertificateTemplateCheck {
+  valid_odt: boolean;
+  usable: boolean;
+  present: string[];
+  split: string[];
+  missing: string[];
+}
+
+export interface CertificateTemplateUploadResult {
+  url: string;
+  signed_id: string;
+  template_check: CertificateTemplateCheck;
+}
+
 export const uploadsApi = {
-  async upload(
-    file: File,
-    type: "banner" | "logo" | "avatar" | "certificate_template",
-  ): Promise<string> {
+  async upload(file: File, type: "banner" | "logo" | "avatar"): Promise<string> {
     const form = new FormData();
     form.append("file", file);
     form.append("type", type);
     const res = await api.upload<{ url: string }>("/uploads", form);
     return res.url;
+  },
+
+  /**
+   * Separate from `upload` because this is the only upload type whose response
+   * carries more than a URL, and folding the richer shape into the shared
+   * method would make every image call site pretend to care about it.
+   */
+  async uploadCertificateTemplate(file: File): Promise<CertificateTemplateUploadResult> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", "certificate_template");
+    return api.upload<CertificateTemplateUploadResult>("/uploads", form);
+  },
+};
+
+// ─── Certificate preview ──────────────────────────────────────────────────────
+
+export type CertificatePreviewStatus = "pending" | "ready" | "failed";
+
+export interface CertificatePreview {
+  status: CertificatePreviewStatus;
+  file_url: string | null;
+  error_code: string | null;
+  updated_at: string;
+}
+
+export const certificatePreviewApi = {
+  /**
+   * Enqueues a render and returns immediately with `pending` — the conversion
+   * runs on the job worker (LibreOffice, ~1-4s and ~180 MB), never in the
+   * request. Takes the blob's `signed_id` rather than its URL: an endpoint
+   * that accepted a URL and fetched it would be an SSRF hole.
+   */
+  async request(eventId: string, signedId: string): Promise<{ preview: CertificatePreview }> {
+    return api.post<{ preview: CertificatePreview }>(
+      `/events/${eventId}/certificate_preview`,
+      { signed_id: signedId },
+    );
+  },
+
+  /** Poll target. Resolves `{ preview: null }` when none has been requested. */
+  async get(eventId: string): Promise<{ preview: CertificatePreview | null }> {
+    return api.get<{ preview: CertificatePreview | null }>(
+      `/events/${eventId}/certificate_preview`,
+    );
   },
 };
 
