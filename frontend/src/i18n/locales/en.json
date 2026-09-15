@@ -867,7 +867,6 @@
     "tabSupport": "Support"
   },
   "legal": {
-    "draftNotice": "Draft — pending legal review. This placeholder copy is not yet reviewed legal text and should not be relied on as binding.",
     "lastUpdated": "Draft dated {{date}}",
     "termsTitle": "Terms of Service",
     "termsIntro": "These Terms of Service govern your use of Rally, an event registration platform. By creating an account or using Rally, you agree to these terms.",

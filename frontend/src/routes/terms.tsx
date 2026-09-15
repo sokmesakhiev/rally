@@ -28,10 +28,6 @@ function TermsPage() {
           <span className="font-display text-lg font-bold">Rally</span>
         </Link>
 
-        <div className="mt-8 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          {t("legal.draftNotice")}
-        </div>
-
         <h1 className="mt-8 font-display text-3xl font-bold">{t("legal.termsTitle")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t("legal.lastUpdated", { date: "2026-08-27" })}</p>
 
