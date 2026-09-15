@@ -112,14 +112,15 @@ module Certificates
       certificate
     end
 
-    # Mirrors UploadsController's `url_for(blob)`, but this is a plain
-    # service class (job-invoked, no request in scope) rather than a
-    # controller, so there's no request to infer a host from — reuse the
-    # host/port already configured for ActionMailer per environment (see
-    # config/environments/*.rb) instead of requiring a separate setting.
+    # This used to build the URL from `action_mailer.default_url_options`,
+    # reasoning that a job has no request to infer a host from. The host it
+    # picked up was FRONTEND_URL — correct for a mailer link, wrong for a blob,
+    # which Rails serves on the API domain. Every certificate rendered in
+    # production was therefore stored with a CloudFront URL that 404s.
+    # See Storage::BlobUrl. **Rows written before that fix still hold the bad
+    # host and need rewriting.**
     def blob_url(blob)
-      options = Rails.application.config.action_mailer.default_url_options || {}
-      Rails.application.routes.url_helpers.rails_blob_url(blob, **options)
+      Storage::BlobUrl.call(blob)
     end
   end
 end

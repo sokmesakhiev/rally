@@ -104,12 +104,11 @@ module Certificates
       blob_url(blob)
     end
 
-    # Same host resolution as Certificates::RenderPdf#blob_url — a job has no
-    # request in scope, so the ActionMailer default_url_options are reused
-    # rather than introducing a second setting that could drift from it.
+    # Same host resolution as Certificates::RenderPdf#blob_url, and shared with
+    # it on purpose: both had the FRONTEND_URL bug, because both copied the same
+    # wrong fallback. See Storage::BlobUrl.
     def blob_url(blob)
-      options = Rails.application.config.action_mailer.default_url_options || {}
-      Rails.application.routes.url_helpers.rails_blob_url(blob, **options)
+      Storage::BlobUrl.call(blob)
     end
 
     def fail!(code)
