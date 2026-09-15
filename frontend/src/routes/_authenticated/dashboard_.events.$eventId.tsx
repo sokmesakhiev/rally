@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -35,6 +35,8 @@ import {
   Shield,
   LogOut,
   UsersRound,
+  Settings,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -57,11 +59,18 @@ import { PlanPaymentPanel } from "@/components/plan-payment-panel";
 import { CheckInScanner } from "@/components/check-in-scanner";
 import { ResultsManager } from "@/components/results-manager";
 import { MembersTab } from "@/components/members-tab";
+import { ListPager } from "@/components/list-pager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -224,6 +233,14 @@ function toDateTimeLocal(iso: string | null): string {
   return local.toISOString().slice(0, 16);
 }
 
+/** Tabs that render a page of the participant list. Membership decides
+ *  whether the list query runs at all — see participantsQuery's `enabled`. */
+const LIST_TABS = ["participants", "checkin", "results"];
+const PER_PAGE = 25;
+/** Long enough that typing a name doesn't fire a request per keystroke,
+ *  short enough that the list doesn't feel stuck. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 function ManageEvent() {
   const { eventId } = Route.useParams();
   const { t } = useTranslation();
@@ -242,6 +259,36 @@ function ManageEvent() {
   // speaks ISO 8601 in UTC — so this is held as the input's own string and
   // converted at each boundary rather than kept as a Date.
   const [registrationClosesAt, setRegistrationClosesAt] = useState<string | undefined>(undefined);
+
+  // Declared here, above the queries that read it. "participants" is always
+  // permitted (panelVisibility.participants is unconditional), so the initial
+  // tab needs nothing from the role — which is what lets it sit above `can`.
+  const [tab, setTab] = useState<string>("participants");
+
+  // One page/search pair shared by the three list tabs. They show the same
+  // underlying rows, so carrying separate state per tab would mean three
+  // near-identical queries and three caches to invalidate after a check-in.
+  const [listPage, setListPage] = useState(1);
+  const [listSearch, setListSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(listSearch), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [listSearch]);
+
+  // Page 1 whenever the search changes — otherwise searching from page 4 lands
+  // on page 4 of a shorter result set, which usually means an empty table.
+  useEffect(() => {
+    setListPage(1);
+  }, [debouncedSearch]);
+
+  // And whenever the tab changes: page 3 of Participants is not a meaningful
+  // starting point for Check-in.
+  useEffect(() => {
+    setListPage(1);
+    setListSearch("");
+  }, [tab]);
 
   const eventQuery = useQuery({
     queryKey: ["event", eventId],
@@ -264,9 +311,29 @@ function ManageEvent() {
     setRegistrationClosesAt(toDateTimeLocal(ev.registration_closes_at));
   }
 
+  // Counts and revenue for the stat cards. Always loaded, because those cards
+  // sit above the tabs and are visible whichever one is open — but it's one
+  // aggregate query, not every registration.
+  const summaryQuery = useQuery({
+    queryKey: ["event-registration-summary", eventId],
+    queryFn: () => registrationsApi.summary(eventId).then((r) => r.summary),
+  });
+
+  // One page of participants, for whichever list tab is open. `enabled` is the
+  // answer to "don't load all participants until we get into this tab": on
+  // Setup or Activity this never fires at all.
   const participantsQuery = useQuery({
-    queryKey: ["event-participants", eventId],
-    queryFn: () => registrationsApi.forEvent(eventId).then((r) => r.registrations),
+    queryKey: ["event-participants", eventId, tab, listPage, debouncedSearch],
+    enabled: LIST_TABS.includes(tab),
+    // Keeps the previous page on screen while the next one loads, so paging
+    // doesn't flash an empty table.
+    placeholderData: (prev) => prev,
+    queryFn: () =>
+      registrationsApi.forEvent(eventId, {
+        page: listPage,
+        perPage: PER_PAGE,
+        q: debouncedSearch,
+      }),
   });
 
   const surveyResponsesQuery = useQuery({
@@ -308,8 +375,14 @@ function ManageEvent() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const invalidateParticipants = () =>
+  // Both, always. The stat cards moved to their own aggregate query, so
+  // invalidating only the list would update the row an organizer just checked
+  // in while leaving the "checked in" and revenue cards showing stale figures
+  // — the sort of divergence nobody reports because each half looks right.
+  const invalidateParticipants = () => {
     queryClient.invalidateQueries({ queryKey: ["event-participants", eventId] });
+    queryClient.invalidateQueries({ queryKey: ["event-registration-summary", eventId] });
+  };
 
   const checkIn = useMutation({
     mutationFn: (id: string) => registrationsApi.checkIn(id),
@@ -333,8 +406,6 @@ function ManageEvent() {
     },
     onError: (e: any) => toast.error(e.message),
   });
-
-  const [checkInSearch, setCheckInSearch] = useState("");
 
   const [exportingCsv, setExportingCsv] = useState(false);
   const handleExportCsv = async () => {
@@ -453,14 +524,21 @@ function ManageEvent() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const participants = participantsQuery.data ?? [];
+  // `participants` is now *one page*, not everyone. Anything that needs a
+  // total must read `summary` — a .length here would silently report 25.
+  const participants = participantsQuery.data?.registrations ?? [];
+  const pageMeta = participantsQuery.data?.meta;
   const waitlist = waitlistQuery.data ?? [];
-  const paidCount = participants.filter((p) => p.payment_status === "paid").length;
-  const revenue = participants.reduce((sum, p) => sum + (p.amount_paid_cents ?? 0), 0);
-  const checkedInCount = participants.filter((p) => p.checked_in_at).length;
-  const filteredForCheckIn = participants.filter((p) =>
-    (p.profile?.display_name ?? "").toLowerCase().includes(checkInSearch.trim().toLowerCase()),
-  );
+
+  const summary = summaryQuery.data;
+  const totalParticipants = summary?.total ?? 0;
+  const paidCount = summary?.paid ?? 0;
+  const revenue = summary?.revenue_cents ?? 0;
+  const checkedInCount = summary?.checked_in ?? 0;
+
+  // Search moved server-side with pagination — filtering an array that only
+  // holds the current page would "find" nobody past row 25.
+  const filteredForCheckIn = participants;
 
   const activeBrandColor = brandColor ?? ev?.brand_color ?? "#6366f1";
 
@@ -516,35 +594,54 @@ function ManageEvent() {
   };
 
   const hasSurvey = !!ev?.survey_id;
-  const tabVisibility = {
-    branding: can.updateEvent,
+  // Nine flat tabs didn't fit: at ~95px per column the labels were unreadable,
+  // and the grid was sized from a key count that didn't match the number of
+  // triggers rendered, so the last one wrapped onto its own row. Both problems
+  // go away by grouping — four things you reach for during an event stay on
+  // the bar, configuration collapses into Setup, and the rarely-opened
+  // read-only views move behind an overflow menu.
+  //
+  // Each panel keeps its own permission, and a *group* only appears when at
+  // least one panel inside it does. Otherwise a Viewer could land on a Setup
+  // tab containing nothing.
+  const panelVisibility = {
     participants: true,
     checkin: can.checkIn,
     results: can.manageResults,
-    responses: hasSurvey && can.viewSurveyResponses,
+    branding: can.updateEvent,
+    registration: can.updateEvent,
     certificate: can.updateEvent,
+    responses: hasSurvey && can.viewSurveyResponses,
     activity: can.viewActivity,
     members: can.viewMembers,
   };
-  const visibleTabKeys = (Object.keys(tabVisibility) as (keyof typeof tabVisibility)[]).filter(
-    (k) => tabVisibility[k],
+
+  // Panels reachable through the Setup tab's own second-level nav.
+  const setupPanels = (["branding", "registration", "certificate"] as const).filter(
+    (k) => panelVisibility[k],
   );
-  const defaultTab = visibleTabKeys[0] ?? "participants";
-  // Tailwind needs complete, literal class strings to find at build time —
-  // a template-interpolated `grid-cols-${n}` wouldn't get generated. Every
-  // count from 1 (Viewer, no survey, somehow only "members" visible) to 8
-  // (Owner/Manager with a survey) is covered.
-  const TAB_GRID_CLASSES: Record<number, string> = {
-    1: "max-w-xs grid-cols-1",
-    2: "max-w-sm grid-cols-2",
-    3: "max-w-lg grid-cols-3",
-    4: "max-w-xl grid-cols-4",
-    5: "max-w-2xl grid-cols-5",
-    6: "max-w-2xl grid-cols-6",
-    7: "max-w-3xl grid-cols-7",
-    8: "max-w-4xl grid-cols-8",
+  // Read-only views behind "More" — opened occasionally, never mid-event.
+  const overflowPanels = (["responses", "activity", "members"] as const).filter(
+    (k) => panelVisibility[k],
+  );
+
+  const primaryTabs = [
+    { value: "participants", icon: Users, label: t("manageEvent.tabParticipants") },
+    { value: "checkin", icon: ScanLine, label: t("manageEvent.tabCheckIn") },
+    { value: "results", icon: Trophy, label: t("manageEvent.tabResults") },
+  ].filter((tabItem) => panelVisibility[tabItem.value as keyof typeof panelVisibility]);
+
+  const overflowLabels: Record<string, string> = {
+    responses: t("manageEvent.tabResponses"),
+    activity: t("manageEvent.tabActivity"),
+    members: t("manageEvent.tabMembers"),
   };
-  const tabGridClass = TAB_GRID_CLASSES[visibleTabKeys.length] ?? TAB_GRID_CLASSES[8];
+
+  const [setupTab, setSetupTab] = useState<string>("branding");
+  // Whichever overflow panel is open, so the More button can show it as
+  // selected — without this, choosing Activity Logs leaves no tab looking
+  // active and the bar reads as though nothing is open.
+  const activeOverflow = overflowPanels.find((k) => k === tab);
 
   return (
     <div className="min-h-screen bg-background">
@@ -848,7 +945,7 @@ function ManageEvent() {
                         {plansQuery.data?.map((plan) => {
                           const isCurrent = plan.id === ev.plan;
                           const tooSmallForTypes = plan.capacity < combinedTypeCapacity;
-                          const tooSmallForRegistered = plan.capacity < participants.length;
+                          const tooSmallForRegistered = plan.capacity < totalParticipants;
                           const disabled = isCurrent || tooSmallForTypes || tooSmallForRegistered;
                           return (
                             <button
@@ -898,12 +995,12 @@ function ManageEvent() {
               <Stat
                 icon={Users}
                 label={t("manageEvent.statParticipants")}
-                value={`${participants.length}${ev.capacity ? ` / ${ev.capacity}` : ""}`}
+                value={`${totalParticipants}${ev.capacity ? ` / ${ev.capacity}` : ""}`}
               />
               <Stat
                 icon={Check}
                 label={t("manageEvent.statPaid")}
-                value={ev.price_cents === 0 ? "—" : `${paidCount} / ${participants.length}`}
+                value={ev.price_cents === 0 ? "—" : `${paidCount} / ${totalParticipants}`}
               />
               <Stat
                 icon={DollarSign}
@@ -918,7 +1015,7 @@ function ManageEvent() {
               <Stat
                 icon={ScanLine}
                 label={t("manageEvent.statCheckedIn")}
-                value={`${checkedInCount} / ${participants.length}`}
+                value={`${checkedInCount} / ${totalParticipants}`}
               />
             </div>
 
@@ -958,11 +1055,13 @@ function ManageEvent() {
                 <p className="text-sm font-semibold mb-3">{t("manageEvent.byType")}</p>
                 <div className="space-y-2">
                   {ev.event_types.map((et) => {
-                    const count = participants.filter((p) =>
-                      p.event_types?.some((t) => t.id === et.id),
-                    ).length;
-                    const pct = participants.length
-                      ? Math.round((count / participants.length) * 100)
+                    // From the summary, not the loaded page: this block sits
+                    // above the tabs and is always on screen, so counting the
+                    // current page would show "3 of 25" for an event with
+                    // three thousand people in it.
+                    const count = summary?.by_event_type?.[et.id] ?? 0;
+                    const pct = totalParticipants
+                      ? Math.round((count / totalParticipants) * 100)
                       : 0;
                     return (
                       <div key={et.id} className="flex items-center gap-3">
@@ -1009,54 +1108,48 @@ function ManageEvent() {
             )}
 
             {/* Tabs */}
-            <Tabs defaultValue={defaultTab} className="mt-10">
-              <TabsList className={`grid w-full ${tabGridClass}`}>
-                {tabVisibility.branding && (
-                  <TabsTrigger value="branding">
-                    <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
-                  </TabsTrigger>
+            <Tabs value={tab} onValueChange={setTab} className="mt-10">
+              {/* Auto-width triggers in a flex row, not a fixed grid: the grid
+                  needed a hardcoded column count per tab total, which is what
+                  silently mis-sized itself when a tab was added. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <TabsList className="h-auto flex-wrap justify-start">
+                  {primaryTabs.map(({ value, icon: Icon, label }) => (
+                    <TabsTrigger key={value} value={value}>
+                      <Icon className="h-4 w-4 mr-1.5" /> {label}
+                    </TabsTrigger>
+                  ))}
+                  {setupPanels.length > 0 && (
+                    <TabsTrigger value="setup">
+                      <Settings className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabSetup")}
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+
+                {overflowPanels.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      {/* Deliberately outside TabsList: a non-trigger child
+                          would break Radix's roving focus across the tabs. */}
+                      <Button
+                        variant={activeOverflow ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-9"
+                      >
+                        {activeOverflow ? overflowLabels[activeOverflow] : t("manageEvent.tabMore")}
+                        <ChevronDown className="h-4 w-4 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {overflowPanels.map((key) => (
+                        <DropdownMenuItem key={key} onSelect={() => setTab(key)}>
+                          {overflowLabels[key]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-                {tabVisibility.participants && (
-                  <TabsTrigger value="participants">
-                    <Users className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabParticipants")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.checkin && (
-                  <TabsTrigger value="checkin">
-                    <ScanLine className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCheckIn")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.results && (
-                  <TabsTrigger value="results">
-                    <Trophy className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResults")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.responses && (
-                  <TabsTrigger value="responses">
-                    <ClipboardList className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabResponses")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.certificate && (
-                  <TabsTrigger value="registration">
-                    <Ban className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabRegistration")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.certificate && (
-                  <TabsTrigger value="certificate">
-                    <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.activity && (
-                  <TabsTrigger value="activity">
-                    <History className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabActivity")}
-                  </TabsTrigger>
-                )}
-                {tabVisibility.members && (
-                  <TabsTrigger value="members">
-                    <UsersRound className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabMembers")}
-                  </TabsTrigger>
-                )}
-              </TabsList>
+              </div>
 
               {/* ── Participants ── */}
               <TabsContent value="participants" className="mt-6">
@@ -1066,7 +1159,7 @@ function ManageEvent() {
                       variant="outline"
                       size="sm"
                       onClick={handleExportCsv}
-                      disabled={exportingCsv || participants.length === 0}
+                      disabled={exportingCsv || totalParticipants === 0}
                     >
                       {exportingCsv ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1077,13 +1170,30 @@ function ManageEvent() {
                     </Button>
                   </div>
                 )}
+                <div className="mb-3 flex justify-end">
+                  <div className="relative w-full max-w-[260px]">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={listSearch}
+                      onChange={(e) => setListSearch(e.target.value)}
+                      placeholder={t("manageEvent.searchParticipants")}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
                 <div className="overflow-hidden rounded-2xl border border-border">
                   {participantsQuery.isLoading && (
                     <p className="p-5 text-sm text-muted-foreground">{t("common.loading")}</p>
                   )}
                   {!participantsQuery.isLoading && participants.length === 0 && (
                     <p className="p-8 text-center text-sm text-muted-foreground">
-                      {t("manageEvent.noParticipants")}
+                      {/* Distinguishes "nobody has registered" from "your
+                          search matched nobody" — the same empty table for
+                          both leaves an organizer wondering if the data
+                          vanished. */}
+                      {debouncedSearch
+                        ? t("manageEvent.noParticipantsMatch", { query: debouncedSearch })
+                        : t("manageEvent.noParticipants")}
                     </p>
                   )}
                   {participants.map((p, i) => (
@@ -1107,6 +1217,11 @@ function ManageEvent() {
                                 {t.name}
                               </Badge>
                             ))}
+                            <ListPager
+                              meta={pageMeta}
+                              busy={participantsQuery.isFetching}
+                              onPageChange={setListPage}
+                            />
                           </div>
                         )}
                       </div>
@@ -1184,7 +1299,7 @@ function ManageEvent() {
               </TabsContent>
 
               {/* ── Check-in ── */}
-              {tabVisibility.checkin && (
+              {panelVisibility.checkin && (
                 <TabsContent value="checkin" className="mt-6 space-y-6">
                   <CheckInScanner onCheckedIn={invalidateParticipants} />
 
@@ -1193,14 +1308,14 @@ function ManageEvent() {
                       <p className="text-sm font-semibold">
                         {t("checkIn.manualListTitle", {
                           checked: checkedInCount,
-                          total: participants.length,
+                          total: totalParticipants,
                         })}
                       </p>
                       <div className="relative w-full max-w-[220px]">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                          value={checkInSearch}
-                          onChange={(e) => setCheckInSearch(e.target.value)}
+                          value={listSearch}
+                          onChange={(e) => setListSearch(e.target.value)}
                           placeholder={t("checkIn.searchPlaceholder")}
                           className="h-8 pl-8 text-sm"
                         />
@@ -1248,6 +1363,11 @@ function ManageEvent() {
                             )}
                           </div>
                         ))}
+                        <ListPager
+                          meta={pageMeta}
+                          busy={participantsQuery.isFetching}
+                          onPageChange={setListPage}
+                        />
                       </div>
                     )}
                   </div>
@@ -1255,221 +1375,263 @@ function ManageEvent() {
               )}
 
               {/* ── Results ── */}
-              {tabVisibility.results && (
+              {panelVisibility.results && (
                 <TabsContent value="results" className="mt-6">
                   <ResultsManager
                     eventId={eventId}
                     participants={participants}
                     onChanged={invalidateParticipants}
                   />
-                </TabsContent>
-              )}
-
-              {/* ── QR & Branding ── */}
-              {tabVisibility.branding && (
-                <TabsContent value="branding" className="mt-6 space-y-6">
-                  {/* QR code card */}
-                  <div className="rounded-2xl border border-border bg-card p-6">
-                    <div className="flex items-center gap-2 mb-1">
-                      <QrCode className="h-5 w-5 text-muted-foreground" />
-                      <h2 className="font-semibold">{t("manageEvent.qrTitle")}</h2>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-6">{t("manageEvent.qrDesc")}</p>
-                    <EventQRCode eventId={eventId} brandColor={activeBrandColor} />
-                  </div>
-
-                  {/* Core details editor — title/date/price/etc. */}
-                  <EventDetailsEditor event={ev} registeredCount={participants.length} />
-
-                  {/* Branding editor card */}
-                  <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-                    <div>
-                      <h2 className="font-semibold">{t("manageEvent.brandingTitle")}</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {t("manageEvent.brandingDesc")}
-                      </p>
-                    </div>
-
-                    <ImageUpload
-                      value={bannerUrl ?? null}
-                      onChange={setBannerUrl}
-                      variant="banner"
-                      label={t("manageEvent.bannerImage")}
+                  {/* ResultsManager renders whatever page it's handed, so the
+                      pager lives here rather than inside it — the component
+                      stays a dumb list and the paging state has one owner. */}
+                  <div className="rounded-2xl border border-border">
+                    <ListPager
+                      meta={pageMeta}
+                      busy={participantsQuery.isFetching}
+                      onPageChange={setListPage}
                     />
-
-                    <div className="flex flex-wrap gap-6">
-                      <ImageUpload
-                        value={logoUrl ?? null}
-                        onChange={setLogoUrl}
-                        variant="logo"
-                        label={t("manageEvent.logo")}
-                      />
-
-                      <div className="flex-1 space-y-2 min-w-[160px]">
-                        <Label>{t("manageEvent.brandColor")}</Label>
-                        <div className="flex flex-wrap gap-2">
-                          {PRESET_COLORS.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
-                              style={{
-                                backgroundColor: c,
-                                borderColor: activeBrandColor === c ? "white" : "transparent",
-                                outline: activeBrandColor === c ? `2px solid ${c}` : "none",
-                                outlineOffset: "1px",
-                              }}
-                              onClick={() => setBrandColor(c)}
-                              aria-label={c}
-                            />
-                          ))}
-                          <label
-                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-muted text-xs text-muted-foreground hover:border-primary"
-                            title={t("manageEvent.customColor")}
-                          >
-                            <input
-                              type="color"
-                              value={activeBrandColor}
-                              onChange={(e) => setBrandColor(e.target.value)}
-                              className="sr-only"
-                            />
-                            +
-                          </label>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span
-                            className="inline-block h-5 w-5 rounded-full border border-border"
-                            style={{ backgroundColor: activeBrandColor }}
-                          />
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {activeBrandColor}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      onClick={() => saveBranding.mutate()}
-                      disabled={saveBranding.isPending}
-                      variant="hero"
-                    >
-                      {saveBranding.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {t("manageEvent.saveBranding")}
-                    </Button>
                   </div>
                 </TabsContent>
               )}
 
-              {/* ── Registration status ── */}
-              {tabVisibility.certificate && (
-                <TabsContent value="registration" className="mt-6">
-                  <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-                    <div className="flex items-center gap-2">
-                      <Ban className="h-5 w-5 text-muted-foreground" />
-                      <h2 className="font-semibold">{t("manageEvent.registrationTitle")}</h2>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {t("manageEvent.registrationDesc")}
-                    </p>
+              {/* ── Setup: branding, registration and certificate ──
+                  One outer tab with its own second-level nav. These three are
+                  all "configure the event before it runs" and none is opened
+                  mid-event, so they cost a top-level slot each for no benefit.
+                  Nested Tabs (a separate Radix root) rather than local state,
+                  so keyboard and ARIA behaviour matches the outer bar. */}
+              {setupPanels.length > 0 && (
+                <TabsContent value="setup" className="mt-6">
+                  <Tabs value={setupTab} onValueChange={setSetupTab}>
+                    <TabsList className="h-auto flex-wrap justify-start">
+                      {setupPanels.includes("branding") && (
+                        <TabsTrigger value="branding">
+                          <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
+                        </TabsTrigger>
+                      )}
+                      {setupPanels.includes("registration") && (
+                        <TabsTrigger value="registration">
+                          <Ban className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabRegistration")}
+                        </TabsTrigger>
+                      )}
+                      {setupPanels.includes("certificate") && (
+                        <TabsTrigger value="certificate">
+                          <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
+                        </TabsTrigger>
+                      )}
+                    </TabsList>
 
-                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/40 p-4">
-                      <div className="min-w-0">
-                        <p className="font-medium">
-                          {ev.registration_closed
-                            ? t("manageEvent.registrationIsClosed")
-                            : t("manageEvent.registrationIsOpen")}
-                        </p>
-                        {ev.registration_closes_at && !ev.registration_closed_at && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {t("manageEvent.registrationClosesOn", {
-                              date: formatDateTime(ev.registration_closes_at),
-                            })}
+                    {/* ── QR & Branding ── */}
+                    {panelVisibility.branding && (
+                      <TabsContent value="branding" className="mt-6 space-y-6">
+                        {/* QR code card */}
+                        <div className="rounded-2xl border border-border bg-card p-6">
+                          <div className="flex items-center gap-2 mb-1">
+                            <QrCode className="h-5 w-5 text-muted-foreground" />
+                            <h2 className="font-semibold">{t("manageEvent.qrTitle")}</h2>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-6">
+                            {t("manageEvent.qrDesc")}
                           </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        disabled={closeRegistration.isPending || reopenRegistration.isPending}
-                        onClick={() =>
-                          ev.registration_closed
-                            ? reopenRegistration.mutate()
-                            : closeRegistration.mutate()
-                        }
-                      >
-                        {(closeRegistration.isPending || reopenRegistration.isPending) && (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        )}
-                        {ev.registration_closed
-                          ? t("manageEvent.reopenRegistration")
-                          : t("manageEvent.closeRegistration")}
-                      </Button>
-                    </div>
+                          <EventQRCode eventId={eventId} brandColor={activeBrandColor} />
+                        </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="registration-closes-at">
-                        {t("manageEvent.registrationDeadlineLabel")}
-                      </Label>
-                      {/* datetime-local has no timezone, so the browser's local
+                        {/* Core details editor — title/date/price/etc. */}
+                        <EventDetailsEditor event={ev} registeredCount={totalParticipants} />
+
+                        {/* Branding editor card */}
+                        <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                          <div>
+                            <h2 className="font-semibold">{t("manageEvent.brandingTitle")}</h2>
+                            <p className="text-sm text-muted-foreground">
+                              {t("manageEvent.brandingDesc")}
+                            </p>
+                          </div>
+
+                          <ImageUpload
+                            value={bannerUrl ?? null}
+                            onChange={setBannerUrl}
+                            variant="banner"
+                            label={t("manageEvent.bannerImage")}
+                          />
+
+                          <div className="flex flex-wrap gap-6">
+                            <ImageUpload
+                              value={logoUrl ?? null}
+                              onChange={setLogoUrl}
+                              variant="logo"
+                              label={t("manageEvent.logo")}
+                            />
+
+                            <div className="flex-1 space-y-2 min-w-[160px]">
+                              <Label>{t("manageEvent.brandColor")}</Label>
+                              <div className="flex flex-wrap gap-2">
+                                {PRESET_COLORS.map((c) => (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+                                    style={{
+                                      backgroundColor: c,
+                                      borderColor: activeBrandColor === c ? "white" : "transparent",
+                                      outline: activeBrandColor === c ? `2px solid ${c}` : "none",
+                                      outlineOffset: "1px",
+                                    }}
+                                    onClick={() => setBrandColor(c)}
+                                    aria-label={c}
+                                  />
+                                ))}
+                                <label
+                                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-muted text-xs text-muted-foreground hover:border-primary"
+                                  title={t("manageEvent.customColor")}
+                                >
+                                  <input
+                                    type="color"
+                                    value={activeBrandColor}
+                                    onChange={(e) => setBrandColor(e.target.value)}
+                                    className="sr-only"
+                                  />
+                                  +
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span
+                                  className="inline-block h-5 w-5 rounded-full border border-border"
+                                  style={{ backgroundColor: activeBrandColor }}
+                                />
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  {activeBrandColor}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            onClick={() => saveBranding.mutate()}
+                            disabled={saveBranding.isPending}
+                            variant="hero"
+                          >
+                            {saveBranding.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {t("manageEvent.saveBranding")}
+                          </Button>
+                        </div>
+                      </TabsContent>
+                    )}
+
+                    {/* ── Registration status ── */}
+                    {panelVisibility.registration && (
+                      <TabsContent value="registration" className="mt-6">
+                        <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                          <div className="flex items-center gap-2">
+                            <Ban className="h-5 w-5 text-muted-foreground" />
+                            <h2 className="font-semibold">{t("manageEvent.registrationTitle")}</h2>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {t("manageEvent.registrationDesc")}
+                          </p>
+
+                          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/40 p-4">
+                            <div className="min-w-0">
+                              <p className="font-medium">
+                                {ev.registration_closed
+                                  ? t("manageEvent.registrationIsClosed")
+                                  : t("manageEvent.registrationIsOpen")}
+                              </p>
+                              {ev.registration_closes_at && !ev.registration_closed_at && (
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {t("manageEvent.registrationClosesOn", {
+                                    date: formatDateTime(ev.registration_closes_at),
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              disabled={closeRegistration.isPending || reopenRegistration.isPending}
+                              onClick={() =>
+                                ev.registration_closed
+                                  ? reopenRegistration.mutate()
+                                  : closeRegistration.mutate()
+                              }
+                            >
+                              {(closeRegistration.isPending || reopenRegistration.isPending) && (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              )}
+                              {ev.registration_closed
+                                ? t("manageEvent.reopenRegistration")
+                                : t("manageEvent.closeRegistration")}
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="registration-closes-at">
+                              {t("manageEvent.registrationDeadlineLabel")}
+                            </Label>
+                            {/* datetime-local has no timezone, so the browser's local
                         zone is what the organizer means — which is right here,
                         since they're setting a deadline for their own event. */}
-                      <Input
-                        id="registration-closes-at"
-                        type="datetime-local"
-                        value={registrationClosesAt}
-                        onChange={(e) => setRegistrationClosesAt(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {t("manageEvent.registrationDeadlineHint")}
-                      </p>
-                      <Button
-                        onClick={() => saveRegistrationDeadline.mutate()}
-                        disabled={saveRegistrationDeadline.isPending}
-                        variant="hero"
-                      >
-                        {saveRegistrationDeadline.isPending && (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        )}
-                        {t("manageEvent.saveDeadline")}
-                      </Button>
-                    </div>
-                  </div>
-                </TabsContent>
-              )}
+                            <Input
+                              id="registration-closes-at"
+                              type="datetime-local"
+                              value={registrationClosesAt}
+                              onChange={(e) => setRegistrationClosesAt(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t("manageEvent.registrationDeadlineHint")}
+                            </p>
+                            <Button
+                              onClick={() => saveRegistrationDeadline.mutate()}
+                              disabled={saveRegistrationDeadline.isPending}
+                              variant="hero"
+                            >
+                              {saveRegistrationDeadline.isPending && (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              )}
+                              {t("manageEvent.saveDeadline")}
+                            </Button>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    )}
 
-              {/* ── Certificate of participation ── */}
-              {tabVisibility.certificate && (
-                <TabsContent value="certificate" className="mt-6">
-                  <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-                    <div className="flex items-center gap-2">
-                      <Award className="h-5 w-5 text-muted-foreground" />
-                      <h2 className="font-semibold">{t("manageEvent.certificateTitle")}</h2>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {t("manageEvent.certificateDesc")}
-                    </p>
+                    {/* ── Certificate of participation ── */}
+                    {panelVisibility.certificate && (
+                      <TabsContent value="certificate" className="mt-6">
+                        <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+                          <div className="flex items-center gap-2">
+                            <Award className="h-5 w-5 text-muted-foreground" />
+                            <h2 className="font-semibold">{t("manageEvent.certificateTitle")}</h2>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {t("manageEvent.certificateDesc")}
+                          </p>
 
-                    <CertificateTemplateUpload
-                      value={certificateTemplateUrl ?? null}
-                      onChange={setCertificateTemplateUrl}
-                      eventId={eventId}
-                    />
+                          <CertificateTemplateUpload
+                            value={certificateTemplateUrl ?? null}
+                            onChange={setCertificateTemplateUrl}
+                            eventId={eventId}
+                          />
 
-                    <Button
-                      onClick={() => saveCertificateTemplate.mutate()}
-                      disabled={saveCertificateTemplate.isPending}
-                      variant="hero"
-                    >
-                      {saveCertificateTemplate.isPending && (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      )}
-                      {t("manageEvent.saveCertificate")}
-                    </Button>
-                  </div>
+                          <Button
+                            onClick={() => saveCertificateTemplate.mutate()}
+                            disabled={saveCertificateTemplate.isPending}
+                            variant="hero"
+                          >
+                            {saveCertificateTemplate.isPending && (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            )}
+                            {t("manageEvent.saveCertificate")}
+                          </Button>
+                        </div>
+                      </TabsContent>
+                    )}
+                  </Tabs>
                 </TabsContent>
               )}
 
               {/* ── Survey Responses ── */}
-              {tabVisibility.responses && (
+              {panelVisibility.responses && (
                 <TabsContent value="responses" className="mt-6">
                   {surveyResponsesQuery.isLoading && (
                     <p className="text-sm text-muted-foreground">
@@ -1580,7 +1742,7 @@ function ManageEvent() {
               )}
 
               {/* ── Activity ── */}
-              {tabVisibility.activity && (
+              {panelVisibility.activity && (
                 <TabsContent value="activity" className="mt-6">
                   <div className="rounded-2xl border border-border bg-card">
                     {activityQuery.isLoading && (
@@ -1623,7 +1785,7 @@ function ManageEvent() {
               )}
 
               {/* ── Members ── */}
-              {tabVisibility.members && (
+              {panelVisibility.members && (
                 <TabsContent value="members" className="mt-6">
                   <MembersTab
                     eventId={eventId}

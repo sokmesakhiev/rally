@@ -254,6 +254,26 @@ The `show` response carries the participant's recent registrations, payment stat
 - Filters compose and are passed straight through to the API (`status`, `assignment`, `unread`) rather than filtered client-side, so the list matches what the server considers `awaiting_staff`. `awaiting_count` is deliberately independent of the active filter — it means "how much is waiting on us", not "how many rows are on screen".
 - The **participant context sidebar** (recent registrations, payment state, refunded totals) is the visible payoff of building in-house rather than embedding a hosted widget, so a test pins it: if it stops rendering, that argument is gone.
 
+### The participant list: pagination and the summary
+
+`GET /events/:event_id/registrations` is **paginated** (`?page=`/`?per_page=`/`?q=`, `meta` envelope, same convention as `events#index`) and `GET .../registrations/summary` returns the aggregates. The two exist as a pair and neither works without the other.
+
+- **The summary is what makes pagination safe, not a nicety.** The manage dashboard used to load every registration and compute the stat cards in JavaScript with `.filter`/`.reduce` — including **revenue**. Paginating the list without moving those to SQL would have left the revenue card summing one page, under-reporting takings on a product that handles real money. `Registrations::Summary` does it in a handful of indexed counts, so it is also strictly cheaper than what it replaced (which serialised every row plus its user, profile, event types, certificate and result).
+- **Six things depended on the full list**, not just the table: the five stat cards, the plan-capacity guard, the Check-in list and its search, the per-type breakdown percentages, `EventDetailsEditor`'s registered count, and the export button's disabled state. All read the summary now. `participants` in that route is **one page** — a `.length` on it reports 25.
+- **The summary counts `kept`, deliberately not `active`.** A cancelled registration is excluded from capacity (`Event#full?`) but still shown in the organizer's list, so the figures have to describe the same rows the table does or the count under it won't match.
+- **Search moved server-side** (`Registration.search`, name or email, `sanitize_sql_like`) because filtering an array that holds only the current page finds nobody past row 25. It `left_joins(user: :profile)` rather than an inner join: a profile is auto-created with every user so an inner join works today, but a missing associated row silently dropping a paying participant from the organizer's view is much worse than showing a blank name.
+- **Nothing loads until its tab opens** — `participantsQuery` is `enabled: LIST_TABS.includes(tab)`, so Setup and Activity Logs fetch no participants at all. The summary always loads, because the stat cards sit above the tabs.
+- **`invalidateParticipants` must invalidate both queries.** Refreshing only the list would update the row an organizer just checked in while leaving the checked-in and revenue cards stale — a divergence nobody reports, because each half looks right on its own.
+
+### Frontend: the manage-event tab bar
+
+`dashboard_.events.$eventId.tsx` has nine panels but only **four top-level tabs** — Participants, Check-in, Results, Setup — plus a "More" dropdown. Branding, Registration and Certificate live inside Setup behind a nested `Tabs` (a separate Radix root, so keyboard and ARIA behaviour matches); Survey Responses, Activity Logs and Members sit in the overflow menu.
+
+- **The grid it replaced was structurally fragile.** `TabsList` was `grid grid-cols-N` with `N` looked up from a hand-maintained `TAB_GRID_CLASSES` table keyed on `visibleTabKeys.length`. Adding a trigger without adding a matching key silently sized the grid one column short and the last tab wrapped onto its own row — which is exactly what happened when the Registration tab was added gated on `tabVisibility.certificate`. Auto-width triggers in a flex row have no count to keep in sync.
+- **Nine tabs never fit anyway**: measured at 1048px of labels inside an 856px container. Four tabs plus More is 544px.
+- **`panelVisibility` is per-panel; a group renders only when something inside it does.** Otherwise a Viewer (no `update_event`) would get a Setup tab containing nothing. `setupPanels`/`overflowPanels` are the filtered lists, and their emptiness is what hides Setup and More respectively. The Check-in role still sees exactly Participants and Check-in and nothing else, which is that role's acceptance criterion.
+- **The Tabs root is controlled (`value`/`onValueChange`), not `defaultValue`.** The overflow items are `DropdownMenuItem`s, not `TabsTrigger`s, so selecting one has to set the value directly. The dropdown trigger deliberately sits **outside** `TabsList` — a non-trigger child inside it breaks Radix's roving focus — and shows the active overflow panel's label so the bar still indicates what's open.
+
 ### Frontend: banners
 
 `HeroBanner` (`src/components/hero-banner.tsx`) is the full-bleed strip on the event detail and organizer profile pages, and the preview inside `ImageUpload`. All three go through it so they cannot drift — the event and organizer pages previously carried byte-identical `object-cover` markup, and a preview that crops differently from the live page is worse than no preview.
