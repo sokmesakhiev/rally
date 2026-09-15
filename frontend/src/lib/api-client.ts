@@ -543,8 +543,7 @@ export const eventsApi = {
       // so a destroy entry can't accidentally be typo'd into a half-filled
       // update.
       event_types_attributes?: (
-        | (ApiEventTypeDraft & { id?: string })
-        | { id: string; _destroy: true }
+        (ApiEventTypeDraft & { id?: string }) | { id: string; _destroy: true }
       )[];
     },
   ) {
@@ -701,10 +700,7 @@ export const registrationsApi = {
    * authorization as forEvent(). Triggers a browser file download rather
    * than returning parsed data. */
   exportCsv(eventId: string) {
-    return downloadFile(
-      `/events/${eventId}/registrations/export`,
-      `registrations-${eventId}.csv`,
-    );
+    return downloadFile(`/events/${eventId}/registrations/export`, `registrations-${eventId}.csv`);
   },
 
   /** `guest` is only needed when the visitor isn't signed in (see
@@ -767,10 +763,9 @@ export const registrationsApi = {
 
   /** Sets (or, with `null`, clears) one participant's finish time. */
   setResult(id: string, finishTimeSeconds: number | null) {
-    return api.patch<{ result: { id: string; registration_id: string; finish_time_seconds: number | null } }>(
-      `/registrations/${id}/result`,
-      { result: { finish_time_seconds: finishTimeSeconds } },
-    );
+    return api.patch<{
+      result: { id: string; registration_id: string; finish_time_seconds: number | null };
+    }>(`/registrations/${id}/result`, { result: { finish_time_seconds: finishTimeSeconds } });
   },
 };
 
@@ -825,7 +820,9 @@ export const waitlistApi = {
   },
 
   myEntryForEvent(eventId: string) {
-    return waitlistApi.mine().then((r) => r.waitlist_entries.find((e) => e.event_id === eventId) ?? null);
+    return waitlistApi
+      .mine()
+      .then((r) => r.waitlist_entries.find((e) => e.event_id === eventId) ?? null);
   },
 
   join(eventId: string, opts?: { eventTypeIds?: string[] }) {
@@ -1106,13 +1103,21 @@ export const certificatePreviewApi = {
   /**
    * Enqueues a render and returns immediately with `pending` — the conversion
    * runs on the job worker (LibreOffice, ~1-4s and ~180 MB), never in the
-   * request. Takes the blob's `signed_id` rather than its URL: an endpoint
-   * that accepted a URL and fetched it would be an SSRF hole.
+   * request.
+   *
+   * `signedId` is optional. Pass it right after an upload, to preview a
+   * template that isn't saved yet; omit it to preview whatever is already
+   * saved on the event, which is the case on every later visit once the page
+   * has been reloaded. Never a URL in either direction — an endpoint that
+   * accepted one and fetched it would be an SSRF hole.
    */
-  async request(eventId: string, signedId: string): Promise<{ preview: CertificatePreview }> {
+  async request(
+    eventId: string,
+    signedId?: string | null,
+  ): Promise<{ preview: CertificatePreview }> {
     return api.post<{ preview: CertificatePreview }>(
       `/events/${eventId}/certificate_preview`,
-      { signed_id: signedId },
+      signedId ? { signed_id: signedId } : {},
     );
   },
 
@@ -1222,7 +1227,9 @@ export const paymentsApi = {
   },
 
   status(paymentId: string, guestContact?: GuestContact) {
-    return api.get<{ payment: ApiPayment }>(`/payments/${paymentId}${guestContactQuery(guestContact)}`);
+    return api.get<{ payment: ApiPayment }>(
+      `/payments/${paymentId}${guestContactQuery(guestContact)}`,
+    );
   },
 };
 
@@ -1349,8 +1356,12 @@ export const adminApi = {
     return api.get<ApiAdminReports>(`/admin/reports?period=${period}`);
   },
 
-
-  users(opts?: { q?: string; status?: "all" | "active" | "suspended"; page?: number; perPage?: number }) {
+  users(opts?: {
+    q?: string;
+    status?: "all" | "active" | "suspended";
+    page?: number;
+    perPage?: number;
+  }) {
     const params = new URLSearchParams();
     if (opts?.q?.trim()) params.set("q", opts.q.trim());
     if (opts?.status && opts.status !== "all") params.set("status", opts.status);
@@ -1358,7 +1369,9 @@ export const adminApi = {
     if (opts?.perPage) params.set("per_page", String(opts.perPage));
 
     const qs = params.toString();
-    return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(`/admin/users${qs ? `?${qs}` : ""}`);
+    return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(
+      `/admin/users${qs ? `?${qs}` : ""}`,
+    );
   },
 
   /** Also unpublishes every event the user created — see User#suspend!. */

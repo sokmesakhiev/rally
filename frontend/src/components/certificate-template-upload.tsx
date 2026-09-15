@@ -103,8 +103,14 @@ export function CertificateTemplateUpload({
     e.target.value = "";
   }
 
+  // Available whenever a template exists at all, not only after an upload in
+  // this session. `signedId` is set only by handleFile, so on any later visit
+  // it is null while `value` still holds the saved template URL — gating the
+  // button on signedId made preview vanish on page reload, which is precisely
+  // when an organizer wants to check what participants will receive. Omitting
+  // signed_id tells the server to render the event's saved template instead.
   async function startPreview() {
-    if (!signedId) return;
+    if (!value) return;
 
     const generation = ++generationRef.current;
     setPreviewing(true);
@@ -175,23 +181,21 @@ export function CertificateTemplateUpload({
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {signedId && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={startPreview}
-                disabled={previewing || uploading}
-              >
-                {previewing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Eye className="h-4 w-4" /> {t("certificateTemplate.preview")}
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={startPreview}
+              disabled={previewing || uploading}
+            >
+              {previewing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Eye className="h-4 w-4" /> {t("certificateTemplate.preview")}
+                </>
+              )}
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -246,9 +250,7 @@ export function CertificateTemplateUpload({
       {check && (
         <div
           className={`rounded-xl border p-3 text-xs space-y-1.5 ${
-            hasSplitTokens
-              ? "border-destructive/40 bg-destructive/5"
-              : "border-border bg-muted/20"
+            hasSplitTokens ? "border-destructive/40 bg-destructive/5" : "border-border bg-muted/20"
           }`}
         >
           <p className="flex items-center gap-1.5 font-medium text-foreground">

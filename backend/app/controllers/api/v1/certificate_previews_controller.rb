@@ -12,7 +12,16 @@ module Api
       before_action :authenticate_user!
 
       # POST /api/v1/events/:event_id/certificate_preview
-      # Params: signed_id (Active Storage signed id of the uploaded .odt)
+      # Params: signed_id (optional — Active Storage signed id of a freshly
+      #         uploaded .odt). Omit it to preview the template already saved
+      #         on the event.
+      #
+      # Both cases matter and they are not the same moment. Before saving, the
+      # organizer wants to look at what they just uploaded. Afterwards — on any
+      # later visit, having reloaded the page — they want to see what
+      # participants will actually receive, and by then the browser has only a
+      # URL, no signed id. Requiring one meant preview silently disappeared the
+      # moment the page was reloaded, which is exactly when it is most wanted.
       #
       # Returns 202: rendering runs in a job (see
       # RenderCertificatePreviewJob for the measurements behind that), so the
@@ -20,7 +29,7 @@ module Api
       def create
         event = find_authorized_event!(params[:event_id], :update_event)
 
-        blob = resolve_template_blob
+        blob = resolve_template_blob(event)
         return if performed?
 
         preview = CertificatePreview.find_or_initialize_by(user: current_user, event: event)
@@ -50,18 +59,31 @@ module Api
 
       private
 
-      # The client hands us a signed id, never a URL. An endpoint that
-      # accepted a URL and fetched it would be a server-side request forgery
-      # hole — the renderer runs inside the VPC and could be pointed at
-      # internal addresses. A signed id can only ever resolve to a blob this
-      # application already stored, and `find_signed` rejects a tampered one
-      # without us writing any validation.
-      def resolve_template_blob
+      # Two sources, and **neither is a URL supplied by the client**. That is
+      # the security property to preserve: an endpoint that accepted a URL and
+      # fetched it would be a server-side request forgery hole, since the
+      # renderer runs inside the VPC and could be pointed at internal
+      # addresses.
+      #
+      #   1. A signed id from the client. It can only ever resolve to a blob
+      #      this application stored, and `find_signed` rejects a tampered one
+      #      with no validation code of ours.
+      #   2. No signed id — fall back to the template already saved on the
+      #      event. The URL there was written by this application and is read
+      #      from our own row, never from the request, so resolving it back to
+      #      a blob introduces no new input. It is also the same event the
+      #      caller has already been authorized for.
+      def resolve_template_blob(event)
         signed_id = params[:signed_id].to_s
-        blob = ActiveStorage::Blob.find_signed(signed_id) if signed_id.present?
+        blob =
+          if signed_id.present?
+            ActiveStorage::Blob.find_signed(signed_id)
+          else
+            Storage::BlobUrl.find_by_url(event.certificate_template_url)
+          end
 
         if blob.nil?
-          render json: { error: "Upload the template again before previewing." },
+          render json: { error: "Upload a certificate template before previewing." },
                  status: :unprocessable_entity
           return nil
         end

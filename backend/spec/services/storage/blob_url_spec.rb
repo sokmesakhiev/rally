@@ -54,6 +54,32 @@ RSpec.describe Storage::BlobUrl do
     }.not_to raise_error
   end
 
+  describe ".find_by_url" do
+    # The inverse of .call, needed because several columns store a URL rather
+    # than a blob id — so anything acting on the underlying blob (render it,
+    # purge it) has to get back from the URL to the record.
+    it "round-trips a URL this app generated back to the blob" do
+      url = with_backend_url("https://rally-api.example.com") { described_class.call(blob) }
+
+      expect(described_class.find_by_url(url)).to eq(blob)
+    end
+
+    it "round-trips regardless of which host generated it" do
+      url = with_backend_url("http://alb.internal:3001") { described_class.call(blob) }
+
+      expect(described_class.find_by_url(url)).to eq(blob)
+    end
+
+    # Every caller is doing something optional — offering a preview, cleaning
+    # up a file — so one row holding a URL from an older scheme must not raise.
+    it "returns nil rather than raising for anything it can't resolve" do
+      [nil, "", "https://example.com/somewhere/else.pdf",
+       "https://example.com/rails/active_storage/blobs/redirect/tampered/x.pdf"].each do |value|
+        expect(described_class.find_by_url(value)).to be_nil
+      end
+    end
+  end
+
   # Both renderers must resolve the host the same way — they had the same bug
   # because they carried the same copied fallback.
   it "is what both certificate renderers use" do

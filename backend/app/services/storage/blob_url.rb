@@ -23,8 +23,40 @@ module Storage
   # EventPlanPaymentsController), so there is no new thing to configure —
   # infrastructure/ecs.tf sets it on both the web and worker tasks.
   module BlobUrl
+    # A rails_blob_url carries the blob's signed id in its path, between the
+    # redirect/proxy segment and the filename:
+    #
+    #   https://api.example.com/rails/active_storage/blobs/redirect/<signed_id>/name.odt
+    #
+    # Matches both `redirect` (the default) and `proxy`, since which one Rails
+    # generates depends on configuration that could change later.
+    BLOB_SIGNED_ID = %r{/blobs/(?:redirect|proxy)/([^/]+)/}
+
     def self.call(blob)
       Rails.application.routes.url_helpers.rails_blob_url(blob, **url_options)
+    end
+
+    # The inverse of .call: recover the blob from a URL this app generated.
+    #
+    # Needed because several columns store a *URL* rather than a blob id —
+    # Event#certificate_template_url, Certificate#file_url,
+    # CertificatePreview#file_url — a deliberate choice explained in
+    # Certificates::RenderPdf's class comment. Anything that has to act on the
+    # underlying blob (render it, purge it) therefore has to get back from the
+    # URL to the record.
+    #
+    # Returns nil rather than raising for a blank, foreign, malformed or
+    # already-purged URL. Every caller is doing something optional — offering a
+    # preview, cleaning up a file — and none should fail loudly because one row
+    # holds a URL from an older scheme.
+    def self.find_by_url(url)
+      signed_id = url.to_s[BLOB_SIGNED_ID, 1]
+      return nil if signed_id.blank?
+
+      ActiveStorage::Blob.find_signed(signed_id)
+    rescue StandardError => e
+      Rails.logger.warn("[blob url] could not resolve #{url.inspect}: #{e.class}: #{e.message}")
+      nil
     end
 
     # Falls back to the mailer options only when BACKEND_URL is unset, which is
