@@ -50,7 +50,7 @@ RSpec.describe "Api::V1::CertificatePreviews", type: :request do
       post "/api/v1/events/#{event.id}/certificate_preview",
            params: { signed_id: "not-a-real-signed-id" }, headers: headers
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(CertificatePreview.count).to eq(0)
     end
 
@@ -74,7 +74,7 @@ RSpec.describe "Api::V1::CertificatePreviews", type: :request do
 
         post "/api/v1/events/#{event.id}/certificate_preview", headers: headers
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(CertificatePreview.count).to eq(0)
       end
 
@@ -85,7 +85,7 @@ RSpec.describe "Api::V1::CertificatePreviews", type: :request do
 
         post "/api/v1/events/#{event.id}/certificate_preview", headers: headers
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 
@@ -97,7 +97,7 @@ RSpec.describe "Api::V1::CertificatePreviews", type: :request do
       post "/api/v1/events/#{event.id}/certificate_preview",
            params: { signed_id: image.signed_id }, headers: headers
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it "404s for someone who can't manage the event" do

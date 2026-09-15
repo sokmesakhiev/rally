@@ -106,7 +106,7 @@ RSpec.describe "Push subscriptions API", type: :request do
           params: { subscription: { p256dh_key: "a", auth_key: "b" } },
           as: :json, headers: auth_headers(user)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       # The endpoint is used to make an outbound request from our own server,
@@ -116,7 +116,7 @@ RSpec.describe "Push subscriptions API", type: :request do
           params: { subscription: valid_payload[:subscription].merge(endpoint: "http://evil.test/x") },
           as: :json, headers: auth_headers(user)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it "rejects a non-URL endpoint" do
@@ -124,7 +124,7 @@ RSpec.describe "Push subscriptions API", type: :request do
           params: { subscription: valid_payload[:subscription].merge(endpoint: "file:///etc/passwd") },
           as: :json, headers: auth_headers(user)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
   end
