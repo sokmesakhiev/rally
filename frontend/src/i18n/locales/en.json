@@ -722,7 +722,24 @@
     "replace": "Replace",
     "clickToUpload": "Click to upload a .odt template",
     "tokensTitle": "Placeholder tokens",
-    "tokensHint": "Type each token as one continuous run of plain text (turn off autocorrect/autoformat while typing it) — if a word processor silently splits a token across formatting, it won't be replaced and will show up literally on the certificate."
+    "tokensHint": "Type each token as one continuous run of plain text (turn off autocorrect/autoformat while typing it) — if a word processor silently splits a token across formatting, it won't be replaced and will show up literally on the certificate.",
+    "preview": "Preview",
+    "previewRendering": "Rendering a preview with this event's details…",
+    "previewFailed": "Could not render a preview.",
+    "previewTimeout": "The preview is taking longer than expected. Try again in a moment.",
+    "previewAlt": "Certificate preview",
+    "previewNoInlineViewer": "Your browser can't show PDFs inline — open the preview in a new tab.",
+    "previewOpenInNewTab": "Open preview in a new tab",
+    "previewError": {
+      "conversion_failed": "LibreOffice couldn't open this template. Try re-saving it as .odt from your word processor.",
+      "not_an_odt": "This file isn't a readable OpenDocument Text (.odt) document.",
+      "template_missing": "The uploaded template is no longer available. Upload it again.",
+      "unknown": "Could not render a preview."
+    },
+    "checkOkTitle": "Template checked — {{found}} of 4 placeholders found",
+    "checkSplitTitle": "This template has a broken placeholder",
+    "checkSplitBody": "{{tokens}} is split across formatting, so it won't be replaced and will print literally on every certificate. Delete it and retype it in one go with autocorrect off.",
+    "checkMissing": "Not used in this template: {{tokens}}. That's fine if you don't want those on the certificate."
   },
   "paymentPanel": {
     "generatingQr": "Generating your KHQR code…",

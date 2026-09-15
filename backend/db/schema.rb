@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_10_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -53,6 +53,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_010000) do
     t.index ["action"], name: "index_admin_actions_on_action"
     t.index ["admin_id"], name: "index_admin_actions_on_admin_id"
     t.index ["target_type", "target_id"], name: "index_admin_actions_on_target_type_and_target_id"
+  end
+
+  create_table "certificate_previews", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "error_code"
+    t.uuid "event_id", null: false
+    t.string "file_url"
+    t.string "status", default: "pending", null: false
+    t.bigint "template_blob_id", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["updated_at"], name: "index_certificate_previews_on_updated_at"
+    t.index ["user_id", "event_id"], name: "index_certificate_previews_one_per_user_per_event", unique: true
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'ready'::character varying, 'failed'::character varying]::text[])", name: "certificate_previews_status_check"
   end
 
   create_table "certificates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -494,6 +508,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_010000) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "admin_actions", "users", column: "admin_id"
+  add_foreign_key "certificate_previews", "events"
+  add_foreign_key "certificate_previews", "users"
   add_foreign_key "certificates", "registrations"
   add_foreign_key "conversations", "users"
   add_foreign_key "conversations", "users", column: "assigned_admin_id", on_delete: :nullify

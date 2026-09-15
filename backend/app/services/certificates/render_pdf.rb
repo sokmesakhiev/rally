@@ -28,7 +28,14 @@ module Certificates
   # blob is the only file-storage path this codebase actually has proven
   # to work end-to-end in tests.
   class RenderPdf
-    class ConversionError < StandardError; end
+    # Deliberately the *same* class as OdtToPdf's, not a sibling of it.
+    # RenderCertificateJob rescues Certificates::RenderPdf::ConversionError to
+    # log-and-swallow a bad template, and three specs assert on it; once the
+    # soffice call moved into OdtToPdf, a separate class here would have
+    # quietly stopped that rescue from catching conversion failures, turning a
+    # logged warning into a crashed job. An alias keeps both the raise sites
+    # (download failure below, conversion failure in OdtToPdf) under one name.
+    ConversionError = Certificates::OdtToPdf::ConversionError
 
     def self.call(registration)
       new(registration).call
@@ -81,41 +88,12 @@ module Certificates
       @registration.user.profile&.display_name.presence || @registration.user.email
     end
 
-    # `-env:UserInstallation=` gives this one conversion its own LibreOffice
-    # profile directory. Without it, two `soffice` invocations running at
-    # the same time (e.g. two certificates rendering back to back) share the
-    # default profile and can lock each other out — a well-known LibreOffice
-    # headless gotcha, not a hypothetical one.
-    #
-    # Brakeman flags the Open3.capture3 call below as "possible command
-    # injection" because one argument is built via string interpolation —
-    # that check is a blunt heuristic and doesn't distinguish this from a
-    # real risk here. Two independent reasons it isn't:
-    #   1. Open3.capture3(*array) execs the array directly (execve), never
-    #      through /bin/sh — there's no shell to interpret ";", "|", "$()",
-    #      backticks, etc. even if a segment contained them.
-    #   2. Every interpolated segment (workdir, profile_dir, odt_path) is
-    #      built purely from Dir.mktmpdir/File.join inside this service —
-    #      none of it is organizer- or participant-controlled input (that
-    #      data only ever reaches Certificates::MergeOdt's XML-escaped
-    #      substitution, never this command).
+    # Moved to Certificates::OdtToPdf when previews were added, so a preview
+    # and the certificate it previews go through byte-for-byte the same
+    # conversion. See that class for the soffice profile-isolation flag and
+    # the Brakeman note.
     def convert_to_pdf(odt_path, workdir)
-      profile_dir = File.join(workdir, "lo_profile")
-      command = [
-        "soffice", "--headless", "--norestore",
-        "--convert-to", "pdf",
-        "--outdir", workdir,
-        "-env:UserInstallation=file://#{profile_dir}",
-        odt_path
-      ]
-
-      stdout, stderr, status = Open3.capture3(*command)
-      raise ConversionError, "soffice conversion failed: #{stderr.presence || stdout}" unless status.success?
-
-      pdf_path = odt_path.sub(/\.odt\z/, ".pdf")
-      raise ConversionError, "soffice reported success but produced no PDF" unless File.exist?(pdf_path)
-
-      pdf_path
+      Certificates::OdtToPdf.call(odt_path: odt_path, workdir: workdir)
     end
 
     def attach!(pdf_path)

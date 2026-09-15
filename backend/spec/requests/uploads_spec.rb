@@ -176,16 +176,108 @@ RSpec.describe "Uploads API", type: :request do
       expect(json["error"]).to match(/JPEG|PNG|WebP|GIF/i)
     end
 
-    it "allows a certificate_template up to its own, larger size limit" do
-      at_limit = Rack::Test::UploadedFile.new(
-        StringIO.new("x" * Api::V1::UploadsController::CERTIFICATE_TEMPLATE_MAX_FILE_SIZE),
-        "application/vnd.oasis.opendocument.text",
-        original_filename: "big.odt"
+    # Was a 10 MB run of "x" bytes. That passed only because nothing opened the
+    # file — since UploadsController began inspecting certificate templates
+    # (Certificates::InspectTemplate), a payload that isn't a real archive is
+    # refused, correctly. Rebuilt as a genuine oversized ODT so it still proves
+    # what it was written to prove: the .odt ceiling is larger than the image
+    # one. The exact-boundary case is covered by the oversized example below,
+    # where the size gate runs before any inspection.
+    it "allows a certificate_template far larger than the image limit" do
+      padding = SecureRandom.bytes(Api::V1::UploadsController::MAX_FILE_SIZE + 1.megabyte)
+      buffer = Zip::OutputStream.write_buffer do |zip|
+        zip.put_next_entry("content.xml")
+        zip.write("<text>{{participant_name}}</text>")
+        # Stored, not deflated — random bytes are incompressible anyway, and
+        # this keeps the uploaded size predictable rather than at the mercy of
+        # the compressor.
+        zip.put_next_entry("Pictures/background.png", nil, nil, Zip::Entry::STORED)
+        zip.write(padding)
+      end
+      buffer.rewind
+
+      big = Rack::Test::UploadedFile.new(
+        buffer, "application/vnd.oasis.opendocument.text", original_filename: "big.odt"
       )
 
-      post "/api/v1/uploads", params: { file: at_limit, type: "certificate_template" }, headers: auth_headers(user)
+      expect(big.size).to be > Api::V1::UploadsController::MAX_FILE_SIZE
+      expect(big.size).to be < Api::V1::UploadsController::CERTIFICATE_TEMPLATE_MAX_FILE_SIZE
+
+      post "/api/v1/uploads", params: { file: big, type: "certificate_template" }, headers: auth_headers(user)
 
       expect(response).to have_http_status(:created)
+    end
+
+    # ── template inspection ────────────────────────────────────────────────
+    # See Certificates::InspectTemplate. The point is to tell an organizer at
+    # upload time whether their placeholders will actually be substituted,
+    # rather than letting them find out from a participant's certificate.
+
+    it "reports which placeholder tokens were found" do
+      post "/api/v1/uploads", params: { file: odt_upload, type: "certificate_template" },
+           headers: auth_headers(user)
+
+      check = json["template_check"]
+      expect(check["valid_odt"]).to be true
+      expect(check["usable"]).to be true
+      expect(check["present"]).to eq(%w[participant_name])
+      expect(check["missing"]).to match_array(%w[event_title event_date event_location])
+    end
+
+    it "flags a token split across formatting without refusing the upload" do
+      split = Zip::OutputStream.write_buffer do |zip|
+        zip.put_next_entry("content.xml")
+        zip.write("<text:span>{{participant_</text:span><text:span>name}}</text:span>")
+      end
+      split.rewind
+
+      post "/api/v1/uploads",
+           params: {
+             file: Rack::Test::UploadedFile.new(
+               split, "application/vnd.oasis.opendocument.text", original_filename: "split.odt"
+             ),
+             type: "certificate_template"
+           },
+           headers: auth_headers(user)
+
+      # Accepted — the detection is a strong heuristic, not a certainty, and
+      # an organizer blocked by a false positive would have no way around it.
+      expect(response).to have_http_status(:created)
+      expect(json["template_check"]["split"]).to eq(%w[participant_name])
+      expect(json["template_check"]["usable"]).to be false
+    end
+
+    # The content-type check above trusts whatever the browser claimed. This
+    # is what actually establishes the file is an ODT — and it runs before the
+    # blob is written, so nothing unusable is ever stored.
+    it "refuses a file that claims to be an odt but isn't a readable archive" do
+      liar = Rack::Test::UploadedFile.new(
+        StringIO.new("\xFF\xD8\xFF\xE0 JFIF, not a zip"),
+        "application/vnd.oasis.opendocument.text",
+        original_filename: "liar.odt"
+      )
+
+      expect {
+        post "/api/v1/uploads", params: { file: liar, type: "certificate_template" },
+             headers: auth_headers(user)
+      }.not_to change(ActiveStorage::Blob, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["code"]).to eq("not_an_odt")
+    end
+
+    it "returns a signed_id so the preview endpoint never has to take a URL" do
+      post "/api/v1/uploads", params: { file: odt_upload, type: "certificate_template" },
+           headers: auth_headers(user)
+
+      expect(ActiveStorage::Blob.find_signed(json["signed_id"])).to eq(ActiveStorage::Blob.last)
+    end
+
+    it "does not add a template_check or signed_id to image uploads" do
+      post "/api/v1/uploads", params: { file: png_upload, type: "banner" }, headers: auth_headers(user)
+
+      expect(json).not_to have_key("template_check")
+      expect(json).not_to have_key("signed_id")
     end
 
     it "rejects a certificate_template over its own size limit with 422" do

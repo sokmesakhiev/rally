@@ -225,6 +225,29 @@ class Rack::Attack
     user_id_from(req) if req.post? && req.path == "/api/v1/support/conversation"
   end
 
+  # ── Certificate previews ──
+  #
+  # The most expensive thing an authenticated user can ask this application to
+  # do: each request enqueues a LibreOffice conversion, measured at roughly
+  # 0.25-1.2s and ~180 MB peak RSS. That cost lands on the Solid Queue worker
+  # rather than a request thread, which is why the request itself is cheap —
+  # and exactly why it needs a limit here. Without one, a loop against this
+  # endpoint costs the caller almost nothing and saturates job processing for
+  # everyone, including the certificate sweep and outbound mail.
+  #
+  # 10 per 10 minutes suits the actual behaviour: upload a template, look at
+  # it, adjust it in LibreOffice, look again. Note this throttles *enqueueing*,
+  # not rendering — the one-row-per-organizer-per-event index means repeated
+  # requests overwrite rather than accumulate, so the worst case is bounded
+  # work, not unbounded storage.
+  #
+  # Only the POST is limited. The GET is a cheap indexed lookup that the UI
+  # polls on a timer while a render is in flight, and throttling it would
+  # break the poll rather than protect anything.
+  throttle("certificate_preview/user", limit: 10, period: 10.minutes) do |req|
+    user_id_from(req) if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/certificate_preview\z})
+  end
+
   ### Response ################################################################
 
   # JSON, not Rack::Attack's default text/plain body — every other error in

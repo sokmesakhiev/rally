@@ -107,6 +107,24 @@ Gateway credentials are two-tiered:
 - Related: the unique index on `registrations(event_id, user_id)` is **partial** (`WHERE deleted_at IS NULL`), and `Registration`'s uniqueness validation carries a matching `conditions:`. `#discard!` keeps the row for its payment history but the person is no longer registered, so they must be able to sign up again — this was a live bug before, reachable via `RegistrationsController#destroy`.
 - `app/jobs/` holds the real jobs (certificates, event-change notifications, the ABA webhook processor, push delivery, and the sweep above); mailers additionally use `deliver_later`, which exercises the same adapter.
 
+### Certificates: templates, checking and preview
+
+An organizer uploads a `.odt`; `Certificates::MergeOdt` substitutes four tokens into it (`participant_name`, `event_title`, `event_date`, `event_location` — `Certificates::RenderPdf#placeholder_values` is the only source of that list) and `Certificates::OdtToPdf` shells out to LibreOffice. `docs/templates/rally-certificate-modern.odt` is a working example, built by `scripts/build-certificate-template.py` — the script is the reviewable source, since an ODT is a zip of XML and therefore opaque in a diff.
+
+Organizers get **two different kinds of feedback, because they answer different questions at wildly different cost**:
+
+- **The token check runs inline at upload** (`Certificates::InspectTemplate`, returned as `template_check` from `POST /uploads`). It answers "will the placeholders be filled in?" in milliseconds with no LibreOffice. It exists for the one failure MergeOdt warns about and cannot defend against: substitution is a literal gsub over raw XML, so a token split across two `<text:span>`s never matches and the braces print on every certificate. Detection is cheap — **a split token is absent from the raw XML but present once tags are stripped**, because stripping tags is exactly what rejoins the runs the word processor separated. A split token is *reported, not rejected* (a heuristic false positive would leave the organizer with no way around it); an unreadable archive **is** rejected, before the blob is written, which is also the first thing in this codebase that actually verifies an upload is an ODT rather than trusting the browser's content-type.
+- **The rendered preview is a job** (`RenderCertificatePreviewJob` → `Certificates::RenderPreview`), polled via `POST`/`GET /events/:event_id/certificate_preview`. It is the only thing that catches layout problems — a long name or event title wrapping and pushing content onto a second page. Measured cost is why it can't be synchronous: **~0.25–1.2s and ~180 MB peak RSS per conversion**, against a web task with 3 Puma threads on 0.5 vCPU / 1 GB. It is also precisely the work the Solid Queue worker split exists to keep off the web task.
+
+Four decisions worth knowing:
+
+- **The preview endpoint takes an Active Storage `signed_id`, never a URL.** An endpoint that accepts a URL and fetches it is an SSRF hole, and the renderer runs inside the VPC. `UploadsController` returns `signed_id` alongside `url` for this reason; `find_signed` rejects a tampered one without any validation code. It also means no outbound HTTP at all — unlike `RenderPdf`, which legitimately downloads `event.certificate_template_url` because by then the template is saved.
+- **Preview runs on an uploaded-but-unsaved template.** That is the point — looking before committing — so it cannot read `event.certificate_template_url`.
+- **One row per organizer per event**, by unique index. That is the entire storage-growth story: re-previewing overwrites, so the table is bounded by (organizers × events) rather than by clicks. Per *organizer*, not per event, so two managers of the same event don't overwrite each other's half-finished renders.
+- **`Certificates::SweepPreviews` (hourly) is not optional.** The row keeps only the newest URL, so every re-render orphans the previous PDF in S3 — unreferenced, invisible, and billed for.
+
+`Certificates::RenderPdf::ConversionError` is deliberately **the same class** as `OdtToPdf::ConversionError`, not a sibling. `RenderCertificateJob` rescues it to log-and-swallow a bad template; when the soffice call moved into `OdtToPdf`, a separate class would have quietly stopped that rescue catching conversion failures, turning a logged warning into a crashed job.
+
 ### Backend: ActionCable
 
 Enabled for support chat (`support-chat-tickets.md`, Ticket 0). `config/application.rb` requires `action_cable/engine` explicitly — this app lists railties individually rather than using `rails/all`, so ActionCable does not appear just because it's in the Rails gem. `solid_cable` is in the `:production` gem group beside `solid_queue`/`solid_cache`; development uses `:async` and test uses `:test`, so neither needs it.
