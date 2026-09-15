@@ -338,7 +338,11 @@ function ManageEvent() {
   // answer to "don't load all participants until we get into this tab": on
   // Setup or Activity this never fires at all.
   const participantsQuery = useQuery({
-    queryKey: ["event-participants", eventId, tab, listPage, debouncedSearch],
+    // `tab` is deliberately NOT in the key: the request doesn't vary by tab,
+    // only whether it runs does. Keying on it gave Participants, Check-in and
+    // Results three cache entries holding the same page, so switching tabs
+    // refetched data already in memory.
+    queryKey: ["event-participants", eventId, listPage, debouncedSearch],
     enabled: LIST_TABS.includes(tab),
     // Keeps the previous page on screen while the next one loads, so paging
     // doesn't flash an empty table.
@@ -1232,11 +1236,6 @@ function ManageEvent() {
                                 {t.name}
                               </Badge>
                             ))}
-                            <ListPager
-                              meta={pageMeta}
-                              busy={participantsQuery.isFetching}
-                              onPageChange={setListPage}
-                            />
                           </div>
                         )}
                       </div>
@@ -1310,6 +1309,17 @@ function ManageEvent() {
                       </div>
                     </div>
                   ))}
+                  {/* Sibling of the row map, not a child of it. It first
+                      shipped nested inside each row's event-type badge row,
+                      which rendered a pager per participant and — because that
+                      block is gated on `p.event_types?.length > 0` — rendered
+                      none at all for an event with no types, which is most of
+                      them. */}
+                  <ListPager
+                    meta={pageMeta}
+                    busy={participantsQuery.isFetching}
+                    onPageChange={setListPage}
+                  />
                 </div>
               </TabsContent>
 
@@ -1378,10 +1388,13 @@ function ManageEvent() {
                             )}
                           </div>
                         ))}
+                        {/* The wrapper is `divide-y`, which already draws the
+                            rule above this as a non-first child. */}
                         <ListPager
                           meta={pageMeta}
                           busy={participantsQuery.isFetching}
                           onPageChange={setListPage}
+                          bordered={false}
                         />
                       </div>
                     )}
@@ -1400,11 +1413,12 @@ function ManageEvent() {
                   {/* ResultsManager renders whatever page it's handed, so the
                       pager lives here rather than inside it — the component
                       stays a dumb list and the paging state has one owner. */}
-                  <div className="rounded-2xl border border-border">
+                  <div className="mt-6 rounded-2xl border border-border">
                     <ListPager
                       meta={pageMeta}
                       busy={participantsQuery.isFetching}
                       onPageChange={setListPage}
+                      bordered={false}
                     />
                   </div>
                 </TabsContent>

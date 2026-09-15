@@ -9,6 +9,12 @@ interface ListPagerProps {
   /** True while the next page is in flight — disables both buttons so a fast
    *  double-click can't skip a page. */
   busy?: boolean;
+  /** Draws the rule above the controls. On by default, because the usual
+   *  position is appended to a list of rows inside a bordered card, where the
+   *  rule is what separates the pager from the last row. Pass false when the
+   *  pager is the only child of its own bordered box — the box's top border
+   *  and this one would otherwise stack into a 2px line. */
+  bordered?: boolean;
 }
 
 /**
@@ -21,7 +27,7 @@ interface ListPagerProps {
  * Renders nothing when there's one page or none — a pager under a list of four
  * people is noise.
  */
-export function ListPager({ meta, onPageChange, busy = false }: ListPagerProps) {
+export function ListPager({ meta, onPageChange, busy = false, bordered = true }: ListPagerProps) {
   const { t } = useTranslation();
 
   if (!meta || meta.total_pages <= 1) return null;
@@ -33,7 +39,11 @@ export function ListPager({ meta, onPageChange, busy = false }: ListPagerProps) 
   const last = Math.min(meta.page * meta.per_page, meta.total_count);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 px-5 py-3 ${
+        bordered ? "border-t border-border" : ""
+      }`}
+    >
       <p className="text-sm text-muted-foreground">
         {t("pagination.showing", { first, last, total: meta.total_count })}
       </p>
