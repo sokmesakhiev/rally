@@ -714,7 +714,8 @@
   "imageUpload": {
     "uploadFailed": "Upload failed",
     "previewAlt": "Upload preview",
-    "clickOrDrag": "Click or drag to upload"
+    "clickOrDrag": "Click or drag to upload",
+    "bannerSizeHint": "Recommended: {{width}} × {{height}} px (4:1). Other sizes still work — the full image is shown, with a blurred fill behind it."
   },
   "certificateTemplate": {
     "uploadFailed": "Upload failed",

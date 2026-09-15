@@ -4,16 +4,40 @@ import { useTranslation } from "react-i18next";
 import { uploadsApi } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { HeroBanner } from "@/components/hero-banner";
 
 interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
-  /** "banner" renders as a wide 16:5 container; "logo"/"avatar" render as a square */
+  /** "banner" renders as a wide strip; "logo"/"avatar" render as a square. */
   variant?: "banner" | "logo" | "avatar";
   label?: string;
+  /**
+   * Suppresses the recommended-size hint under a banner. Only for places where
+   * the surrounding form already says it — otherwise leave it on: organizers
+   * had no way at all to know what ratio to design for, which is how banners
+   * came to be uploaded at shapes the page had to letterbox.
+   */
+  hideSizeHint?: boolean;
 }
 
-export function ImageUpload({ value, onChange, variant = "banner", label }: ImageUploadProps) {
+/**
+ * What to design a banner at. Derived from where banners actually render —
+ * HeroBanner's strip is 288px tall on desktop, so at a typical 1280–1600px
+ * viewport a 4:1 image fills it almost exactly and the blurred edges stay
+ * thin. Wildly different ratios still *work* (HeroBanner shows the whole
+ * image and blurs the gap rather than cropping), they just leave more blur.
+ */
+export const BANNER_RECOMMENDED_WIDTH = 1600;
+export const BANNER_RECOMMENDED_HEIGHT = 400;
+
+export function ImageUpload({
+  value,
+  onChange,
+  variant = "banner",
+  label,
+  hideSizeHint = false,
+}: ImageUploadProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -64,11 +88,24 @@ export function ImageUpload({ value, onChange, variant = "banner", label }: Imag
       >
         {value ? (
           <>
-            <img
-              src={value}
-              alt={t("imageUpload.previewAlt")}
-              className="h-full w-full object-cover"
-            />
+            {isLogo ? (
+              <img
+                src={value}
+                alt={t("imageUpload.previewAlt")}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              /* The same component the public pages use, so this preview is
+                 the real rendering rather than an approximation of it. An
+                 object-cover preview would crop where the live page doesn't,
+                 leaving the organizer to judge a picture nobody will see. */
+              <HeroBanner
+                src={value}
+                alt={t("imageUpload.previewAlt")}
+                className="h-full"
+                fadeOut={false}
+              />
+            )}
             {/* Remove button */}
             <button
               type="button"
@@ -94,6 +131,14 @@ export function ImageUpload({ value, onChange, variant = "banner", label }: Imag
           </div>
         )}
       </div>
+      {!isLogo && !hideSizeHint && (
+        <p className="text-xs text-muted-foreground">
+          {t("imageUpload.bannerSizeHint", {
+            width: BANNER_RECOMMENDED_WIDTH,
+            height: BANNER_RECOMMENDED_HEIGHT,
+          })}
+        </p>
+      )}
       {error && <p className="text-xs text-destructive">{error}</p>}
       <input
         ref={inputRef}
