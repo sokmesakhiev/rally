@@ -241,6 +241,21 @@ const PER_PAGE = 25;
  *  short enough that the list doesn't feel stuck. */
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Underline styling for the nested Setup tabs, overriding the shadcn default
+ *  at the call site so `components/ui/tabs.tsx` stays vendored/untouched. The
+ *  parent bar keeps the filled pill; this one is the secondary level, and the
+ *  two must not look alike or the nesting is invisible. `-mb-px` pulls each
+ *  trigger's bottom border onto the list's, so the active underline sits in
+ *  the rule rather than below it. */
+const SETUP_TABS_LIST_CLASS =
+  "h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-transparent p-0";
+/** Active state is colour + underline only, deliberately not a weight change:
+ *  bolding the label widens it and shunts every tab after it sideways. */
+const SETUP_TAB_TRIGGER_CLASS =
+  "-mb-px rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 pt-0 shadow-none " +
+  "hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent " +
+  "data-[state=active]:text-foreground data-[state=active]:shadow-none focus-visible:ring-offset-0";
+
 function ManageEvent() {
   const { eventId } = Route.useParams();
   const { t } = useTranslation();
@@ -1404,19 +1419,28 @@ function ManageEvent() {
               {setupPanels.length > 0 && (
                 <TabsContent value="setup" className="mt-6">
                   <Tabs value={setupTab} onValueChange={setSetupTab}>
-                    <TabsList className="h-auto flex-wrap justify-start">
+                    {/* Underline, not pills-on-a-tray. Styled from the call site
+                        rather than by editing the vendored shadcn Tabs, and
+                        deliberately NOT the same look as the parent bar: two
+                        identical TabsLists stacked read as two peer menus, with
+                        nothing saying one is subordinate. Filled pill = primary,
+                        underline = secondary is the conventional pairing. */}
+                    <TabsList
+                      className={SETUP_TABS_LIST_CLASS}
+                      aria-label={t("manageEvent.tabSetup")}
+                    >
                       {setupPanels.includes("branding") && (
-                        <TabsTrigger value="branding">
+                        <TabsTrigger value="branding" className={SETUP_TAB_TRIGGER_CLASS}>
                           <Palette className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabBranding")}
                         </TabsTrigger>
                       )}
                       {setupPanels.includes("registration") && (
-                        <TabsTrigger value="registration">
+                        <TabsTrigger value="registration" className={SETUP_TAB_TRIGGER_CLASS}>
                           <Ban className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabRegistration")}
                         </TabsTrigger>
                       )}
                       {setupPanels.includes("certificate") && (
-                        <TabsTrigger value="certificate">
+                        <TabsTrigger value="certificate" className={SETUP_TAB_TRIGGER_CLASS}>
                           <Award className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabCertificate")}
                         </TabsTrigger>
                       )}
