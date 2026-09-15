@@ -14,7 +14,7 @@ import {
   QrCode,
   Hourglass,
   Award,
-  Ban
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HeroBanner } from "@/components/hero-banner";
 import {
   formatDateTime,
   formatPrice,
@@ -100,19 +101,20 @@ export const Route = createFileRoute("/events/$eventId")({
           }
         : undefined,
       image: imageUrl,
-      offers: event.price_cents > 0
-        ? {
-            "@type": "Offer",
-            price: (event.price_cents / 100).toFixed(2),
-            priceCurrency: event.currency.toUpperCase(),
-            availability: "https://schema.org/InStock",
-          }
-        : {
-            "@type": "Offer",
-            price: "0",
-            priceCurrency: event.currency.toUpperCase(),
-            availability: "https://schema.org/InStock",
-          },
+      offers:
+        event.price_cents > 0
+          ? {
+              "@type": "Offer",
+              price: (event.price_cents / 100).toFixed(2),
+              priceCurrency: event.currency.toUpperCase(),
+              availability: "https://schema.org/InStock",
+            }
+          : {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: event.currency.toUpperCase(),
+              availability: "https://schema.org/InStock",
+            },
     };
 
     return {
@@ -404,7 +406,7 @@ function EventDetail() {
 
   function handleJoinWaitlistForType(typeId: string) {
     setWaitlistPendingTypeId(typeId);
-    joinWaitlist.mutate({ eventTypeIds: [ typeId ] });
+    joinWaitlist.mutate({ eventTypeIds: [typeId] });
   }
 
   return (
@@ -416,14 +418,11 @@ function EventDetail() {
           banner image doesn't render for exactly the audience a suspension is
           meant to protect. */}
       {ev?.banner_url && !(ev.suspended && !ev.role) && (
-        <div className="relative h-52 w-full overflow-hidden md:h-72">
-          <img
-            src={ev.banner_url}
-            alt={t("common.bannerAlt", { title: ev.title })}
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-        </div>
+        <HeroBanner
+          src={ev.banner_url}
+          alt={t("common.bannerAlt", { title: ev.title })}
+          className="h-52 md:h-72"
+        />
       )}
 
       <main className="mx-auto max-w-3xl px-5 py-10">
@@ -680,9 +679,7 @@ function EventDetail() {
                 <div className="space-y-5">
                   <div>
                     <p className="font-medium">{t("eventDetail.confirmTitle")}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("eventDetail.confirmDesc")}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("eventDetail.confirmDesc")}</p>
                   </div>
 
                   <div className="space-y-3 rounded-xl border border-border bg-card p-4 text-sm">
@@ -698,10 +695,7 @@ function EventDetail() {
                       </span>
                       <span className="font-medium">
                         {user
-                          ? [
-                              user.phone,
-                              user.email_auto_generated ? null : user.email,
-                            ]
+                          ? [user.phone, user.email_auto_generated ? null : user.email]
                               .filter(Boolean)
                               .join(" · ") || t("eventDetail.confirmNoContact")
                           : [guestPhone.trim(), guestEmail.trim()].filter(Boolean).join(" · ")}
@@ -775,62 +769,62 @@ function EventDetail() {
               ) : activeReg ? (
                 /* Already registered and paid (or free) */
                 <div className="space-y-4">
-                {/* The one moment the ask is concrete rather than abstract —
+                  {/* The one moment the ask is concrete rather than abstract —
                     they've just committed to an event and there's something
                     specific to be told about. Renders nothing unless the
                     browser supports push, the server has VAPID keys, and they
                     haven't already subscribed or been denied. The permission
                     prompt only fires on click, never on mount. */}
-                <PushNotificationPrompt brandColor={brandColor} />
+                  <PushNotificationPrompt brandColor={brandColor} />
 
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p
-                      className="flex items-center gap-2 font-medium"
-                      style={{ color: brandColor }}
-                    >
-                      <Check className="h-5 w-5" /> {t("eventDetail.youAreRegistered")}
-                    </p>
-                    {activeReg.event_types?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {activeReg.event_types.map((et) => (
-                          <Badge key={et.id} variant="secondary">
-                            {et.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {activeReg.checked_in_at && (
-                      <Badge variant="secondary" className="mt-2">
-                        {t("dashboard.checkedIn")}
-                      </Badge>
-                    )}
-                    {activeReg.finish_time_seconds != null && (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {t("dashboard.yourFinishTime", {
-                          time: formatFinishTime(activeReg.finish_time_seconds),
-                        })}
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p
+                        className="flex items-center gap-2 font-medium"
+                        style={{ color: brandColor }}
+                      >
+                        <Check className="h-5 w-5" /> {t("eventDetail.youAreRegistered")}
                       </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <RegistrationTicketQR
-                      registrationId={activeReg.id}
-                      eventTitle={ev.title}
-                      brandColor={brandColor}
-                    />
-                    {activeReg.certificate_url && (
-                      <Button asChild variant="outline">
-                        <a href={activeReg.certificate_url} target="_blank" rel="noreferrer">
-                          <Award className="h-4 w-4" /> {t("eventDetail.downloadCertificate")}
-                        </a>
+                      {activeReg.event_types?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {activeReg.event_types.map((et) => (
+                            <Badge key={et.id} variant="secondary">
+                              {et.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {activeReg.checked_in_at && (
+                        <Badge variant="secondary" className="mt-2">
+                          {t("dashboard.checkedIn")}
+                        </Badge>
+                      )}
+                      {activeReg.finish_time_seconds != null && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {t("dashboard.yourFinishTime", {
+                            time: formatFinishTime(activeReg.finish_time_seconds),
+                          })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RegistrationTicketQR
+                        registrationId={activeReg.id}
+                        eventTitle={ev.title}
+                        brandColor={brandColor}
+                      />
+                      {activeReg.certificate_url && (
+                        <Button asChild variant="outline">
+                          <a href={activeReg.certificate_url} target="_blank" rel="noreferrer">
+                            <Award className="h-4 w-4" /> {t("eventDetail.downloadCertificate")}
+                          </a>
+                        </Button>
+                      )}
+                      <Button variant="outline" onClick={() => downloadICS(ev)}>
+                        <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
                       </Button>
-                    )}
-                    <Button variant="outline" onClick={() => downloadICS(ev)}>
-                      <Download className="h-4 w-4" /> {t("eventDetail.addToCalendar")}
-                    </Button>
+                    </div>
                   </div>
-                </div>
                 </div>
               ) : waitlistQuery.data ? (
                 /* On the waitlist — not registered yet, waiting for a spot */
@@ -904,7 +898,9 @@ function EventDetail() {
                     onClick={isFull ? () => joinWaitlist.mutate(undefined) : handleRegisterClick}
                     style={isFull ? undefined : { backgroundColor: brandColor }}
                     variant={isFull ? "outline" : undefined}
-                    className={isFull ? undefined : "text-white hover:opacity-90 disabled:opacity-50"}
+                    className={
+                      isFull ? undefined : "text-white hover:opacity-90 disabled:opacity-50"
+                    }
                   >
                     {(register.isPending || joinWaitlist.isPending) && (
                       <Loader2 className="h-4 w-4 animate-spin" />

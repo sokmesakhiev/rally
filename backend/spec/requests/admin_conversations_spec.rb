@@ -103,7 +103,7 @@ RSpec.describe "Admin support conversations", type: :request do
     it "rejects an unknown status" do
       get "/api/v1/admin/conversations", params: { status: "escalated" }, headers: auth_headers(admin)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
@@ -190,7 +190,7 @@ RSpec.describe "Admin support conversations", type: :request do
       post "/api/v1/admin/conversations/#{conversation.id}/messages",
            params: { body: "  " }, headers: auth_headers(admin), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
@@ -231,7 +231,7 @@ RSpec.describe "Admin support conversations", type: :request do
         post "/api/v1/admin/conversations/#{conversation.id}/assign", headers: auth_headers(admin)
       }.not_to change(AdminAction, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body["code"]).to eq("conversation_resolved")
       expect(conversation.reload.assigned_admin).to be_nil
     end

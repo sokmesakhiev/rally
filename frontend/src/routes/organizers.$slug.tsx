@@ -17,6 +17,7 @@ import { SiteHeader } from "@/components/site-header";
 import { VerifiedBadge } from "@/components/presented-by";
 import { formatPrice, formatDate, categoryLabel } from "@/lib/event-utils";
 import { Badge } from "@/components/ui/badge";
+import { HeroBanner } from "@/components/hero-banner";
 
 export const Route = createFileRoute("/organizers/$slug")({
   loader: async ({ params }) => {
@@ -69,14 +70,7 @@ function OrganizerPage() {
       {/* The organizer's own banner. An event's banner belongs to the event —
           the two brandings live in different places and never compete. */}
       {organizer?.banner_url && (
-        <div className="relative h-44 w-full overflow-hidden md:h-60">
-          <img
-            src={organizer.banner_url}
-            alt={organizer.name}
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-        </div>
+        <HeroBanner src={organizer.banner_url} alt={organizer.name} className="h-44 md:h-60" />
       )}
 
       <main className="mx-auto max-w-3xl px-5 py-10">
@@ -84,9 +78,7 @@ function OrganizerPage() {
           <div className="rounded-2xl border border-border bg-muted/30 p-10 text-center">
             <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-4 text-lg font-semibold">{t("organizerPage.notFoundTitle")}</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t("organizerPage.notFoundDesc")}
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("organizerPage.notFoundDesc")}</p>
           </div>
         )}
 
@@ -270,7 +262,9 @@ function EventSection({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">{categoryLabel(event.category)}</Badge>
-                    <Badge variant="outline">{formatPrice(event.price_cents, event.currency)}</Badge>
+                    <Badge variant="outline">
+                      {formatPrice(event.price_cents, event.currency)}
+                    </Badge>
                   </div>
                   <p className="mt-1.5 truncate font-medium">{event.title}</p>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

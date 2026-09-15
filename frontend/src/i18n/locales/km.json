@@ -707,7 +707,8 @@
   "imageUpload": {
     "uploadFailed": "ការផ្ទុកឡើងបានបរាជ័យ",
     "previewAlt": "មើលជាមុន",
-    "clickOrDrag": "ចុច ឬអូសដើម្បីផ្ទុកឡើង"
+    "clickOrDrag": "ចុច ឬអូសដើម្បីផ្ទុកឡើង",
+    "bannerSizeHint": "ណែនាំ៖ {{width}} × {{height}} ភីកសែល (4:1)។ ទំហំផ្សេងក៏ប្រើបានដែរ — រូបភាពទាំងមូលនឹងត្រូវបង្ហាញ ដោយមានផ្ទៃព្រិលនៅខាងក្រោយ។"
   },
   "certificateTemplate": {
     "uploadFailed": "ការផ្ទុកឡើងបានបរាជ័យ",

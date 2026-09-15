@@ -90,7 +90,7 @@ RSpec.describe "Support chat (participant)", type: :request do
       post "/api/v1/support/conversation", params: { subject: "x" * 500 },
                                            headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body["error"]).to be_present
     end
 
@@ -276,7 +276,7 @@ RSpec.describe "Support chat (participant)", type: :request do
       post "/api/v1/support/messages", params: { body: "   " },
                                        headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(Message.count).to eq(0)
     end
 
@@ -284,7 +284,7 @@ RSpec.describe "Support chat (participant)", type: :request do
       post "/api/v1/support/messages", params: { body: "x" * (Message::MAX_BODY_LENGTH + 1) },
                                        headers: auth_headers(user), as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(Message.count).to eq(0)
     end
 
