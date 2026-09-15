@@ -41,19 +41,13 @@ module Certificates
     private
 
     # The row stores a URL, not a blob id (same plain-URL pattern as
-    # Certificate#file_url), so the blob has to be recovered from the signed
-    # id embedded in that URL. A failure here is logged and skipped rather
-    # than raised: an unparseable or already-purged URL must not stop the
-    # sweep from clearing the rest, and the worst case is one orphaned object
-    # instead of every row after it surviving.
+    # Certificate#file_url), so the blob has to be recovered from it —
+    # Storage::BlobUrl.find_by_url, which already returns nil rather than
+    # raising for an unparseable or purged URL. That matters here: one bad row
+    # must not stop the sweep from clearing the rest, and the worst case is a
+    # single orphaned object instead of every row after it surviving.
     def purge_pdf(preview)
-      signed_id = preview.file_url.to_s[%r{/blobs/(?:redirect|proxy)/([^/]+)/}, 1]
-      return if signed_id.blank?
-
-      blob = ActiveStorage::Blob.find_signed(signed_id)
-      blob&.purge_later
-    rescue StandardError => e
-      Rails.logger.warn("[certificate previews] could not purge pdf for #{preview.id}: #{e.class}: #{e.message}")
+      Storage::BlobUrl.find_by_url(preview.file_url)&.purge_later
     end
   end
 end

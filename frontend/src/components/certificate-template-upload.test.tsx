@@ -148,16 +148,42 @@ describe("CertificateTemplateUpload", () => {
     await upload();
     await userEvent.click(await screen.findByRole("button", { name: /preview/i }));
 
-    expect(await screen.findByText(/LibreOffice couldn't open/i, {}, { timeout: 10_000 }))
-      .toBeInTheDocument();
+    expect(
+      await screen.findByText(/LibreOffice couldn't open/i, {}, { timeout: 10_000 }),
+    ).toBeInTheDocument();
   }, 15_000);
 
-  it("offers no preview until a template has been uploaded in this session", () => {
-    // `value` alone isn't enough: previewing needs the signed_id, which only
-    // exists after an upload. A saved template from a previous visit has a URL
-    // but no signed id, and offering a button that can't work would be worse
-    // than not offering one.
-    renderComponent("https://example.com/saved-template.odt");
+  // The regression this replaces: preview used to be gated on the signed_id,
+  // which only exists after an upload in the current session — so it vanished
+  // on page reload, exactly when an organizer wants to check what participants
+  // will receive.
+  it("offers a preview for a template saved on a previous visit", async () => {
+    const request = vi.spyOn(certificatePreviewApi, "request").mockResolvedValue({
+      preview: { status: "pending", file_url: null, error_code: null, updated_at: "" },
+    });
+    vi.spyOn(certificatePreviewApi, "get").mockResolvedValue({
+      preview: {
+        status: "ready",
+        file_url: "https://api.example.com/preview.pdf",
+        error_code: null,
+        updated_at: "",
+      },
+    });
+
+    // No upload in this render — only the saved URL, as after a reload.
+    renderComponent("https://api.example.com/saved-template.odt");
+
+    const button = screen.getByRole("button", { name: /preview/i });
+    expect(button).toBeInTheDocument();
+    await userEvent.click(button);
+
+    // Called with no signed id, which tells the server to render the template
+    // already saved on the event.
+    await waitFor(() => expect(request).toHaveBeenCalledWith("event-1", null));
+  });
+
+  it("offers no preview when there is no template at all", () => {
+    renderComponent(null);
 
     expect(screen.queryByRole("button", { name: /preview/i })).not.toBeInTheDocument();
   });

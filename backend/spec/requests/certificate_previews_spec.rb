@@ -54,6 +54,41 @@ RSpec.describe "Api::V1::CertificatePreviews", type: :request do
       expect(CertificatePreview.count).to eq(0)
     end
 
+    # The case a page reload produces: the browser has the saved template URL
+    # but no signed id, because that only comes back from an upload. Requiring
+    # one made preview disappear on every later visit.
+    context "with no signed_id" do
+      it "previews the template already saved on the event" do
+        event.update!(certificate_template_url: Storage::BlobUrl.call(template_blob))
+
+        expect {
+          post "/api/v1/events/#{event.id}/certificate_preview", headers: headers
+        }.to have_enqueued_job(RenderCertificatePreviewJob)
+
+        expect(response).to have_http_status(:accepted)
+        expect(CertificatePreview.sole.template_blob_id).to eq(template_blob.id)
+      end
+
+      it "refuses when the event has no saved template either" do
+        expect(event.certificate_template_url).to be_blank
+
+        post "/api/v1/events/#{event.id}/certificate_preview", headers: headers
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(CertificatePreview.count).to eq(0)
+      end
+
+      # The saved URL is read from our own row, never from the request — so a
+      # stale or foreign one resolves to nothing rather than being fetched.
+      it "refuses when the saved template URL no longer resolves to a blob" do
+        event.update!(certificate_template_url: "https://example.com/not/a/blob/url.odt")
+
+        post "/api/v1/events/#{event.id}/certificate_preview", headers: headers
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
     it "rejects a blob that isn't an odt" do
       image = ActiveStorage::Blob.create_and_upload!(
         io: StringIO.new("\xFF\xD8\xFF"), filename: "photo.jpg", content_type: "image/jpeg"
