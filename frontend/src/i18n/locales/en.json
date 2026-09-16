@@ -368,7 +368,7 @@
     "alreadyCheckedInToast": "{{name}} was already checked in",
     "undoneToast": "Check-in undone",
     "manualListTitle": "{{checked}} / {{total}} checked in",
-    "searchPlaceholder": "Search by name…",
+    "searchPlaceholder": "Search by name or bib…",
     "checkedInAt": "Checked in {{date}}",
     "checkInButton": "Check in",
     "undo": "Undo"
@@ -379,7 +379,7 @@
     "chooseCsv": "Choose CSV file",
     "importSummaryUpdated_one": "{{count}} result updated.",
     "importSummaryUpdated_other": "{{count}} results updated.",
-    "importSummaryErrorRow": "Row {{row}} ({{email}}): {{reason}}",
+    "importSummaryErrorRow": "Row {{row}} ({{identifier}}): {{reason}}",
     "importSuccessToast": "{{count}} results imported",
     "importPartialToast": "{{count}} results imported, {{errors}} rows had errors",
     "manualTitle": "Manual entry",
@@ -541,8 +541,10 @@
     "toastDeadlineSaved": "Deadline saved",
     "tabSetup": "Setup",
     "tabMore": "More",
-    "searchParticipants": "Search by name or email",
-    "noParticipantsMatch": "Nobody matches “{{query}}”."
+    "searchParticipants": "Search by name, email or bib",
+    "noParticipantsMatch": "Nobody matches “{{query}}”.",
+    "bibEditLabel": "Race number",
+    "bibPlaceholder": "Bib"
   },
   "eventForm": {
     "title": "Create an event",

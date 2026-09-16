@@ -365,7 +365,7 @@
     "alreadyCheckedInToast": "{{name}} បានចូលរួមរួចមកហើយ",
     "undoneToast": "បានលុបចោលការចូលរួម",
     "manualListTitle": "{{checked}} / {{total}} បានចូលរួម",
-    "searchPlaceholder": "ស្វែងរកតាមឈ្មោះ…",
+    "searchPlaceholder": "ស្វែងរកតាមឈ្មោះ ឬលេខសម្គាល់…",
     "checkedInAt": "បានចូលរួម {{date}}",
     "checkInButton": "ចូលរួម",
     "undo": "លុបចោល"
@@ -375,7 +375,7 @@
     "importDesc": "អាប់ឡូតឯកសារ CSV ដែលមានពេលវេលាបញ្ចប់របស់អ្នកចូលរួមនីមួយៗ។ ផ្គូផ្គងតាមអ៊ីមែល។",
     "chooseCsv": "ជ្រើសរើសឯកសារ CSV",
     "importSummaryUpdated_other": "លទ្ធផល {{count}} ត្រូវបានធ្វើបច្ចុប្បន្នភាព។",
-    "importSummaryErrorRow": "ជួរទី {{row}} ({{email}}): {{reason}}",
+    "importSummaryErrorRow": "ជួរទី {{row}} ({{identifier}}): {{reason}}",
     "importSuccessToast": "បាននាំចូលលទ្ធផល {{count}}",
     "importPartialToast": "បាននាំចូលលទ្ធផល {{count}}, ជួរ {{errors}} មានបញ្ហា",
     "manualTitle": "បញ្ចូលដោយដៃ",
@@ -536,8 +536,10 @@
     "toastDeadlineSaved": "បានរក្សាទុកកំណត់ពេល",
     "tabSetup": "ការកំណត់",
     "tabMore": "ច្រើនទៀត",
-    "searchParticipants": "ស្វែងរកតាមឈ្មោះ ឬអ៊ីមែល",
-    "noParticipantsMatch": "គ្មាននរណាម្នាក់ត្រូវនឹង “{{query}}” ទេ។"
+    "searchParticipants": "ស្វែងរកតាមឈ្មោះ អ៊ីមែល ឬលេខសម្គាល់",
+    "noParticipantsMatch": "គ្មាននរណាម្នាក់ត្រូវនឹង “{{query}}” ទេ។",
+    "bibEditLabel": "លេខសម្គាល់",
+    "bibPlaceholder": "លេខ"
   },
   "eventForm": {
     "title": "បង្កើតព្រឹត្តិការណ៍",

@@ -138,6 +138,90 @@ Four decisions worth knowing:
 
 `Certificates::RenderPdf::ConversionError` is deliberately **the same class** as `OdtToPdf::ConversionError`, not a sibling. `RenderCertificateJob` rescues it to log-and-swallow a bad template; when the soffice call moved into `OdtToPdf`, a separate class would have quietly stopped that rescue catching conversion failures, turning a logged warning into a crashed job.
 
+### Bib numbers, and the certificate job that never ran
+
+Both landed together as Phase 0 of `docs/partner-api-design.md` (the Partner
+API), but neither is about the API — they're gaps the product already had.
+
+- **`GenerateCertificatesJob` was dead code until 2026-09-16.** Its own header
+  said it "runs on a schedule (see `config/recurring.yml`)"; it was not in
+  `recurring.yml` and nothing called it, so **no certificate had ever been
+  generated in production**. Comments that describe intent are not evidence
+  that the wiring exists.
+- **It could not simply be switched on.** `eligible_registrations` filtered on
+  status, payment, template and end date — but not on `registrations.deleted_at`,
+  `events.deleted_at` or `events.suspended_at`, while every other read of
+  registrations in this codebase goes through `.kept`. Its first run would have
+  issued certificates to people who withdrew and to events an admin had taken
+  down, each one a PDF in S3 that the participant can see. The bug survived
+  review *because* the job was dead: the existing spec passed throughout, since
+  it only covered the filters that were there. Suspension is treated as
+  deferral rather than denial — unsuspending makes those registrations eligible
+  on the next run.
+- **`MAX_PER_RUN` (200) is what makes a no-cutoff backfill safe.** Every
+  finished event qualifies however old, so the first runs face the whole
+  history; each render is ~180 MB RSS and 0.25–1.2 s of LibreOffice on the
+  worker. Hourly + capped drains the backlog over hours instead of starving
+  the queue of the registration and payment jobs people are waiting on.
+  Ordering is oldest-finished-first so a capped run is predictable.
+- **`registrations.bib_number` is a string, not an integer** — real bibs are
+  `"A1042"`, `"10K-233"`, `"0007"` with the leading zeros printed on them, and
+  nothing sorts or sums this column. The unique index is partial and per-event
+  (`WHERE bib_number IS NOT NULL`), the same shape as the `(event_id, user_id)`
+  index. `normalizes` turns `""` and whitespace into NULL, without which the
+  second participant to have their bib cleared would collide with the first.
+- **Unlike the `user_id` index, the bib index is deliberately *not* scoped to
+  kept rows.** A withdrawn runner's number must not be silently reissued while
+  their result and certificate still reference it; freeing a number is an
+  explicit edit.
+- **`Results::ImportCsv` matches on bib first, then email**, and reports a
+  bib/email pair that names two different people as an error rather than
+  picking a side. Email was the only key before, which was always wrong for the
+  file organizers actually have: chip-timing systems export bib and time and no
+  timing exporter emits entrant email addresses. The export CSV leads with
+  `Bib` so export → fill in times → re-import is a round trip with no VLOOKUP.
+  Its lookups are now `.kept`-scoped, which they weren't.
+
+### Monitoring: the worker liveness alarm
+
+`infrastructure/monitoring.tf` holds the stack's first alarms. They exist for
+one gap: the worker task has no ECS `healthCheck` on purpose, so "supervisor
+alive but not doing work" is invisible from the ECS side — and that became
+load-bearing when certificate generation moved onto the worker.
+
+- **The signal is a log line, not `solid_queue_processes.last_heartbeat_at`.**
+  Two reasons, and the second is the real one. Practically, that column is in
+  Postgres and CloudWatch can't read Postgres — bridging it needs a VPC Lambda
+  or a reporter thread in the *web* task, since the worker can't report on
+  itself and a recurring job is the very thing being tested. Substantively,
+  **the heartbeat is written by its own thread and says nothing about whether
+  jobs run**: a worker wedged on a stuck LibreOffice render keeps its heartbeat
+  perfectly fresh. `WorkerLivenessJob` runs every 5 minutes and logs one JSON
+  line, so the line appearing proves scheduler → dispatcher → claim → execute
+  all work.
+- **The metric filter matches the JSON field** (`{ $.event = "solid_queue.liveness" }`),
+  not a substring, so the string appearing inside a stack trace can't forge an
+  "everything is fine". `default_value = 0` makes an empty period report zero
+  rather than no-data, which is what makes the alarm's own history honest.
+- **`treat_missing_data = "breaching"` on liveness, `"missing"` on the ECS task
+  count.** Opposite settings, deliberately: a worker that stopped logging and a
+  log pipeline that stopped delivering are indistinguishable and both mean "you
+  don't know if jobs run", but Container Insights legitimately stops publishing
+  for a service scaled to zero, where `breaching` would page forever.
+- **15 minutes = three expected lines.** One missed period is a deploy severing
+  the worker mid-schedule; three is not. **`config/recurring.yml`'s
+  `worker_liveness` schedule and this window are coupled across two
+  repositories of truth**, so a spec pins the schedule — lengthening it without
+  widening the window turns a healthy worker into a page.
+- **A deep backlog logs a second line, it never raises.** A liveness probe that
+  raised when the numbers got interesting would turn "the worker is behind"
+  into "the worker looks dead" — different alarm, different response.
+- **`alarm_email` is a variable and defaults to empty**, so the topic and alarms
+  exist with nothing subscribed. Worth knowing: an email subscription sits in
+  `PendingConfirmation` until the link is clicked and **`terraform apply`
+  reports success either way** — `terraform output alarm_subscription_check`
+  prints the command that distinguishes configured from working.
+
 ### Backend: ActionCable
 
 Enabled for support chat (`support-chat-tickets.md`, Ticket 0). `config/application.rb` requires `action_cable/engine` explicitly — this app lists railties individually rather than using `rails/all`, so ActionCable does not appear just because it's in the Rails gem. `solid_cable` is in the `:production` gem group beside `solid_queue`/`solid_cache`; development uses `:async` and test uses `:test`, so neither needs it.

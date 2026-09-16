@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_16_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -415,6 +415,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_010000) do
   create_table "registrations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.integer "amount_owed_cents"
     t.integer "amount_paid_cents", default: 0, null: false
+    t.string "bib_number"
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
     t.datetime "deleted_at"
@@ -425,6 +426,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_010000) do
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
+    t.index ["event_id", "bib_number"], name: "index_registrations_on_event_id_and_bib_number", unique: true, where: "(bib_number IS NOT NULL)"
     t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true, where: "(deleted_at IS NULL)"
     t.index ["event_id"], name: "index_registrations_on_event_id"
     t.index ["user_id"], name: "index_registrations_on_user_id"

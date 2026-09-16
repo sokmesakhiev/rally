@@ -352,7 +352,8 @@ module Api
           payment_status: reg.payment_status,
           amount_paid_cents: reg.amount_paid_cents,
           created_at: reg.created_at,
-          checked_in_at: reg.checked_in_at
+          checked_in_at: reg.checked_in_at,
+          bib_number: reg.bib_number
         }
 
         # nil until an organizer (via Api::V1::ResultsController) records

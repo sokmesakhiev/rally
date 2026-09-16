@@ -344,6 +344,10 @@ export interface ApiRegistration {
   created_at: string;
   /** Null until an organizer scans/taps this registration in on event day. */
   checked_in_at: string | null;
+  /** Race number, null until an organizer assigns one. A string, not a
+   * number — real bibs look like "A1042" or "0007", where the leading zeros
+   * are printed on the bib itself. */
+  bib_number: string | null;
   event?: ApiEvent;
   event_types: ApiEventType[];
   profile?: { display_name: string | null; avatar_url: string | null };
@@ -811,6 +815,17 @@ export const registrationsApi = {
     });
   },
 
+  /** Assigns or clears a race number. Pass null to clear — the backend
+   * normalizes null and "" to NULL so the row stops counting against the
+   * per-event uniqueness index. A duplicate comes back as a 422 whose
+   * message names the conflict; there's no pre-check, because between a
+   * check and a write another organizer could take the number. */
+  setBibNumber(id: string, bibNumber: string | null) {
+    return api.patch<{ registration: ApiRegistration }>(`/registrations/${id}`, {
+      registration: { bib_number: bibNumber?.trim() || null },
+    });
+  },
+
   remove(id: string) {
     return api.delete<{ message: string }>(`/registrations/${id}`);
   },
@@ -842,7 +857,11 @@ export const registrationsApi = {
 
 export interface ApiResultsImportSummary {
   updated: number;
-  errors: Array<{ row: number; email: string; reason: string }>;
+  /** `bib` and `email` echo whichever key the failing row actually used, so
+   * the list reads against the file that was uploaded. A timing export has
+   * only bibs and a hand-made sheet often has only emails, so either can be
+   * null — display code should fall back from one to the other. */
+  errors: Array<{ row: number; bib: string | null; email: string | null; reason: string }>;
 }
 
 export interface ApiLeaderboardEntry {
