@@ -71,6 +71,18 @@ production:
     class: CancelWaitlistsForClosedEventsJob
     schedule: every hour at minute 22
 
+  # Enforces the support-chat retention window. Daily, not hourly — the window
+  # is twelve months, so nothing is gained by checking twenty-four times a day
+  # on a worker that also renders certificates.
+  #
+  # 03:40 is deliberate: the first runs after this ships have a backlog (every
+  # historically-resolved thread becomes eligible at once, see the resolved_at
+  # backfill), and destroying cascades to messages. Off-peak, and capped by
+  # Conversations::SweepResolved::MAX_PER_RUN.
+  sweep_resolved_conversations:
+    class: SweepResolvedConversationsJob
+    schedule: every day at 3:40am
+
   # Certificate previews are scratch renders an organizer looked at once.
   # Each re-preview orphans the previous PDF in S3 (the row keeps only the
   # newest URL), so without this they accumulate unreferenced and invisible.

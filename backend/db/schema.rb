@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_16_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_17_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -82,12 +82,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010000) do
     t.datetime "created_at", null: false
     t.datetime "last_message_at"
     t.datetime "participant_last_read_at"
+    t.datetime "resolved_at"
     t.datetime "staff_last_read_at"
     t.string "status", default: "open", null: false
     t.string "subject"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["assigned_admin_id"], name: "index_conversations_on_assigned_admin_id", where: "(assigned_admin_id IS NOT NULL)"
+    t.index ["resolved_at"], name: "index_conversations_on_resolved_at", where: "(resolved_at IS NOT NULL)"
     t.index ["status", "last_message_at"], name: "index_conversations_on_status_and_last_message_at", order: { last_message_at: :desc }
     t.index ["user_id", "created_at"], name: "index_conversations_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_conversations_one_live_per_user", unique: true, where: "((status)::text <> 'resolved'::text)"
