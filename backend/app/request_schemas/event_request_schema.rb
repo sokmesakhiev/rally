@@ -23,7 +23,13 @@ class EventRequestSchema < ApplicationRequestSchema
   params do
     required(:event).hash do
       required(:title).filled(:string)
-      optional(:description).value(:string)
+      # `.maybe`, not `.value`. This was `.value(:string)` — the only nullable
+      # field in this schema that wasn't `.maybe` — which rejects nil, so
+      # creating an event without a description 422'd with "must be a string".
+      # The class comment above already listed description first among the
+      # fields "the frontend sends null for", so the intent was never in doubt;
+      # the declaration just didn't match it.
+      optional(:description).maybe(:string)
       required(:category).filled(:string)
       optional(:location).maybe(:string)
       optional(:latitude).maybe(:float)

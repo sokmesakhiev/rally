@@ -124,6 +124,11 @@ class Event < ApplicationRecord
   scope :kept, -> { where(deleted_at: nil) }
   scope :discarded, -> { where.not(deleted_at: nil) }
 
+  # `brand_color`, `currency` and `price_cents` are NOT NULL with defaults, and
+  # all three are `.maybe` in the request schemas — so an explicit null used to
+  # 500. See ApplicationRecord.reject_nils_for_defaulted_columns, which both
+  # EventsController#create and #update run params through.
+
   # Soft-delete: hides the event (and, since it's no longer reachable
   # through normal reads, effectively everyone downstream of it) without
   # touching payments, event_types, or event_plan_payments — those remain as

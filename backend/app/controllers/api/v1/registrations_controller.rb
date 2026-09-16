@@ -224,7 +224,14 @@ module Api
         return unless authorize_event!(event, :update_registration)
 
         validate_params_with_schema(RegistrationUpdateRequestSchema) do |validated_params|
-          if registration.update(validated_params[:registration])
+          # `amount_paid_cents` is `.maybe(:integer)` in the schema but NOT NULL
+          # with a default of 0 in the database, so an explicit null would raise
+          # NotNullViolation — a StatementInvalid, which the RecordNotFound
+          # rescue below doesn't catch, so a 500. See
+          # ApplicationRecord.reject_nils_for_defaulted_columns.
+          attrs = Registration.reject_nils_for_defaulted_columns(validated_params[:registration])
+
+          if registration.update(attrs)
             render json: { registration: registration_json(registration, include_profile: true, include_types: true) }
           else
             render json: { error: registration.errors.full_messages.join(", ") }, status: :unprocessable_entity

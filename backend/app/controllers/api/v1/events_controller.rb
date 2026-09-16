@@ -165,7 +165,12 @@ module Api
       # POST /api/v1/events
       def create
         validate_params_with_schema(EventRequestSchema) do |validated_params|
-          attrs = validated_params[:event]
+          # An explicit null for a NOT NULL column with a default means "use the
+          # default" — see Event.reject_nils_for_defaulted_columns. Without it,
+          # `{"brand_color": null}` raises NotNullViolation, which the rescue
+          # below doesn't catch (it's a StatementInvalid, not a RecordInvalid),
+          # so the caller gets a 500 for a perfectly ordinary request.
+          attrs = Event.reject_nils_for_defaulted_columns(validated_params[:event])
           organization = resolve_organization_for_create!(attrs[:organization_id])
           next if organization.nil?
 
@@ -193,13 +198,17 @@ module Api
       # PATCH /api/v1/events/:id
       def update
         validate_params_with_schema(EventUpdateRequestSchema) do |validated_params|
-          changes = notifiable_changes(validated_params[:event])
+          # Same NOT NULL / explicit-null trap as #create, and worse here:
+          # update has no RecordInvalid rescue at all, so a null brand_color,
+          # currency or price_cents would 500 with nothing catching it.
+          attrs = Event.reject_nils_for_defaulted_columns(validated_params[:event])
+          changes = notifiable_changes(attrs)
 
           # Captured before assignment below overwrites it — see
           # #reject_unverified_paid_event! for why only the free → paid
           # *transition* is gated, not every edit to an already-paid event.
           was_paid = @event.paid?
-          @event.assign_attributes(validated_params[:event])
+          @event.assign_attributes(attrs)
           next if reject_unverified_paid_event!(@event, was_paid: was_paid)
 
           if @event.save

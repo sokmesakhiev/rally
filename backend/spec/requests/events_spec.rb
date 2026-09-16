@@ -676,6 +676,60 @@ RSpec.describe "Events API", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
+    # The create form sends null for every field the organizer left blank, so
+    # each of these has to be accepted as nil rather than merely omitted.
+    # `description` was declared `.value(:string)` — the one nullable field in
+    # EventRequestSchema that wasn't `.maybe` — which rejected nil and 422'd
+    # anyone who didn't write a description. The update schema had `.maybe` all
+    # along, so the two disagreed about the same column.
+    describe "fields the form sends as null" do
+      # Nullable columns: null is stored as null.
+      %i[description location route_map_url end_at
+         banner_url logo_url survey_id].each do |field|
+        it "accepts a null #{field}" do
+          post "/api/v1/events",
+               params: { event: valid_params[:event].merge(field => nil) },
+               headers: auth_headers(user),
+               as: :json
+
+          expect(response).to have_http_status(:created)
+        end
+      end
+
+      # NOT NULL columns that carry a database default. These are the ones that
+      # used to 500 rather than 422: the schema permits nil, the column refuses
+      # it, and NotNullViolation isn't a RecordInvalid so nothing rescued it.
+      # An explicit null now means "use the default", same as omitting the key.
+      {
+        brand_color: "#6366f1",
+        currency: "usd",
+        price_cents: 0
+      }.each do |field, default|
+        it "falls back to the default for a null #{field}, rather than 500ing" do
+          post "/api/v1/events",
+               params: { event: valid_params[:event].merge(field => nil) },
+               headers: auth_headers(user),
+               as: :json
+
+          expect(response).to have_http_status(:created)
+          expect(Event.find(json["event"]["id"]).public_send(field)).to eq(default)
+        end
+      end
+
+      it "accepts every optional field null at once, which is what an empty form sends" do
+        blanks = %i[description location latitude longitude route_map_url end_at
+                    currency brand_color price_cents banner_url logo_url survey_id]
+                 .index_with(nil)
+
+        post "/api/v1/events",
+             params: { event: valid_params[:event].merge(blanks) },
+             headers: auth_headers(user),
+             as: :json
+
+        expect(response).to have_http_status(:created)
+      end
+    end
+
     it "returns 401 without a token" do
       post "/api/v1/events", params: valid_params, as: :json
       expect(response).to have_http_status(:unauthorized)
@@ -883,6 +937,32 @@ RSpec.describe "Events API", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(json["event"]["title"]).to eq("New Title")
+    end
+
+    # #update has no `rescue RecordInvalid` at all, so this was the worse of
+    # the two: a null brand_color raised NotNullViolation straight through to
+    # a 500. An explicit null for a defaulted column now means "leave it at
+    # the default" rather than "write NULL".
+    it "keeps the existing value rather than 500ing on a null brand_color" do
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { brand_color: nil } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload.brand_color).to be_present
+    end
+
+    it "does the same for a null price_cents" do
+      event.update!(price_cents: 2500)
+
+      patch "/api/v1/events/#{event.id}",
+            params: { event: { price_cents: nil } },
+            headers: auth_headers(user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload.price_cents).to eq(2500)
     end
 
     it "only touches the submitted field — a partial update doesn't null out the rest" do
