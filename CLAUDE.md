@@ -228,7 +228,34 @@ load-bearing when certificate generation moved onto the worker.
   exist with nothing subscribed. Worth knowing: an email subscription sits in
   `PendingConfirmation` until the link is clicked and **`terraform apply`
   reports success either way** — `terraform output alarm_subscription_check`
-  prints the command that distinguishes configured from working.
+  prints the command that distinguishes configured from working. It currently
+  points at the account owner's own address; move it to a shared alias the day
+  a second person is on call.
+- **Deploy the backend *before* applying the liveness alarm.** The alarm treats
+  missing data as breaching, and `WorkerLivenessJob` only exists once the image
+  carrying it is running. Apply first and the alarm goes to ALARM about fifteen
+  minutes later and stays there — a false page on day one, which is the fastest
+  way to teach yourself to ignore it. Order: deploy backend → confirm the line
+  is flowing → `terraform apply`. The check is:
+
+  ```
+  aws logs tail /ecs/rally-production --since 15m \
+    --filter-pattern '{ $.event = "solid_queue.liveness" }'
+  ```
+
+  `tail` is the subcommand that takes a human `--since`; `filter-log-events`
+  does not, and wants `--start-time` in epoch *milliseconds* instead
+  (`--start-time $(( ($(date +%s) - 900) * 1000 ))`). Expect roughly three
+  lines per fifteen minutes. **No output means don't apply yet** — either the
+  worker hasn't got the image or it isn't running jobs, and both are exactly
+  what the alarm is for.
+- **A missing `ECS_WORKER_SERVICE` secret now fails the deploy** rather than
+  emitting a `::warning::` and exiting 0. That step is the only path by which
+  `WorkerLivenessJob` reaches production, so skipping it means the alarm fires
+  forever against a deploy that reported success — and the old `exit 0` also
+  let the "✅ Rally backend deployed" Telegram message go out. Failing routes
+  to the `if: failure()` notification instead, so the channel anyone actually
+  reads says what really happened.
 
 ### Backend: ActionCable
 
