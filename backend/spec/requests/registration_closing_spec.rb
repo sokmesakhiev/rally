@@ -38,6 +38,22 @@ RSpec.describe "Registration closing", type: :request do
       expect(event.reload).not_to be_registration_closed
     end
 
+    # Closing is final for people already queueing, and they're told once
+    # rather than left waiting for a promotion that can never happen — see
+    # Waitlists::CancelForClosedEvent. Run inline here (not only by the hourly
+    # sweep) so the organizer watches the waitlist clear.
+    it "ends the waitlist and notifies everyone still on it" do
+      event.update!(capacity: 1)
+      create(:registration, event: event)
+      waiting = create(:waitlist_entry, event: event, status: "waiting")
+
+      expect { post "/api/v1/events/#{event.id}/close_registration", headers: headers }
+        .to change(Notification, :count).by(1)
+
+      expect(waiting.reload.status).to eq("cancelled")
+      expect(Notification.last.kind).to eq("waitlist_closed")
+    end
+
     # The distinction that motivates the whole feature: closing must not hide
     # the event from the people already registered.
     it "leaves the event published and publicly visible" do

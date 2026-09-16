@@ -368,7 +368,7 @@
     "alreadyCheckedInToast": "{{name}} was already checked in",
     "undoneToast": "Check-in undone",
     "manualListTitle": "{{checked}} / {{total}} checked in",
-    "searchPlaceholder": "Search by name…",
+    "searchPlaceholder": "Search by name or bib…",
     "checkedInAt": "Checked in {{date}}",
     "checkInButton": "Check in",
     "undo": "Undo"
@@ -379,7 +379,7 @@
     "chooseCsv": "Choose CSV file",
     "importSummaryUpdated_one": "{{count}} result updated.",
     "importSummaryUpdated_other": "{{count}} results updated.",
-    "importSummaryErrorRow": "Row {{row}} ({{email}}): {{reason}}",
+    "importSummaryErrorRow": "Row {{row}} ({{identifier}}): {{reason}}",
     "importSuccessToast": "{{count}} results imported",
     "importPartialToast": "{{count}} results imported, {{errors}} rows had errors",
     "manualTitle": "Manual entry",
@@ -541,8 +541,10 @@
     "toastDeadlineSaved": "Deadline saved",
     "tabSetup": "Setup",
     "tabMore": "More",
-    "searchParticipants": "Search by name or email",
-    "noParticipantsMatch": "Nobody matches “{{query}}”."
+    "searchParticipants": "Search by name, email or bib",
+    "noParticipantsMatch": "Nobody matches “{{query}}”.",
+    "bibEditLabel": "Race number",
+    "bibPlaceholder": "Bib"
   },
   "eventForm": {
     "title": "Create an event",
@@ -918,13 +920,13 @@
     "privacyTitle": "Privacy Policy",
     "privacyIntro": "This Privacy Policy describes how Rally collects, uses, and shares information when you use the platform.",
     "privacyCollectTitle": "Information we collect",
-    "privacyCollectBody": "We collect the information you provide when creating an account or registering for an event (name, email, phone), along with event and payment records.",
+    "privacyCollectBody": "We collect the information you provide when creating an account or registering for an event (name, email, phone), along with event and payment records. If you contact us through the in-app support chat, we also store the messages you send and our replies.",
     "privacyUseTitle": "How we use it",
-    "privacyUseBody": "We use this information to operate Rally: creating accounts, processing registrations and payments, sending confirmation and notification emails, and moderating the platform.",
+    "privacyUseBody": "We use this information to operate Rally: creating accounts, processing registrations and payments, sending confirmation and notification emails, answering your support messages, and moderating the platform.",
     "privacySharingTitle": "Sharing",
-    "privacySharingBody": "Event organizers can see the registration details of people registered for their own events. We don't sell personal information to third parties.",
+    "privacySharingBody": "Event organizers can see the registration details of people registered for their own events. Support chat is between you and the Rally team only — organizers never see it. We don't sell personal information to third parties.",
     "privacyRetentionTitle": "Data retention",
-    "privacyRetentionBody": "We retain account and registration data for as long as your account is active, and as needed to comply with legal obligations.",
+    "privacyRetentionBody": "We retain account and registration data for as long as your account is active, and as needed to comply with legal obligations. Support chat conversations are deleted automatically 12 months after they are closed. If you delete your account, your support conversations, notifications and saved devices are deleted with it; registration and payment records are kept, with your personal details removed, because the event organizer needs them.",
     "privacyContactTitle": "Contact",
     "privacyContactBody": "Questions about this policy can be sent to the email address associated with your Rally account's support channel."
   },

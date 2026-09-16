@@ -31,15 +31,25 @@ module ValidateParams
     end
 
     def build_error_response(schema_errors)
+      messages = schema_errors.messages
+
       error_body = {
         "success" => false,
         "message" => "Unprocessable Entity",
         "code" => 422
       }
-      error_body["errors"] = schema_errors.messages.map do |message|
+
+      error_body["errors"] = messages.map { |message|
         message.meta[:code].presence || ErrorCodes::GENERAL_ERROR
+      }.uniq
+
+      # Which field failed, structured. Most dry-schema messages carry no
+      # `meta[:code]`, so `errors` above collapses to ["general_error"] and
+      # says nothing at all — this is the part a caller can actually act on,
+      # and the part a frontend can use to mark the offending input.
+      error_body["details"] = messages.map do |message|
+        { "field" => field_path(message), "message" => message.text }
       end
-      error_body["errors"].uniq!
 
       # Every other controller in this app returns { error: "<human text>",
       # code: "<optional machine code>" } (see e.g. RegistrationsController's
@@ -47,9 +57,30 @@ module ValidateParams
       # reads response.json.error / .code — it has no awareness of `errors`
       # (plural). Without this, a schema validation failure would surface to
       # the user as a bare "API error 422" instead of the real message.
-      error_body["error"] = schema_errors.messages.map(&:text).join(", ")
+      #
+      # The field name is prefixed rather than left to `details` alone,
+      # because `error` is the string that reaches a human. It used to be
+      # just `messages.map(&:text)`, which produced bodies like
+      # `"error": "must be a string"` — true, unactionable, and requiring a
+      # read of the schema source to find out which of seventeen fields was
+      # meant.
+      error_body["error"] = error_body["details"].map { |detail|
+        detail["field"].present? ? "#{detail['field']} #{detail['message']}" : detail["message"]
+      }.join(", ")
 
       error_body
+    end
+
+    # "event.description", or "event.event_types_attributes.0.capacity" for a
+    # failure inside a nested array.
+    #
+    # The wrapper key (`event`, `registration`) is deliberately *not* stripped.
+    # It would read a little cleaner for the nested schemas, but not every
+    # schema wraps — the query-param ones are flat — so stripping the first
+    # segment would be a guess that silently mislabels a field in exactly the
+    # schemas where it guessed wrong.
+    def field_path(message)
+      Array(message.path).join(".")
     end
   end
 end

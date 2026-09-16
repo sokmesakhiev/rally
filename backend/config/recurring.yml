@@ -10,6 +10,18 @@
 #     schedule: at 5am every day
 
 production:
+  # Liveness. Every five minutes because that is the resolution the alarm
+  # needs, not because anything here is urgent — see WorkerLivenessJob for why
+  # a job that runs is a better signal than a heartbeat column that ticks.
+  #
+  # This is the only entry here that must keep its cadence in step with
+  # infrastructure/monitoring.tf: the alarm's evaluation window assumes three
+  # of these per fifteen minutes, so lengthening the schedule without widening
+  # the window turns a healthy worker into a page.
+  worker_liveness:
+    class: WorkerLivenessJob
+    schedule: every 5 minutes
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
@@ -32,6 +44,44 @@ production:
   release_abandoned_registrations:
     class: ReleaseAbandonedRegistrationsJob
     schedule: every hour at minute 37
+
+  # Issues certificates for finished events. This was missing until
+  # 2026-09-16 — GenerateCertificatesJob's own header claimed it was
+  # scheduled here and it never was, so no certificate had ever been
+  # generated in production. See the job for the eligibility guards that were
+  # never exercised while it was dead, and for MAX_PER_RUN, which is what
+  # keeps the historical backlog from being enqueued in a single run.
+  #
+  # Minute 07, so it lands before the three sweeps below rather than beside
+  # them: this is the one recurring job that fans out to hundreds of other
+  # jobs, and the sweeps are cheap enough to wait.
+  generate_certificates:
+    class: GenerateCertificatesJob
+    schedule: every hour at minute 7
+
+  # Ends the waitlist for events that have closed. Exists for the *deadline*
+  # path: a manual close cancels its waitlist inline from the controller, but
+  # registration_closes_at is evaluated rather than stored, so nothing runs
+  # when it passes and the queue would sit waiting for a promotion that can
+  # never happen. Also backstops the inline call against a crash mid-close.
+  #
+  # Minute 22, between the two sweeps around it rather than sharing a minute —
+  # all of these compete for the worker's three job threads.
+  cancel_waitlists_for_closed_events:
+    class: CancelWaitlistsForClosedEventsJob
+    schedule: every hour at minute 22
+
+  # Enforces the support-chat retention window. Daily, not hourly — the window
+  # is twelve months, so nothing is gained by checking twenty-four times a day
+  # on a worker that also renders certificates.
+  #
+  # 03:40 is deliberate: the first runs after this ships have a backlog (every
+  # historically-resolved thread becomes eligible at once, see the resolved_at
+  # backfill), and destroying cascades to messages. Off-peak, and capped by
+  # Conversations::SweepResolved::MAX_PER_RUN.
+  sweep_resolved_conversations:
+    class: SweepResolvedConversationsJob
+    schedule: every day at 3:40am
 
   # Certificate previews are scratch renders an organizer looked at once.
   # Each re-preview orphans the previous PDF in S3 (the row keeps only the

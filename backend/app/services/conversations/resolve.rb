@@ -33,7 +33,10 @@ module Conversations
       conversation.with_lock do
         next if conversation.resolved?
 
-        conversation.update!(status: ::Conversation::RESOLVED)
+        # resolved_at is the clock the retention sweep runs against
+        # (Conversation::RETENTION_PERIOD), so it has to be stamped here —
+        # this is the only place a thread becomes resolved.
+        conversation.update!(status: ::Conversation::RESOLVED, resolved_at: Time.current)
         notice = conversation.messages.create!(
           sender: nil,
           sender_role: ::Message::SYSTEM,

@@ -58,3 +58,19 @@ ecs_desired_count = 1
 
 # ── SENTRY ─────────────────────────────────────────────────────────────────────
 sentry_dsn = "YOUR_SENTRY_DSN"
+
+# ── ALARMS ─────────────────────────────────────────────────────────────────────
+# Where CloudWatch alarms are emailed (see monitoring.tf). Leaving this empty is
+# a valid apply — the SNS topic and all three alarms are still created, they
+# just reach nobody. That is the one failure worth stating plainly, because a
+# console full of green alarms with no subscriber looks exactly like health.
+#
+# Two things `terraform apply` will NOT tell you:
+#   * AWS emails a confirmation link to this address, and the subscription
+#     delivers nothing until it's clicked. Apply reports success either way.
+#     Run `terraform output alarm_subscription_check` to see which state it's in.
+#   * The worker liveness alarm treats missing data as breaching, and the job
+#     that feeds it ships with the backend image. Deploy the backend BEFORE
+#     applying these alarms, or the first one fires ~15 minutes later against a
+#     worker that simply hasn't been given the code yet.
+alarm_email = "admin@rails-dev.com"

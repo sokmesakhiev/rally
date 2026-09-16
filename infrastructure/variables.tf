@@ -196,6 +196,22 @@ variable "sentry_dsn" {
   default     = ""
 }
 
+variable "alarm_email" {
+  description = <<-DESC
+    Address CloudWatch alarms are emailed to (see monitoring.tf). Leave empty to
+    create the SNS topic and alarms without any subscription — the alarms still
+    fire and are visible in the console, they just reach nobody, which is worth
+    knowing before treating silence as health.
+
+    AWS sends a confirmation email to this address that must be clicked before
+    anything is delivered. Terraform reports the subscription as created while
+    it is still `pending confirmation`, so `terraform apply` succeeding is not
+    evidence that alerting works. Check the topic's subscription status.
+  DESC
+  type        = string
+  default     = ""
+}
+
 # ── Mail ──────────────────────────────────────────────────────────────────────
 
 variable "mailer_from_email" {

@@ -19,9 +19,22 @@ class WaitlistEntry < ApplicationRecord
   # The waitlist exists to catch people when an event is *full*, i.e. when
   # spots might still free up; once the organizer has closed sign-ups there is
   # nothing to wait for, and collecting names would promise something the
-  # organizer has just said they aren't doing. Same `on: :create` reasoning as
-  # Registration: an entry that already exists can still be promoted, so
-  # closing doesn't strand people who were queueing before it happened.
+  # organizer has just said they aren't doing.
+  #
+  # `on: :create` here does NOT mean existing entries survive a closure and get
+  # promoted later. This comment used to claim exactly that ("closing doesn't
+  # strand people who were queueing before it happened") and it was wrong:
+  # promotion creates a Registration, Registration validates
+  # `registration_is_open` on create too, so every promotion on a closed event
+  # raised and was swallowed by Waitlists::PromoteNext's rescue — the entry sat
+  # "waiting" forever, silently.
+  #
+  # What actually happens now is that closing is final and the queue is told:
+  # Waitlists::CancelForClosedEvent cancels every waiting entry and notifies its
+  # owner, run inline when an organizer presses Close and hourly by
+  # CancelWaitlistsForClosedEventsJob for the deadline path. So `on: :create`
+  # here buys only the ordinary thing — an entry already in the table stays
+  # valid on later saves — and never outlives the closure.
   validate :registration_is_open, on: :create
 
   scope :waiting, -> { where(status: "waiting") }

@@ -16,6 +16,15 @@ class Notification < ApplicationRecord
 
   # Mirrors the mailer and push trigger names. Kept in sync with
   # Notifications::RegistrationNotifier's public methods.
+  # `waitlist_closed` is the odd one out: every other kind reports something
+  # that happened *for* the participant, while that one reports that nothing
+  # will — the organizer closed registration (or a deadline passed) while they
+  # were still queueing, so they'll never be promoted. See
+  # Notifications::WaitlistNotifier.
+  #
+  # Keep commentary above this constant, never inside it: %w[] has no comment
+  # syntax, so a `#` line between the brackets silently becomes array elements
+  # ("#", "The", "organizer", …) rather than being stripped.
   KINDS = %w[
     registration_confirmed
     payment_received
@@ -23,6 +32,7 @@ class Notification < ApplicationRecord
     refund_issued
     event_details_changed
     support_reply
+    waitlist_closed
   ].freeze
 
   # How many the bell shows before giving up on precision. A badge reading

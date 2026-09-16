@@ -29,6 +29,15 @@ module Waitlists
     end
 
     def call
+      # Registration validates `registration_is_open` on create, so on a closed
+      # event every promotion below would raise and be swallowed by the rescue
+      # in #promote!, leaving each entry "waiting" forever with nothing logged.
+      # Bail loudly instead. Waiting entries are cancelled and their owners
+      # notified at close time (Waitlists::CancelForClosedEvent), so reaching
+      # here with a closed event and a non-empty waitlist means that didn't
+      # happen — worth a line in the log rather than silence.
+      return [] if closed?
+
       promoted = []
 
       @event.waitlist_entries.waiting.order(created_at: :asc).each do |entry|
@@ -43,6 +52,21 @@ module Waitlists
     end
 
     private
+
+    def closed?
+      return false if @event.accepting_signups?
+
+      waiting = @event.waitlist_entries.waiting.count
+      if waiting.positive?
+        Rails.logger.warn(
+          "[waitlist] skipping promotion for closed event #{@event.id}: " \
+          "#{waiting} entries still waiting — expected them to have been " \
+          "cancelled by Waitlists::CancelForClosedEvent"
+        )
+      end
+
+      true
+    end
 
     def fits?(entry)
       return false if @event.full?
@@ -80,11 +104,34 @@ module Waitlists
       end
       Notifications::RegistrationNotifier.promoted_from_waitlist(registration) if registration
       registration
-    rescue ActiveRecord::RecordInvalid
-      # Lost the capacity race between `fits?` and the actual create (e.g.
-      # two promotion passes overlapping) — leave the entry "waiting" so the
-      # next pass picks it up instead of silently dropping this person.
+    rescue ActiveRecord::RecordInvalid => e
+      # Two very different failures reach here, and treating them the same is
+      # what made closing registration strand waitlisters silently:
+      #
+      #   * a lost capacity race between `fits?` and the create (two promotion
+      #     passes overlapping) — **transient**. Leave the entry "waiting" so
+      #     the next pass picks this person up rather than dropping them.
+      #   * registration closed between the guard in #call and here —
+      #     **permanent**. Retrying will never work, so it gets a log line;
+      #     staying quiet here is how nobody noticed.
+      #
+      # Checked by error type rather than message text, since the message is
+      # prose and the symbol is the contract (Registration#registration_is_open
+      # adds :registration_closed, which the controllers already map to
+      # `code: "registration_closed"`).
+      if permanently_closed?(e.record)
+        Rails.logger.warn(
+          "[waitlist] cannot promote entry on closed event #{@event.id}: " \
+          "registration closed mid-pass"
+        )
+      end
+
       nil
+    end
+
+    def permanently_closed?(record)
+      record.respond_to?(:errors) &&
+        record.errors.details[:base]&.any? { |detail| detail[:error] == :registration_closed }
     end
 
     def compute_amount(type_ids)
