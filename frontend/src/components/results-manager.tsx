@@ -122,7 +122,11 @@ export function ResultsManager({ eventId, participants, onChanged }: ResultsMana
                   <li key={i}>
                     {t("results.importSummaryErrorRow", {
                       row: err.row,
-                      email: err.email,
+                      // Bib first: a file that has both is a timing export,
+                      // where the bib is what the organizer will scan the
+                      // error list for. Em dash when the row identified
+                      // nobody at all, so the parentheses are never empty.
+                      identifier: err.bib || err.email || "—",
                       reason: err.reason,
                     })}
                   </li>

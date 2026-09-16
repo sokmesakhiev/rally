@@ -20,6 +20,23 @@ class Conversation < ApplicationRecord
   # Anything not resolved holds the participant's one live slot.
   LIVE_STATUSES = (STATUSES - [ RESOLVED ]).freeze
 
+  # How long a resolved thread is kept before Conversations::SweepResolved
+  # destroys it. **This number is published** — the privacy policy states it
+  # (`legal.privacyRetentionBody`), so changing it here without changing it
+  # there makes the policy a false statement rather than a stale comment.
+  #
+  # Twelve months covers a chargeback window, a repeat complaint about the same
+  # event, and a full annual cycle of events — support threads are mostly about
+  # a specific race, and races recur yearly. Past that the content is a
+  # liability rather than an asset: threads carry whatever people paste while
+  # asking for help, which on a payments product means card complaints and
+  # personal details.
+  #
+  # Measured from `resolved_at`, not `updated_at` (which moves whenever an
+  # agent so much as reads the thread) and not `last_message_at` (activity, and
+  # nullable). See the migration that added the column.
+  RETENTION_PERIOD = 12.months
+
   validates :status, inclusion: { in: STATUSES }
   validates :subject, length: { maximum: 200 }, allow_nil: true
 
@@ -36,6 +53,15 @@ class Conversation < ApplicationRecord
 
   scope :live, -> { where(status: LIVE_STATUSES) }
   scope :resolved, -> { where(status: RESOLVED) }
+
+  # Threads past their retention window. Deliberately requires `resolved_at`
+  # to be present as well as old: a NULL there means "we don't know when this
+  # closed", and destroying on a guess is the wrong way round for an
+  # irreversible operation. The migration backfills existing rows precisely so
+  # this scope isn't silently exempting the oldest data.
+  scope :purgeable, lambda { |now = Time.current|
+    resolved.where.not(resolved_at: nil).where(resolved_at: ...(now - RETENTION_PERIOD))
+  }
   scope :newest_activity_first, -> { order(Arel.sql("last_message_at DESC NULLS LAST")) }
   scope :assigned_to, ->(admin) { where(assigned_admin: admin) }
   scope :unassigned, -> { where(assigned_admin_id: nil) }

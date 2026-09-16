@@ -207,14 +207,21 @@ resource "aws_ecs_task_definition" "worker" {
     # supervisor is this container's main process (under the init below), so if
     # it dies the container exits and ECS replaces the task — a liveness probe
     # would only be re-asking a question the exit status already answers. If a
-    # *forked* worker dies, the supervisor replaces it without help. The failure
-    # a probe can't see either — supervisor alive but wedged — is detectable
-    # only from solid_queue_processes.last_heartbeat_at going stale, which
-    # belongs in a CloudWatch alarm, not a container command.
+    # *forked* worker dies, the supervisor replaces it without help.
+    #
+    # The failure a probe can't see either — supervisor alive but wedged — is
+    # covered by monitoring.tf's worker-not-running-jobs alarm. This comment
+    # used to say that gap "is detectable only from
+    # solid_queue_processes.last_heartbeat_at going stale"; that turned out to
+    # be wrong twice over, and the alarm deliberately does something else. See
+    # backend/app/jobs/worker_liveness_job.rb: the heartbeat is written by its
+    # own thread and keeps ticking on a worker that is executing nothing, so it
+    # answers the same question the exit status already does.
     #
     # One consequence worth knowing: with no health check, ECS's deployment
     # circuit breaker treats "reached RUNNING" as success, so it catches a
-    # crash-on-boot but not a worker that boots and then fails every job.
+    # crash-on-boot but not a worker that boots and then fails every job. That
+    # case is exactly what the liveness alarm catches, 15 minutes later.
 
     logConfiguration = {
       logDriver = "awslogs"

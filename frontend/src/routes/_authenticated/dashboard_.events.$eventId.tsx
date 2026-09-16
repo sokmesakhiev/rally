@@ -60,6 +60,7 @@ import { CheckInScanner } from "@/components/check-in-scanner";
 import { ResultsManager } from "@/components/results-manager";
 import { MembersTab } from "@/components/members-tab";
 import { ListPager } from "@/components/list-pager";
+import { BibNumberField } from "@/components/bib-number-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -380,6 +381,18 @@ function ManageEvent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-participants", eventId] });
       toast.success(t("manageEvent.toastPaymentUpdated"));
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // Not `invalidateParticipants` — a bib doesn't change any figure on the
+  // summary cards, and refetching those on every keystroke-sized edit would
+  // be two requests where one will do.
+  const setBib = useMutation({
+    mutationFn: ({ id, bib }: { id: string; bib: string | null }) =>
+      registrationsApi.setBibNumber(id, bib),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-participants", eventId] });
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -1223,9 +1236,24 @@ function ManageEvent() {
                       }`}
                     >
                       <div className="min-w-0">
-                        <p className="font-medium">
-                          {p.profile?.display_name ?? t("manageEvent.participantFallback")}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">
+                            {p.profile?.display_name ?? t("manageEvent.participantFallback")}
+                          </p>
+                          {can.updateRegistration ? (
+                            <BibNumberField
+                              value={p.bib_number}
+                              disabled={setBib.isPending}
+                              onSave={(bib) => setBib.mutateAsync({ id: p.id, bib })}
+                            />
+                          ) : (
+                            p.bib_number && (
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {p.bib_number}
+                              </span>
+                            )
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           {t("manageEvent.registeredOn", { date: formatDate(p.created_at) })}
                         </p>
@@ -1359,6 +1387,15 @@ function ManageEvent() {
                           >
                             <div className="min-w-0">
                               <p className="truncate font-medium">
+                                {/* Read-only here. The check-in desk is a
+                                    place to find someone by their bib, not to
+                                    assign one — and the Check-in role can't
+                                    edit registrations anyway. */}
+                                {p.bib_number && (
+                                  <span className="mr-2 font-mono text-xs text-muted-foreground">
+                                    {p.bib_number}
+                                  </span>
+                                )}
                                 {p.profile?.display_name ?? t("manageEvent.participantFallback")}
                               </p>
                               {p.checked_in_at && (

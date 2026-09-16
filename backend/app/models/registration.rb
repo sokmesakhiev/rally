@@ -47,13 +47,31 @@ class Registration < ApplicationRecord
 
     pattern = "%#{sanitize_sql_like(query)}%"
     left_joins(user: :profile).where(
-      "profiles.display_name ILIKE :pattern OR users.email ILIKE :pattern",
+      "profiles.display_name ILIKE :pattern OR users.email ILIKE :pattern " \
+      "OR registrations.bib_number ILIKE :pattern",
       pattern: pattern
     )
   }
 
   validates :status, inclusion: { in: STATUSES }
   validates :payment_status, inclusion: { in: PAYMENT_STATUSES }
+
+  # Bib numbers (docs/partner-api-design.md, D10). Blank is stored as NULL, not
+  # "" — the partial unique index keys on `bib_number IS NOT NULL`, so an empty
+  # string would be a real value and the second runner to be cleared would
+  # collide with the first.
+  normalizes :bib_number, with: ->(value) { value.to_s.strip.presence }
+
+  # Matches the partial unique index from
+  # db/migrate/20260916010000_add_bib_number_to_registrations.rb. Unlike the
+  # user_id rule below there is no `conditions:` for kept rows: the index isn't
+  # scoped that way either, deliberately, so a withdrawn runner's number can't
+  # be handed to someone else while their result and certificate still point at
+  # it.
+  validates :bib_number,
+            uniqueness: { scope: :event_id, message: "is already taken for this event" },
+            length: { maximum: 32 },
+            allow_nil: true
   # Scoped to live rows, matching the partial unique index added in
   # db/migrate/20260909010000_scope_registration_uniqueness_to_kept.rb.
   # #discard! keeps the row (for its payment/refund history) but the person is

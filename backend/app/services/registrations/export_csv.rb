@@ -39,9 +39,14 @@ module Registrations
         .order(created_at: :asc)
     end
 
+    # "Bib" leads, because the export's most common second life is as the
+    # entrant list a timing company is handed — and bib is the column they
+    # key on. It's also what Results::ImportCsv now matches on, so exporting
+    # this file, filling in finish times and re-uploading is a round trip
+    # that works without an intermediate VLOOKUP.
     def headers
       [
-        "Name", "Email", "Phone", "Event Type(s)", "Status", "Payment Status",
+        "Bib", "Name", "Email", "Phone", "Event Type(s)", "Status", "Payment Status",
         "Amount Paid (#{event.currency.upcase})", "Checked In", "Checked In At",
         "Registered At"
       ] + questions.map(&:question_text)
@@ -49,6 +54,7 @@ module Registrations
 
     def row(registration)
       [
+        registration.bib_number,
         registration.user.profile&.display_name.presence || "—",
         # Blank rather than the "guest-...@guest.rally.invalid" placeholder
         # for a phone-only guest checkout (see Registrations::GuestCheckout
