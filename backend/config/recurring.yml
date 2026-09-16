@@ -59,6 +59,18 @@ production:
     class: GenerateCertificatesJob
     schedule: every hour at minute 7
 
+  # Ends the waitlist for events that have closed. Exists for the *deadline*
+  # path: a manual close cancels its waitlist inline from the controller, but
+  # registration_closes_at is evaluated rather than stored, so nothing runs
+  # when it passes and the queue would sit waiting for a promotion that can
+  # never happen. Also backstops the inline call against a crash mid-close.
+  #
+  # Minute 22, between the two sweeps around it rather than sharing a minute —
+  # all of these compete for the worker's three job threads.
+  cancel_waitlists_for_closed_events:
+    class: CancelWaitlistsForClosedEventsJob
+    schedule: every hour at minute 22
+
   # Certificate previews are scratch renders an organizer looked at once.
   # Each re-preview orphans the previous PDF in S3 (the row keeps only the
   # newest URL), so without this they accumulate unreferenced and invisible.
