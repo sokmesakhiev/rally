@@ -201,6 +201,55 @@ class User < ApplicationRecord
   def discard!
     transaction do
       events.kept.each(&:discard!)
+
+      # Support threads are destroyed, not anonymized. This looks like it
+      # should already happen — `has_many :conversations, dependent: :destroy`
+      # is declared above — but that callback fires on `destroy`, and this
+      # method is a soft delete written with `update!`. So until now, deleting
+      # your account left every support message you had ever written intact
+      # and readable in the staff console, indefinitely.
+      #
+      # Destroying rather than redacting: the thread exists only because this
+      # person opened it, and its contents are whatever they typed while
+      # trying to get help — which on a payments product means card
+      # complaints and personal details (the same reasoning that keeps
+      # SupportReplyFallbackEmailJob from quoting a reply). Staff replies
+      # inside it go too. The moderation record that matters survives
+      # elsewhere: `admin_actions` rows are attributed to the admin, not to
+      # the thread, and are untouched by this.
+      #
+      # `.destroy_all`, not `delete_all` — Message rows hang off these and need
+      # the association's own cascade to run.
+      conversations.destroy_all
+
+      # Same bug, second table. `has_many :notifications, dependent: :destroy`
+      # is declared above and likewise never fires here, and these are not the
+      # harmless "you have a reply" rows they might look like:
+      # Notifications::SupportNotifier writes `preview(message.body)` into
+      # Notification#body, so a support_reply row carries a quoted excerpt of
+      # the thread being destroyed one line above. Purging the conversation
+      # while leaving those behind would delete the archive and keep the
+      # extracts.
+      #
+      # All kinds go, not just support_reply: every notification is addressed
+      # to this person and about their own registrations, payments and
+      # refunds, which is exactly what a deletion request covers.
+      notifications.destroy_all
+
+      # Push endpoints are device identifiers, and a deleted account has no
+      # business still holding a delivery channel. SendPushNotificationJob
+      # already refuses to send to a discarded user, so this is hygiene rather
+      # than a live leak — but the rows are per-device and outlive the reason
+      # they existed.
+      push_subscriptions.destroy_all
+
+      # Not just hygiene: Waitlists::PromoteNext has no discarded-user guard,
+      # so an entry left behind here can still be promoted — creating a real,
+      # confirmed registration for an account that asked to be deleted, and
+      # taking a spot from someone who could have used it. Registrations
+      # themselves deliberately stay (payment and refund history the organizer
+      # needs), but an unfulfilled place in a queue is only ever this person's.
+      waitlist_entries.destroy_all
       # password_confirmation is a virtual attr_accessor from has_secure_password
       # that validates_confirmation_of checks *whenever it's already been set on
       # this in-memory object* (e.g. by the factory/signup flow that created it),

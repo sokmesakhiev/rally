@@ -308,5 +308,90 @@ RSpec.describe User, type: :model do
 
       expect(Payment.exists?(payment.id)).to be(true)
     end
+
+    # ── The `dependent: :destroy` associations that never fired ───────────────
+    # User declares dependent: :destroy on conversations, notifications,
+    # push_subscriptions and more — but every one of those callbacks fires on
+    # `destroy`, and this method is a soft delete written with `update!`. So
+    # until 2026-09-17 a deleted account kept all of it, and the declarations
+    # above read as though it didn't.
+    describe "data that must not survive the account" do
+      it "destroys the person's support threads and their messages" do
+        user = create(:user)
+        conversation = create(:conversation, user: user)
+        create(:message, conversation: conversation, body: "my card was charged twice")
+
+        expect { user.discard! }.to change(Message, :count).by(-1)
+        expect(Conversation.exists?(conversation.id)).to be(false)
+      end
+
+      it "takes staff replies inside that thread with it" do
+        user = create(:user)
+        conversation = create(:conversation, :with_exchange, user: user)
+
+        user.discard!
+
+        expect(Message.where(conversation_id: conversation.id)).to be_empty
+      end
+
+      # Not the harmless "you have a reply" rows they look like:
+      # Notifications::SupportNotifier writes preview(message.body) into
+      # Notification#body, so these carry excerpts of the thread destroyed
+      # above. Purging the archive and keeping the extracts would be worse
+      # than doing neither.
+      it "destroys notifications, which quote support messages" do
+        user = create(:user)
+        create(:notification, user: user, kind: "support_reply",
+                              title: "Rally Support replied", body: "about your refund…")
+
+        expect { user.discard! }.to change(Notification, :count).by(-1)
+      end
+
+      it "destroys push subscriptions, which are per-device identifiers" do
+        user = create(:user)
+        create(:push_subscription, user: user)
+
+        expect { user.discard! }.to change(PushSubscription, :count).by(-1)
+      end
+
+      # Waitlists::PromoteNext has no discarded-user guard, so an entry left
+      # here can still be promoted — creating a confirmed registration for an
+      # account that asked to be deleted, and taking a spot from someone who
+      # could have used it.
+      it "destroys waitlist entries, which could otherwise still be promoted" do
+        user = create(:user)
+        event = create(:event, capacity: 1)
+        create(:registration, event: event)
+        create(:waitlist_entry, event: event, user: user, status: "waiting")
+
+        expect { user.discard! }.to change(WaitlistEntry, :count).by(-1)
+      end
+
+      # The line between the two lists: a registration carries payment and
+      # refund history the organizer needs and the business has to keep. The
+      # participant is anonymized in place instead.
+      it "keeps registrations, which are the organizer's records too" do
+        user = create(:user)
+        registration = create(:registration, user: user)
+
+        user.discard!
+
+        expect(Registration.exists?(registration.id)).to be(true)
+      end
+
+      # Threads this person answered as staff, inside someone else's
+      # conversation, are not theirs to take down — Message#sender_id is
+      # ON DELETE SET NULL for exactly this.
+      it "leaves other people's conversations alone" do
+        staff = create(:user, admin: true)
+        someone_else = create(:conversation)
+        create(:message, :from_staff, conversation: someone_else, sender: staff)
+
+        staff.discard!
+
+        expect(Conversation.exists?(someone_else.id)).to be(true)
+        expect(someone_else.messages.count).to eq(1)
+      end
+    end
   end
 end

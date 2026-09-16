@@ -254,6 +254,19 @@ module Api
       # two managers pressing the button is a normal thing to happen.
       def close_registration
         @event.close_registration! unless @event.registration_closed_at.present?
+
+        # Closing is final for people already queueing: a spot freed on a closed
+        # event stays empty, so anyone still "waiting" is told once rather than
+        # left hoping. Run inline (not only from the hourly sweep) so the
+        # organizer watches the waitlist clear in the response they're already
+        # waiting for.
+        #
+        # Deliberately after the render-blocking work rather than in a job: the
+        # service is idempotent and the sweep retries anything that fails, so
+        # the cost of doing it here is bounded, and an organizer who closes and
+        # immediately looks at the waitlist should not see stale names.
+        Waitlists::CancelForClosedEvent.call(@event)
+
         render json: { event: event_json(@event, include_types: true) }
       end
 

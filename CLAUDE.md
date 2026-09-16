@@ -87,6 +87,14 @@ An organizer can stop taking sign-ups before an event is full — for printing b
 - `registration_closed_at` is deliberately **absent from `EventUpdateRequestSchema`** — it's set only by the close/reopen endpoints, so "when was this closed" can't be back-dated by anyone editing the event form. `registration_closes_at` is in the schema, since it's an ordinary editable field.
 - The error code is `registration_closed`, checked **before** `full` in both controllers' error mapping: an event can be closed *and* full, and the closed reason is the more accurate one.
 
+**Closing ends the waitlist, and that was a silent bug for a while.** Promotion creates a `Registration`, `Registration` validates `registration_is_open` on create, so on a closed event every promotion raised `RecordInvalid` — which `Waitlists::PromoteNext` swallowed under a rescue written for lost capacity races. Each entry sat `waiting` forever with nothing logged, nothing visible to the organizer and nothing said to the person. `WaitlistEntry`'s own comment asserted the opposite ("an entry that already exists can still be promoted, so closing doesn't strand people"); it was wrong, and the comment is why nobody looked.
+
+- **Closing is final for the queue.** Organizers close to fix a headcount — printing bibs, confirming catering, a permit — so a promotion afterwards adds someone already counted. A spot freed on a closed event stays empty. `Waitlists::CancelForClosedEvent` cancels every `waiting` entry and notifies its owner once (`Notifications::WaitlistNotifier`, kind `waitlist_closed`).
+- **Two triggers, one service, because the deadline path has no moment.** `registration_closed_at` is a discrete act the controller hooks inline, so the organizer watches the queue clear. `registration_closes_at` is *evaluated, never stored* — nothing runs when it passes — so `CancelWaitlistsForClosedEventsJob` sweeps hourly for that path and backstops a manual close interrupted by a crash or deploy. Hooking only the manual path would leave every deadline-closed event stranding its queue exactly as before. Same shape as `payment_received` firing from both the poll and the ABA webhook.
+- **The sweep expresses "closed" in SQL** rather than calling `Event#registration_closed?` per row. Two definitions of one predicate in two languages drift, so a spec pins them against each other across all four cases.
+- **`PromoteNext` now distinguishes permanent from transient failures.** A lost capacity race still leaves the entry `waiting` for the next pass; a closed-registration failure is logged, checked by *error type* (`:registration_closed`) rather than message text. It also bails early when the event is closed, warning if anyone is still queueing — which means `CancelForClosedEvent` didn't run.
+- **`Notifications::WaitlistNotifier` is a sibling of `RegistrationNotifier`, not a method on it** — every entry point there takes a `registration` and reads `registration.event.title`. Same reasoning as `SupportNotifier`. It reuses the `notify_promoted_from_waitlist` preference (same channel, and this is the message that channel ends with) and follows the house rule: push respects the preference, **the in-app row is always written**.
+
 ### Backend: publishing & payments (ABA PayWay / KHQR)
 
 Two separate payment flows share one gateway (`app/services/aba_payway/client.rb`), and it's easy to conflate them:
@@ -137,6 +145,117 @@ Four decisions worth knowing:
 **Blob URLs built outside a request must use `Storage::BlobUrl`, never `action_mailer.default_url_options`.** A controller's `url_for(blob)` takes the host from the request — the API domain — and is correct. A job has no request, and the obvious fallback is the mailer host, which is deliberately `FRONTEND_URL`. But `/rails/active_storage/blobs/redirect/...` is served by *Rails*, on the API domain: pointed at the frontend it becomes a CloudFront path that doesn't exist. Both `RenderPdf` and `RenderPreview` shipped with that bug (the second copied it from the first), storing 404 URLs for every certificate and preview. It survived because in development and test the mailer host *is* the Rails host, so only production was wrong. `Storage::BlobUrl` reads `BACKEND_URL` — the same value the ABA webhook callbacks already use — and falls back to the mailer options only when it's unset. **Certificate rows written before the fix still hold the bad host.**
 
 `Certificates::RenderPdf::ConversionError` is deliberately **the same class** as `OdtToPdf::ConversionError`, not a sibling. `RenderCertificateJob` rescues it to log-and-swallow a bad template; when the soffice call moved into `OdtToPdf`, a separate class would have quietly stopped that rescue catching conversion failures, turning a logged warning into a crashed job.
+
+### Bib numbers, and the certificate job that never ran
+
+Both landed together as Phase 0 of `docs/partner-api-design.md` (the Partner
+API), but neither is about the API — they're gaps the product already had.
+
+- **`GenerateCertificatesJob` was dead code until 2026-09-16.** Its own header
+  said it "runs on a schedule (see `config/recurring.yml`)"; it was not in
+  `recurring.yml` and nothing called it, so **no certificate had ever been
+  generated in production**. Comments that describe intent are not evidence
+  that the wiring exists.
+- **It could not simply be switched on.** `eligible_registrations` filtered on
+  status, payment, template and end date — but not on `registrations.deleted_at`,
+  `events.deleted_at` or `events.suspended_at`, while every other read of
+  registrations in this codebase goes through `.kept`. Its first run would have
+  issued certificates to people who withdrew and to events an admin had taken
+  down, each one a PDF in S3 that the participant can see. The bug survived
+  review *because* the job was dead: the existing spec passed throughout, since
+  it only covered the filters that were there. Suspension is treated as
+  deferral rather than denial — unsuspending makes those registrations eligible
+  on the next run.
+- **`MAX_PER_RUN` (200) is what makes a no-cutoff backfill safe.** Every
+  finished event qualifies however old, so the first runs face the whole
+  history; each render is ~180 MB RSS and 0.25–1.2 s of LibreOffice on the
+  worker. Hourly + capped drains the backlog over hours instead of starving
+  the queue of the registration and payment jobs people are waiting on.
+  Ordering is oldest-finished-first so a capped run is predictable.
+- **`registrations.bib_number` is a string, not an integer** — real bibs are
+  `"A1042"`, `"10K-233"`, `"0007"` with the leading zeros printed on them, and
+  nothing sorts or sums this column. The unique index is partial and per-event
+  (`WHERE bib_number IS NOT NULL`), the same shape as the `(event_id, user_id)`
+  index. `normalizes` turns `""` and whitespace into NULL, without which the
+  second participant to have their bib cleared would collide with the first.
+- **Unlike the `user_id` index, the bib index is deliberately *not* scoped to
+  kept rows.** A withdrawn runner's number must not be silently reissued while
+  their result and certificate still reference it; freeing a number is an
+  explicit edit.
+- **`Results::ImportCsv` matches on bib first, then email**, and reports a
+  bib/email pair that names two different people as an error rather than
+  picking a side. Email was the only key before, which was always wrong for the
+  file organizers actually have: chip-timing systems export bib and time and no
+  timing exporter emits entrant email addresses. The export CSV leads with
+  `Bib` so export → fill in times → re-import is a round trip with no VLOOKUP.
+  Its lookups are now `.kept`-scoped, which they weren't.
+
+### Monitoring: the worker liveness alarm
+
+`infrastructure/monitoring.tf` holds the stack's first alarms. They exist for
+one gap: the worker task has no ECS `healthCheck` on purpose, so "supervisor
+alive but not doing work" is invisible from the ECS side — and that became
+load-bearing when certificate generation moved onto the worker.
+
+- **The signal is a log line, not `solid_queue_processes.last_heartbeat_at`.**
+  Two reasons, and the second is the real one. Practically, that column is in
+  Postgres and CloudWatch can't read Postgres — bridging it needs a VPC Lambda
+  or a reporter thread in the *web* task, since the worker can't report on
+  itself and a recurring job is the very thing being tested. Substantively,
+  **the heartbeat is written by its own thread and says nothing about whether
+  jobs run**: a worker wedged on a stuck LibreOffice render keeps its heartbeat
+  perfectly fresh. `WorkerLivenessJob` runs every 5 minutes and logs one JSON
+  line, so the line appearing proves scheduler → dispatcher → claim → execute
+  all work.
+- **The metric filter matches the JSON field** (`{ $.event = "solid_queue.liveness" }`),
+  not a substring, so the string appearing inside a stack trace can't forge an
+  "everything is fine". `default_value = 0` makes an empty period report zero
+  rather than no-data, which is what makes the alarm's own history honest.
+- **`treat_missing_data = "breaching"` on liveness, `"missing"` on the ECS task
+  count.** Opposite settings, deliberately: a worker that stopped logging and a
+  log pipeline that stopped delivering are indistinguishable and both mean "you
+  don't know if jobs run", but Container Insights legitimately stops publishing
+  for a service scaled to zero, where `breaching` would page forever.
+- **15 minutes = three expected lines.** One missed period is a deploy severing
+  the worker mid-schedule; three is not. **`config/recurring.yml`'s
+  `worker_liveness` schedule and this window are coupled across two
+  repositories of truth**, so a spec pins the schedule — lengthening it without
+  widening the window turns a healthy worker into a page.
+- **A deep backlog logs a second line, it never raises.** A liveness probe that
+  raised when the numbers got interesting would turn "the worker is behind"
+  into "the worker looks dead" — different alarm, different response.
+- **`alarm_email` is a variable and defaults to empty**, so the topic and alarms
+  exist with nothing subscribed. Worth knowing: an email subscription sits in
+  `PendingConfirmation` until the link is clicked and **`terraform apply`
+  reports success either way** — `terraform output alarm_subscription_check`
+  prints the command that distinguishes configured from working. It currently
+  points at the account owner's own address; move it to a shared alias the day
+  a second person is on call.
+- **Deploy the backend *before* applying the liveness alarm.** The alarm treats
+  missing data as breaching, and `WorkerLivenessJob` only exists once the image
+  carrying it is running. Apply first and the alarm goes to ALARM about fifteen
+  minutes later and stays there — a false page on day one, which is the fastest
+  way to teach yourself to ignore it. Order: deploy backend → confirm the line
+  is flowing → `terraform apply`. The check is:
+
+  ```
+  aws logs tail /ecs/rally-production --since 15m \
+    --filter-pattern '{ $.event = "solid_queue.liveness" }'
+  ```
+
+  `tail` is the subcommand that takes a human `--since`; `filter-log-events`
+  does not, and wants `--start-time` in epoch *milliseconds* instead
+  (`--start-time $(( ($(date +%s) - 900) * 1000 ))`). Expect roughly three
+  lines per fifteen minutes. **No output means don't apply yet** — either the
+  worker hasn't got the image or it isn't running jobs, and both are exactly
+  what the alarm is for.
+- **A missing `ECS_WORKER_SERVICE` secret now fails the deploy** rather than
+  emitting a `::warning::` and exiting 0. That step is the only path by which
+  `WorkerLivenessJob` reaches production, so skipping it means the alarm fires
+  forever against a deploy that reported success — and the old `exit 0` also
+  let the "✅ Rally backend deployed" Telegram message go out. Failing routes
+  to the `if: failure()` notification instead, so the channel anyone actually
+  reads says what really happened.
 
 ### Backend: ActionCable
 
@@ -208,6 +327,16 @@ The `show` response carries the participant's recent registrations, payment stat
 - **Push is unconditional, unlike most kinds.** There is deliberately no `notify_support_reply` column: a reply is the answer to a question this person asked, which puts it with the transactional registration confirmation rather than with the payment and waitlist announcements you might reasonably mute. Offering to mute the answer to your own question would be strange. The in-app row is always written, as everywhere else.
 - **`SupportReplyFallbackEmailJob`** is enqueued with `wait: DELAY` (3 minutes) and re-checks on the way out — it mails only if `participant_last_read_at` is still older than the reply. The check has to happen on completion, not at enqueue, because at enqueue nobody has read a message written a microsecond ago. It also stands down if a *newer* staff reply exists, so three replies in a row produce one email rather than three.
 - **The email deliberately doesn't quote the reply.** Support threads carry whatever people paste, which on a payments product means card complaints and personal details; email is the least controlled channel and the most likely to be forwarded or archived unencrypted. A nudge to come read it in the app costs one click and leaks nothing.
+
+### Support chat: deletion and retention
+
+Two things a support product has to get right, both of which were missing.
+
+- **`User#discard!` is a soft delete, so no `dependent: :destroy` on `User` ever fired.** The model declares it on `conversations`, `notifications`, `push_subscriptions`, `waitlist_entries` and more, but `#discard!` is written with `update!`. Deleting your account therefore anonymised the user row and left every support message you had written intact and readable in the staff console, indefinitely. The declarations above the method read as though it didn't. **When adding a `dependent:` to `User`, decide explicitly whether `#discard!` should do it too** — the association alone does nothing on this path.
+- **What `#discard!` now destroys, and the line between the lists.** Conversations (and their messages, staff replies included), notifications, push subscriptions, waitlist entries. Registrations deliberately **stay** — they carry payment and refund history the organizer needs and the business has to keep, so the participant is anonymised in place instead. Notifications are not the harmless "you have a reply" rows they look like: `SupportNotifier` writes `preview(message.body)` into `Notification#body`, so purging the thread while keeping those would delete the archive and keep the extracts. Waitlist entries are not just hygiene either — `Waitlists::PromoteNext` has no discarded-user guard, so an entry left behind can still be promoted into a real registration for an account that asked to be deleted.
+- **Retention is `Conversation::RETENTION_PERIOD` (12 months after resolution)**, enforced by `Conversations::SweepResolved` daily. Only *resolved* threads are ever in scope: an unclosed thread is still someone's open question however old, and deleting it would answer them by making the question disappear.
+- **The clock is `resolved_at`, a column added for this.** `updated_at` moves when an agent so much as reads a thread; `last_message_at` is activity, is nullable, and moves again if the participant writes into an already-resolved thread. The migration backfills existing rows from `last_message_at` — leaving them NULL would have silently exempted the oldest data from the policy it most needs to apply to, since `Conversation.purgeable` requires the timestamp to be present.
+- **The number is published, and a spec pins it.** `spec/models/conversation_retention_spec.rb` reads the frontend locale files and asserts the privacy policy states the same figure `RETENTION_PERIOD` enforces, in both `en` and `km` (transliterating to Khmer numerals — ១២ — rather than forcing Arabic digits into Khmer prose). A backend spec reading frontend files is a deliberate boundary crossing: the failure mode it prevents is a privacy policy that makes a false statement, and a comment has never stopped anyone changing a constant.
 
 ### Notifications: three channels, one notifier
 

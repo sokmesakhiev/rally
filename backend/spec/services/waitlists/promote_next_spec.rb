@@ -130,4 +130,51 @@ RSpec.describe Waitlists::PromoteNext do
       expect(ActionMailer::Base.deliveries.last.subject).to include("A spot opened up")
     end
   end
+
+  # Promotion creates a Registration, which validates registration_is_open on
+  # create — so on a closed event promotion cannot succeed. It used to try
+  # anyway and swallow the RecordInvalid as though it were a lost capacity
+  # race, leaving the entry "waiting" forever with nothing logged.
+  describe "a closed event" do
+    def closed_event_with_a_free_spot
+      event = create(:event, capacity: 1)
+      holder = create(:registration, event: event)
+      create(:waitlist_entry, event: event, status: "waiting")
+      holder.destroy!
+      event.close_registration!
+      event
+    end
+
+    it "promotes nobody" do
+      event = closed_event_with_a_free_spot
+
+      expect(described_class.call(event)).to be_empty
+    end
+
+    it "creates no registration" do
+      event = closed_event_with_a_free_spot
+
+      expect { described_class.call(event) }.not_to change(Registration, :count)
+    end
+
+    # Silence is the bug. An entry still waiting on a closed event means
+    # Waitlists::CancelForClosedEvent didn't run, and somebody should be able
+    # to find that out from the log rather than from a confused participant.
+    it "says so in the log rather than failing quietly" do
+      event = closed_event_with_a_free_spot
+      allow(Rails.logger).to receive(:warn)
+
+      described_class.call(event)
+
+      expect(Rails.logger).to have_received(:warn).with(/closed event #{event.id}/)
+    end
+
+    it "leaves the entry alone rather than marking it promoted" do
+      event = closed_event_with_a_free_spot
+
+      described_class.call(event)
+
+      expect(event.waitlist_entries.first.reload.status).to eq("waiting")
+    end
+  end
 end

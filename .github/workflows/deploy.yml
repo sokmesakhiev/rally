@@ -236,20 +236,42 @@ jobs:
       # is the one that runs migrations, so finishing it first means the worker
       # starts new code against a schema that already matches.
       #
-      # The empty-secret branch exists because this secret was introduced with
-      # the worker service — a repo that hasn't added it yet should get a loud
-      # annotation rather than a red build on an otherwise-good deploy, but it
-      # must be loud: a silently skipped worker deploy is the exact failure
-      # this step is here to prevent. Set it to the ecs_worker_service_name
-      # Terraform output ("<app>-<env>-worker").
+      # A missing ECS_WORKER_SERVICE **fails the build**. It used to emit a
+      # `::warning::` and `exit 0`, on the grounds that a repo which hadn't
+      # added the secret yet shouldn't get a red build for an otherwise-good
+      # deploy. That was the wrong trade twice over:
+      #
+      #   * `exit 0` let the job succeed, which let the "✅ Rally backend
+      #     deployed" Telegram message fire. The one notification anyone
+      #     actually reads said the deploy worked while half of it hadn't.
+      #     A warning annotation nobody opens the Actions tab to see is not
+      #     "loud", whatever the old comment here claimed.
+      #   * Since the monitoring work, `WorkerLivenessJob` only reaches
+      #     production through *this* step. Skip it and the worker never runs
+      #     the new code, so no liveness line is ever emitted and
+      #     `rally-production-worker-not-running-jobs` fires permanently —
+      #     against a deploy that reported success.
+      #
+      # Failing here leaves the API on the new image and the worker on the old
+      # one. That is a genuinely broken state, so a red build describes it
+      # accurately; the message below says so rather than leaving it to be
+      # worked out. Set the secret to the `ecs_worker_service_name` Terraform
+      # output ("<app>-<env>-worker") and re-run.
       - name: Deploy to ECS (jobs)
         env:
           ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
           ECS_WORKER_SERVICE: ${{ secrets.ECS_WORKER_SERVICE }}
         run: |
           if [ -z "$ECS_WORKER_SERVICE" ]; then
-            echo "::warning title=Worker not deployed::ECS_WORKER_SERVICE is unset, so the Solid Queue worker still runs the PREVIOUS image. Set it to the ecs_worker_service_name Terraform output."
-            exit 0
+            echo "::error title=Worker not deployed::ECS_WORKER_SERVICE is unset. The API is now running the NEW image and the Solid Queue worker is still on the PREVIOUS one."
+            echo ""
+            echo "The backend is half-deployed. Until this is fixed:"
+            echo "  * jobs run old code (certificates, waitlist sweeps, notifications)"
+            echo "  * WorkerLivenessJob never runs, so the CloudWatch liveness alarm stays in ALARM"
+            echo ""
+            echo "Fix: set the ECS_WORKER_SERVICE repo secret to the 'ecs_worker_service_name'"
+            echo "Terraform output (\"<app>-<env>-worker\"), then re-run this workflow."
+            exit 1
           fi
 
           aws ecs update-service \

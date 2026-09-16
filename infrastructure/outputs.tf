@@ -106,6 +106,21 @@ output "cloudwatch_log_group" {
   value       = aws_cloudwatch_log_group.app.name
 }
 
+output "alarm_topic_arn" {
+  description = "SNS topic every CloudWatch alarm publishes to. Subscribe more endpoints here (Slack via chatbot, PagerDuty) without touching monitoring.tf."
+  value       = aws_sns_topic.alarms.arn
+}
+
+output "alarm_subscription_check" {
+  description = <<-DESC
+    Command that tells you whether alarms actually reach anyone. An email
+    subscription sits in `PendingConfirmation` until the recipient clicks the
+    link AWS sent, and terraform apply reports success either way — so this is
+    the only way to distinguish "configured" from "working".
+  DESC
+  value       = "aws sns list-subscriptions-by-topic --topic-arn ${aws_sns_topic.alarms.arn} --query 'Subscriptions[].[Endpoint,SubscriptionArn]' --output table"
+}
+
 # ── Storage ───────────────────────────────────────────────────────────────────
 
 output "uploads_bucket_name" {
