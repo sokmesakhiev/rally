@@ -40,6 +40,10 @@ class EventRequestSchema < ApplicationRequestSchema
       optional(:price_cents).maybe(:integer)
       optional(:currency).maybe(:string)
       optional(:brand_color).maybe(:string)
+      # public | unlisted. `included_in?` here as well as on the model: this
+      # is a closed set the caller picks from, so a typo should be a named
+      # 422 rather than a generic model validation message.
+      optional(:visibility).filled(:string, included_in?: Event::VISIBILITIES)
       optional(:banner_url).maybe(:string)
       optional(:logo_url).maybe(:string)
       # events.survey_id is a uuid column (see db/schema.rb), not an integer.

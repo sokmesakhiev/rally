@@ -36,6 +36,7 @@ class WaitlistEntry < ApplicationRecord
   # here buys only the ordinary thing — an entry already in the table stays
   # valid on later saves — and never outlives the closure.
   validate :registration_is_open, on: :create
+  validate :event_not_suspended, on: :create
 
   scope :waiting, -> { where(status: "waiting") }
 
@@ -61,6 +62,16 @@ class WaitlistEntry < ApplicationRecord
     return if event.nil? || event.accepting_signups?
 
     errors.add(:base, :registration_closed, message: "Registration for this event is closed")
+  end
+
+  # Mirrors Registration#event_not_suspended — see its comment. Both sign-up
+  # paths need it, and for the same reason: nothing in this model or the
+  # controller looked at `suspended_at`, so a suspended event still took
+  # queue entries.
+  def event_not_suspended
+    return if event.nil? || !event.suspended?
+
+    errors.add(:base, :event_suspended, message: "This event is not currently accepting registrations")
   end
 
   def not_already_registered

@@ -539,7 +539,15 @@
     "searchParticipants": "ស្វែងរកតាមឈ្មោះ អ៊ីមែល ឬលេខសម្គាល់",
     "noParticipantsMatch": "គ្មាននរណាម្នាក់ត្រូវនឹង “{{query}}” ទេ។",
     "bibEditLabel": "លេខសម្គាល់",
-    "bibPlaceholder": "លេខ"
+    "bibPlaceholder": "លេខ",
+    "visibilityPublic": "បង្ហាញជាសាធារណៈ",
+    "visibilityPublicDesc": "អ្នកគ្រប់គ្នាអាចរកឃើញព្រឹត្តិការណ៍នេះដោយការរុករក ឬស្វែងរកនៅលើ Rally។",
+    "visibilityUnlisted": "មិនបង្ហាញក្នុងបញ្ជី",
+    "visibilityUnlistedDesc": "លាក់ពីការរុករក និងការស្វែងរក។ អ្នកដែលមានតំណនៅតែអាចបើកទំព័រ និងចុះឈ្មោះបាន ដូច្នេះសូមចាត់ទុកតំណនោះជាការអញ្ជើញ។",
+    "visibilityMakePublic": "បង្ហាញជាសាធារណៈ",
+    "visibilityMakeUnlisted": "លាក់ពីបញ្ជី",
+    "toastVisibilityPublic": "ព្រឹត្តិការណ៍ត្រូវបានបង្ហាញជាសាធារណៈហើយ",
+    "toastVisibilityUnlisted": "ព្រឹត្តិការណ៍ត្រូវបានលាក់ពីបញ្ជី — សូមចែករំលែកតំណទៅអ្នកដែលអ្នកចង់បាន"
   },
   "eventForm": {
     "title": "បង្កើតព្រឹត្តិការណ៍",
