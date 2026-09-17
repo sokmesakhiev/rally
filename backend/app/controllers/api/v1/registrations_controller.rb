@@ -17,6 +17,7 @@ module Api
       # a closed one has nothing to offer, and the participant-facing wording
       # differs ("no spots left" vs "the organizer closed registration").
       CLOSED_ERROR_CODE = :registration_closed
+      SUSPENDED_ERROR_CODE = :event_suspended
 
       # GET /api/v1/registrations — current user's registrations with event data
       def index
@@ -331,9 +332,15 @@ module Api
       def capacity_error_json(record)
         details = record.errors.details[:base] || []
         code =
-          # Closed is checked first: a closed event can *also* be full, and
-          # "the organizer closed this" is the more accurate thing to say.
-          if details.any? { |d| d[:error] == CLOSED_ERROR_CODE }
+          # Ordered most-fundamental first, because an event can be several of
+          # these at once and only the first is reported. Suspended outranks
+          # closed outranks full: a suspended event is frozen by an admin and
+          # the organizer cannot reopen it, so telling the participant
+          # "registration is closed" would send them to ask for something
+          # nobody at the event can give them.
+          if details.any? { |d| d[:error] == SUSPENDED_ERROR_CODE }
+            "event_suspended"
+          elsif details.any? { |d| d[:error] == CLOSED_ERROR_CODE }
             "registration_closed"
           elsif details.any? { |d| FULL_ERROR_CODES.include?(d[:error]) }
             "full"

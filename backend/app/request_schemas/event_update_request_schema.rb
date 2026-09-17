@@ -41,6 +41,10 @@ class EventUpdateRequestSchema < ApplicationRequestSchema
       optional(:price_cents).maybe(:integer)
       optional(:currency).maybe(:string)
       optional(:brand_color).maybe(:string)
+      # See EventRequestSchema. `filled`, not `maybe`: the column is NOT NULL
+      # with a default, and an organizer flipping visibility always sends a
+      # real value.
+      optional(:visibility).filled(:string, included_in?: Event::VISIBILITIES)
       optional(:banner_url).maybe(:string)
       optional(:logo_url).maybe(:string)
       optional(:certificate_template_url).maybe(:string)

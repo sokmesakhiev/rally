@@ -531,6 +531,12 @@ module Api
           price_cents: event.price_cents,
           currency: event.currency,
           is_published: event.is_published,
+          # Orthogonal to is_published — an unlisted event is fully live, it
+          # just isn't in the catalogue. Exposed publicly (not organizer-only)
+          # so the event page can tell a participant who followed a link that
+          # this one isn't listed, which is the difference between "I can't
+          # find it again" and "I know why I can't find it again".
+          visibility: event.visibility,
           # Two separate facts, not one. `registration_closed` is what the
           # register button branches on; `registration_closes_at` is shown to
           # participants *before* it passes so they know there's a deadline,
