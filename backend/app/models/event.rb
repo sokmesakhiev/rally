@@ -65,6 +65,28 @@ class Event < ApplicationRecord
   validate :organization_identity_complete_to_publish,
     if: -> { is_published? && will_save_change_to_is_published? }
 
+  # ── Visibility ──────────────────────────────────────────────────────────────
+  # Whether a *published* event appears in public listings. Orthogonal to
+  # `is_published`, which answers "is this finished and paid for" — an unlisted
+  # event is fully live: it takes registrations, issues certificates and shows
+  # results exactly like any other, it simply isn't in the catalogue.
+  #
+  # **The value is `unlisted`, not `private`, and that is deliberate.** Access
+  # is the URL: anyone holding the link can view and register, and a link that
+  # gets forwarded works for whoever receives it. Labelling that "private"
+  # would invite an organizer to post the link somewhere public believing it
+  # was gated — the word would be doing the damage. A string enum rather than
+  # a boolean so real access control (a code, an invite list) can be a third
+  # value later without a migration or an API break.
+  PUBLIC = "public"
+  UNLISTED = "unlisted"
+  VISIBILITIES = [ PUBLIC, UNLISTED ].freeze
+
+  validates :visibility, inclusion: { in: VISIBILITIES }
+
+  def unlisted? = visibility == UNLISTED
+  def listed? = visibility == PUBLIC
+
   before_validation :default_price_cents
 
   scope :published, -> { where(is_published: true) }
@@ -84,12 +106,21 @@ class Event < ApplicationRecord
   # `.published`: a suspended organization's events stay is_published: true
   # (the cascade doesn't write to them, so unsuspending restores them), which
   # means `published` alone would happily serve them to the world.
+  # `visibility` joins the list here rather than at each call site, and that's
+  # the whole implementation of unlisted events: this scope is the one
+  # chokepoint every public read already goes through (events#index,
+  # organizers#show, and Organization's two public "events run" counters), so
+  # one `where` hides an unlisted event from all four at once. Anything that
+  # lists events to strangers in future must go through here too.
   scope :publicly_visible, -> {
-    published.kept.where(suspended_at: nil)
+    published.kept.listed.where(suspended_at: nil)
       .joins(organization: :owner)
       .where(organizations: { suspended_at: nil, deleted_at: nil })
       .where(users: { suspended_at: nil })
   }
+
+  scope :listed, -> { where(visibility: PUBLIC) }
+  scope :unlisted, -> { where(visibility: UNLISTED) }
 
   # Free-text search across the fields a participant would plausibly type:
   # event name, blurb, and place. Deliberately ILIKE rather than Postgres

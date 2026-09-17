@@ -93,6 +93,7 @@ class Registration < ApplicationRecord
   # mark them paid — taking their money and then refusing the spot. Closing
   # stops *new* sign-ups; it does not reach backwards.
   validate :registration_is_open, on: :create
+  validate :event_not_suspended, on: :create
 
   # Amount owed. `amount_owed_cents` is a snapshot taken once at creation
   # time (see Api::V1::RegistrationsController#compute_amount and
@@ -186,6 +187,29 @@ class Registration < ApplicationRecord
     return if event.nil? || event.accepting_signups?
 
     errors.add(:base, :registration_closed, message: "Registration for this event is closed")
+  end
+
+  # A suspended event took no notice of sign-ups until now: `Event#suspend!`
+  # freezes the *organizer* out (EventAuthorization::SUSPENDED_ALLOWED_CAPABILITIES)
+  # and forces is_published false, but neither this model nor WaitlistEntry
+  # looked at `suspended_at`, and neither RegistrationsController#set_event nor
+  # the waitlist's checks published-ness — so anyone holding the event id could
+  # still register for an event an admin had taken down, and take their money
+  # with them.
+  #
+  # Its own error type rather than folding into `accepting_signups?`: an
+  # organizer closing registration and an admin suspending the event are
+  # different facts, and reporting a suspension as "registration is closed"
+  # would send the participant to ask the organizer to reopen something the
+  # organizer cannot reopen.
+  #
+  # `on: :create` for the same reason as the two rules above — a suspension
+  # landing while someone is at the payment screen must not make the ABA
+  # webhook fail when it marks them paid.
+  def event_not_suspended
+    return if event.nil? || !event.suspended?
+
+    errors.add(:base, :event_suspended, message: "This event is not currently accepting registrations")
   end
 
   def event_not_full

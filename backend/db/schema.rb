@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_17_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_18_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -202,6 +202,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_010000) do
     t.string "suspension_reason"
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.string "visibility", default: "public", null: false
     t.index ["category"], name: "index_events_on_category"
     t.index ["creator_id"], name: "index_events_on_creator_id"
     t.index ["deleted_at"], name: "index_events_on_deleted_at"
@@ -212,6 +213,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_010000) do
     t.index ["start_at"], name: "index_events_on_start_at"
     t.index ["survey_id"], name: "index_events_on_survey_id"
     t.index ["suspended_at"], name: "index_events_on_suspended_at", where: "(suspended_at IS NOT NULL)"
+    t.check_constraint "visibility::text = ANY (ARRAY['public'::character varying, 'unlisted'::character varying]::text[])", name: "events_visibility_valid"
   end
 
   create_table "host_ledger_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

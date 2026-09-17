@@ -544,7 +544,15 @@
     "searchParticipants": "Search by name, email or bib",
     "noParticipantsMatch": "Nobody matches “{{query}}”.",
     "bibEditLabel": "Race number",
-    "bibPlaceholder": "Bib"
+    "bibPlaceholder": "Bib",
+    "visibilityPublic": "Listed publicly",
+    "visibilityPublicDesc": "Anyone can find this event by browsing or searching Rally.",
+    "visibilityUnlisted": "Not listed",
+    "visibilityUnlistedDesc": "Hidden from browsing and search. Anyone with the link can still open the page and register, so treat the link itself as the invitation.",
+    "visibilityMakePublic": "List publicly",
+    "visibilityMakeUnlisted": "Hide from listings",
+    "toastVisibilityPublic": "Event is now listed publicly",
+    "toastVisibilityUnlisted": "Event is hidden from listings — share the link with the people you want"
   },
   "eventForm": {
     "title": "Create an event",

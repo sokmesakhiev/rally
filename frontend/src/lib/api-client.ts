@@ -273,6 +273,13 @@ export interface ApiEvent {
   price_cents: number;
   currency: string;
   is_published: boolean;
+  /** Whether a published event appears in the public catalogue and search.
+   *  Orthogonal to `is_published` — an "unlisted" event is fully live and
+   *  takes registrations, it just isn't listed. Access is the URL: anyone
+   *  holding the link can view and register, and a forwarded link works for
+   *  whoever receives it, so don't present this to an organizer as access
+   *  control. */
+  visibility: "public" | "unlisted";
   /** True when the organizer closed sign-ups, or a deadline they set has
    *  passed. Distinct from "full": a closed event may have plenty of spots,
    *  and unlike a full one it offers no waitlist. */

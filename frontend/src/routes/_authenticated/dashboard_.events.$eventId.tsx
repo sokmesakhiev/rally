@@ -547,6 +547,24 @@ function ManageEvent() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // Plain PATCH rather than its own endpoint, unlike close/reopen: those two
+  // exist because `registration_closed_at` is a timestamp deliberately kept
+  // out of the update schema so it can't be back-dated. Visibility is an
+  // ordinary editable field with nothing to protect, so it goes through the
+  // ordinary path.
+  const setVisibility = useMutation({
+    mutationFn: (visibility: "public" | "unlisted") => eventsApi.update(eventId, { visibility }),
+    onSuccess: (_data, visibility) => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      toast.success(
+        visibility === "unlisted"
+          ? t("manageEvent.toastVisibilityUnlisted")
+          : t("manageEvent.toastVisibilityPublic"),
+      );
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const reopenRegistration = useMutation({
     mutationFn: () => eventsApi.reopenRegistration(eventId),
     onSuccess: () => {
@@ -1605,6 +1623,44 @@ function ManageEvent() {
                           <p className="text-sm text-muted-foreground">
                             {t("manageEvent.registrationDesc")}
                           </p>
+
+                          {/* Visibility sits above the open/closed control on
+                              purpose: "who can find this" is a decision an
+                              organizer makes once at setup, where open/closed
+                              is one they revisit. The copy says "anyone with
+                              the link" rather than "private" — the link is the
+                              only gate, and a label implying otherwise is what
+                              would get an unlisted event posted publicly. */}
+                          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/40 p-4">
+                            <div className="min-w-0">
+                              <p className="font-medium">
+                                {ev.visibility === "unlisted"
+                                  ? t("manageEvent.visibilityUnlisted")
+                                  : t("manageEvent.visibilityPublic")}
+                              </p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {ev.visibility === "unlisted"
+                                  ? t("manageEvent.visibilityUnlistedDesc")
+                                  : t("manageEvent.visibilityPublicDesc")}
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              disabled={setVisibility.isPending}
+                              onClick={() =>
+                                setVisibility.mutate(
+                                  ev.visibility === "unlisted" ? "public" : "unlisted",
+                                )
+                              }
+                            >
+                              {setVisibility.isPending && (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              )}
+                              {ev.visibility === "unlisted"
+                                ? t("manageEvent.visibilityMakePublic")
+                                : t("manageEvent.visibilityMakeUnlisted")}
+                            </Button>
+                          </div>
 
                           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/40 p-4">
                             <div className="min-w-0">

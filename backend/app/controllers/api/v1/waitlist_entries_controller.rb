@@ -69,7 +69,12 @@ module Api
       def waitlist_error_json(record)
         details = record.errors.details[:base] || []
         code =
-          if details.any? { |d| d[:error] == ALREADY_REGISTERED_CODE }
+          # Suspended first, for the same reason as
+          # RegistrationsController#capacity_error_json: the organizer can't
+          # undo it, so naming it anything softer misdirects the participant.
+          if details.any? { |d| d[:error] == :event_suspended }
+            "event_suspended"
+          elsif details.any? { |d| d[:error] == ALREADY_REGISTERED_CODE }
             "already_registered"
           elsif details.any? { |d| d[:error] == NOT_FULL_CODE }
             "not_full"
