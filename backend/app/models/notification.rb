@@ -16,6 +16,11 @@ class Notification < ApplicationRecord
 
   # Mirrors the mailer and push trigger names. Kept in sync with
   # Notifications::RegistrationNotifier's public methods.
+  # `event_reported` is the only **staff-facing** kind — every other one is
+  # addressed to a participant about their own registration. It goes to every
+  # admin, carries no push (see Notifications::ModerationNotifier), and
+  # deep-links to the admin console rather than the public event page.
+  #
   # `waitlist_closed` is the odd one out: every other kind reports something
   # that happened *for* the participant, while that one reports that nothing
   # will — the organizer closed registration (or a deadline passed) while they
@@ -33,6 +38,7 @@ class Notification < ApplicationRecord
     event_details_changed
     support_reply
     waitlist_closed
+    event_reported
   ].freeze
 
   # How many the bell shows before giving up on precision. A badge reading

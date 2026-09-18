@@ -114,6 +114,11 @@ Rails.application.routes.draw do
       # Waitlists — join when an event/type is full, promoted automatically
       # (Waitlists::PromoteNext) when a registration is cancelled/removed.
       get    "waitlist_entries",                  to: "waitlist_entries#index"
+      # Reporting an event. No auth filter on the route — the controller uses
+      # authenticate_user_optional!, because anonymous reports are accepted on
+      # purpose. Throttled in rack_attack.rb instead.
+      post   "events/:event_id/reports", to: "event_reports#create"
+
       post   "events/:event_id/waitlist_entries", to: "waitlist_entries#create"
       get    "events/:event_id/waitlist_entries", to: "waitlist_entries#event_waitlist"
       delete "waitlist_entries/:id",               to: "waitlist_entries#destroy"
@@ -229,6 +234,14 @@ Rails.application.routes.draw do
         # the self-service email verification flow (see User#verified?).
         post "users/:id/verify",    to: "users#verify"
         post "users/:id/unverify",  to: "users#unverify"
+
+        # The moderation queue. Named event_reports, not reports — `reports`
+        # in this namespace is already the analytics dashboard, below.
+        # Grouped by event because a reviewer's unit of work is the event, not
+        # the individual report.
+        get  "event_reports",                          to: "event_reports#index"
+        get  "event_reports/events/:event_id",         to: "event_reports#show"
+        post "event_reports/events/:event_id/resolve", to: "event_reports#resolve"
 
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"

@@ -38,6 +38,33 @@ module Api
           end
         end
 
+        # An unlisted event above a size threshold needs a verified
+        # organization. Checked here, pre-charge, for the same reason as the
+        # identity check above.
+        #
+        # This covers the one segment the report queue cannot: an unlisted
+        # event is hidden from the catalogue and search, so there is no
+        # audience to report it — and "invite-only, not listed, carefully
+        # worded" is exactly the profile of the gatherings Rally refuses to
+        # host. Reporting scales with audience; this doesn't need one.
+        #
+        # Threshold, not a blanket rule, because the cost falls on the wrong
+        # people otherwise: a 30-person club ride that someone wants kept off
+        # the catalogue is not the risk, and making it prove identity would
+        # tax the ordinary case to reach the rare one. Above
+        # Event::UNLISTED_VERIFICATION_THRESHOLD there should be a real,
+        # identified organization behind something that large and invisible.
+        if event.unlisted? && details[:capacity] > Event::UNLISTED_VERIFICATION_THRESHOLD &&
+           !event.organization&.verified?
+          render json: {
+            error: "An unlisted event for more than " \
+                   "#{Event::UNLISTED_VERIFICATION_THRESHOLD} people needs a verified " \
+                   "organization. Get verified, or list the event publicly.",
+            code: "verification_required"
+          }, status: :unprocessable_entity
+          return
+        end
+
         # Reject upfront, before charging anything (or applying the plan),
         # if the event doesn't actually fit under it — either its own types'
         # combined limit, or (only relevant once people can already be

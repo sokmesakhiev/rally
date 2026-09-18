@@ -11,6 +11,10 @@ class Event < ApplicationRecord
   has_many :event_plan_payments, dependent: :destroy
   has_many :waitlist_entries, -> { order(created_at: :asc) }, dependent: :destroy
   has_many :event_activities, dependent: :destroy
+  # Reports survive a soft-delete for the same reason payments do: the
+  # moderation history is the record of how a decision was reached, and an
+  # organizer discarding a reported event must not erase why it was reported.
+  has_many :event_reports, dependent: :destroy
   # The event's team — people other than #creator who help run it. See
   # EventMembership. `dependent: :destroy` here only fires on a real
   # `destroy` (which nothing in the app calls on Event); the soft-delete
@@ -64,6 +68,30 @@ class Event < ApplicationRecord
   # retroactively unpublish anything.
   validate :organization_identity_complete_to_publish,
     if: -> { is_published? && will_save_change_to_is_published? }
+  # Guards the *transitions* into "published and unlisted", never the resting
+  # state — same discipline as the rule above, and for the same reason: an
+  # event that predates this must stay editable. Applying it to the state
+  # would make an existing large unlisted event unsaveable, so its organizer
+  # couldn't so much as fix a typo.
+  #
+  # EventPlanPaymentsController checks the same thing before taking payment,
+  # which is where an organizer actually sees the error. This is the backstop
+  # for the paths that don't go through that check: flipping an
+  # already-published event to unlisted with PATCH, and *growing* one.
+  #
+  # `will_save_change_to_capacity?` is the third trigger and the least
+  # obvious. Without it an unlisted event published on the free tier (20) could
+  # be raised to 30,000 with a plan upgrade and never re-enter this rule, since
+  # neither `visibility` nor `is_published` moves on that save — the event
+  # crosses the threshold this exists to guard without ever transitioning into
+  # the guarded state by the two obvious routes. Still transition-scoped, so a
+  # grandfathered row stays editable as long as its size doesn't change.
+  validate :unlisted_scale_requires_verified_organization,
+    if: lambda {
+      is_published? && unlisted? &&
+        (will_save_change_to_visibility? || will_save_change_to_is_published? ||
+         will_save_change_to_capacity?)
+    }
 
   # ── Visibility ──────────────────────────────────────────────────────────────
   # Whether a *published* event appears in public listings. Orthogonal to
@@ -81,6 +109,18 @@ class Event < ApplicationRecord
   PUBLIC = "public"
   UNLISTED = "unlisted"
   VISIBILITIES = [ PUBLIC, UNLISTED ].freeze
+
+  # Above this capacity, an unlisted event needs a verified organization.
+  #
+  # The report queue cannot see unlisted events — they're absent from the
+  # catalogue and search, so there is no audience to report them, and that is
+  # precisely the shape of the gatherings Rally refuses to host. This is the
+  # compensating control for that blind spot, and it's deliberately a
+  # threshold rather than a blanket rule: a 30-person club ride kept off the
+  # catalogue isn't the risk, and taxing it to reach the rare case is the
+  # wrong trade. 50 is the first plan tier above `small`'s free-ish end where
+  # "large and invisible" starts to mean something.
+  UNLISTED_VERIFICATION_THRESHOLD = 50
 
   validates :visibility, inclusion: { in: VISIBILITIES }
 
@@ -385,6 +425,20 @@ class Event < ApplicationRecord
   # rejects incomplete organizations up front, before any charge is started —
   # same before-payment ordering #capacity_covers_event_types already has.
   # This exists so no future call site can quietly skip that.
+  # See UNLISTED_VERIFICATION_THRESHOLD. Uses `capacity` — the plan's headcount,
+  # stamped at publish — rather than current registrations, because the
+  # question is how large this event is *allowed* to get, not how many have
+  # signed up so far. Nil capacity means no plan has been applied yet, which
+  # can't be over the threshold.
+  def unlisted_scale_requires_verified_organization
+    return if capacity.nil? || capacity <= UNLISTED_VERIFICATION_THRESHOLD
+    return if organization&.verified?
+
+    errors.add(:base, :verification_required,
+      message: "An unlisted event for more than #{UNLISTED_VERIFICATION_THRESHOLD} people " \
+               "needs a verified organization. Get verified, or list the event publicly.")
+  end
+
   def organization_identity_complete_to_publish
     return unless Organization.identity_required_for_publishing?
     return if organization.nil?

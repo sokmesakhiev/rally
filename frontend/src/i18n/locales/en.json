@@ -895,7 +895,8 @@
     "toastEventUnsuspended": "Event unsuspended",
     "toastEventDeleted": "Event deleted",
     "paginationLabel": "Table pagination",
-    "tabSupport": "Support"
+    "tabSupport": "Support",
+    "tabReports": "Reports"
   },
   "legal": {
     "lastUpdated": "Draft dated {{date}}",
@@ -1030,6 +1031,43 @@
     "loadOlder": "Load earlier messages",
     "loading": "Loading…"
   },
+  "adminReports": {
+    "filterLive": "Needs review",
+    "reasonAll": "All reasons",
+    "openCount_one": "{{count}} event waiting on us",
+    "openCount_other": "{{count}} events waiting on us",
+    "emptyList": "No reported events match these filters.",
+    "selectPrompt": "Select an event to read what was reported.",
+    "loadFailed": "Couldn't load that event.",
+    "actionFailed": "That didn't work.",
+    "anonymous": "Anonymous",
+    "suspended": "Suspended",
+    "unlisted": "Unlisted",
+    "openEvent": "Open event page",
+    "suspendHint": "Closing these reports records your decision. To take the event down, suspend it from the Events tab.",
+    "notePlaceholder": "Note for the record (optional)",
+    "markActioned_one": "Mark actioned ({{count}} report)",
+    "markActioned_other": "Mark actioned ({{count}} reports)",
+    "dismiss_one": "Dismiss ({{count}} report)",
+    "dismiss_other": "Dismiss ({{count}} reports)",
+    "resolved_one": "{{count}} report closed.",
+    "resolved_other": "{{count}} reports closed.",
+    "allResolved": "Every report on this event has been reviewed.",
+    "reviewedBy": "Reviewed by {{email}}",
+    "status": {
+      "open": "Open",
+      "reviewing": "Reviewing",
+      "actioned": "Actioned",
+      "dismissed": "Dismissed"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "normal": "Normal"
+    },
+    "openAndMatching": "{{open}} open · {{matching}} shown",
+    "truncated": "Showing the {{shown}} most recent of {{total}} reports."
+  },
   "adminSupport": {
     "filterLive": "Live",
     "filterOpen": "Open",
@@ -1075,5 +1113,30 @@
     "pageOf": "Page {{page}} of {{pages}}",
     "previous": "Previous",
     "next": "Next"
+  },
+  "report": {
+    "trigger": "Report this event",
+    "title": "Report this event",
+    "description": "Tell our team why this event concerns you. A person reviews every report — reporting doesn't remove anything by itself.",
+    "reasonLabel": "What's the concern?",
+    "detailsLabel": "Anything else? (optional)",
+    "detailsPlaceholder": "What made you concerned about this event?",
+    "submit": "Send report",
+    "pickReason": "Pick a reason first.",
+    "thanks": "Thanks — our team will review this event.",
+    "reason": {
+      "political": "Political gathering",
+      "gambling": "Gambling",
+      "violence": "Violence",
+      "discrimination": "Discrimination",
+      "other": "Something else"
+    },
+    "reasonHint": {
+      "political": "Organised for a political campaign, party or demonstration.",
+      "gambling": "Betting or games of chance for money.",
+      "violence": "Organised to threaten, intimidate or hurt people.",
+      "discrimination": "Excluding or targeting people by race, religion, gender or similar.",
+      "other": "Something that doesn't fit the categories above."
+    }
   }
 }
