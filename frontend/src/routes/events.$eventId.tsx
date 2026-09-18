@@ -31,6 +31,7 @@ import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { PresentedBy } from "@/components/presented-by";
 import { EventQRCode } from "@/components/event-qr-code";
+import { ReportEventDialog } from "@/components/report-event-dialog";
 import { RegistrationTicketQR } from "@/components/registration-ticket-qr";
 import { SurveyForm } from "@/components/survey-form";
 import { EventTypeSelector } from "@/components/event-type-selector";
@@ -946,6 +947,16 @@ function EventDetail() {
               </div>
               <p className="text-sm text-muted-foreground mb-5">{t("eventDetail.shareDesc")}</p>
               <EventQRCode eventId={eventId} brandColor={brandColor} />
+            </div>
+
+            {/* Deliberately quiet and at the foot of the page. Reporting needs
+                to be findable, not prominent — a loud button beside Register
+                invites misuse as a disagreement channel, and every false
+                report costs a reviewer the time they need for a real one.
+                Shown to anonymous visitors too: the server accepts
+                unauthenticated reports on purpose. */}
+            <div className="mt-8 flex justify-center">
+              <ReportEventDialog eventId={eventId} />
             </div>
           </>
         )}

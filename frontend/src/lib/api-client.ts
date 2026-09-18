@@ -541,6 +541,21 @@ export const emailVerificationsApi = {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
+/** The four purposes Rally refuses to host, plus an escape hatch.
+ *
+ * `other` exists because a fixed list always misses something, and a reporter
+ * who can't find their category either picks the nearest wrong one — poisoning
+ * the only signal a report carries — or gives up. */
+export type EventReportReason = "political" | "gambling" | "violence" | "discrimination" | "other";
+
+export const EVENT_REPORT_REASONS: EventReportReason[] = [
+  "political",
+  "gambling",
+  "violence",
+  "discrimination",
+  "other",
+];
+
 export const eventsApi = {
   /**
    * Public event browsing. All options are optional — omitting them returns the
@@ -606,6 +621,22 @@ export const eventsApi = {
    */
   closeRegistration(id: string) {
     return api.post<{ event: ApiEvent }>(`/events/${id}/close_registration`);
+  },
+
+  /** Tell Rally staff to look at an event.
+   *
+   * Works signed in or not — the person best placed to report a gathering may
+   * not want an account attached to it, so the server accepts anonymous
+   * reports and rate-limits by IP instead.
+   *
+   * The response is identical whether this is the first report or the tenth,
+   * and whether the event is already suspended: the endpoint deliberately
+   * isn't an oracle for Rally's moderation state. Don't build UI that implies
+   * otherwise. */
+  report(id: string, reason: EventReportReason, details?: string) {
+    return api.post<{ message: string }>(`/events/${id}/reports`, {
+      report: { reason, details: details?.trim() || undefined },
+    });
   },
 
   /** Clears the deadline as well as the manual close, so a passed deadline
@@ -1841,6 +1872,104 @@ export const adminSupportApi = {
   markRead(id: string) {
     return api.post<{ conversation: ApiAdminConversationDetail }>(
       `/admin/conversations/${id}/read`,
+    );
+  },
+};
+
+export type EventReportStatus = "open" | "reviewing" | "actioned" | "dismissed";
+
+/** Queue priority only. It orders the reviewer's day and never hides anything
+ *  on its own — see `AdminEventReports` for why auto-action is refused. */
+export type EventReportPriority = "urgent" | "high" | "normal";
+
+export interface ApiReportedEventSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  location: string | null;
+  start_at: string | null;
+  is_published: boolean;
+  visibility: "public" | "unlisted";
+  suspended: boolean;
+  suspension_reason: string | null;
+  organization: { slug: string; name: string } | null;
+}
+
+/** One row of the queue: an event, not a report. Twelve reports on one event
+ *  are one decision. */
+export interface ApiEventReportGroup {
+  event: ApiReportedEventSummary;
+  /** Reports matching the active filter — why this row is in this list. */
+  report_count: number;
+  /** Every live report on the event, *ignoring* the filter: it answers "is
+   *  there work left here", which is a fact about the event rather than about
+   *  the current view. `priority` is derived from it for the same reason. */
+  open_count: number;
+  priority: EventReportPriority;
+  /** reason → count, over the filtered set, same as `report_count`. */
+  reasons: Partial<Record<EventReportReason, number>>;
+  last_reported_at: string | null;
+}
+
+export interface ApiEventReport {
+  id: string;
+  reason: EventReportReason;
+  details: string | null;
+  status: EventReportStatus;
+  created_at: string;
+  /** Null for an anonymous report — a normal state, not missing data. */
+  reporter: { id: string; email: string } | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reviewer_note: string | null;
+}
+
+export const adminEventReportsApi = {
+  /** `open_count` is counted independently of the filter, same as the support
+   *  inbox's `awaiting_count`: "how much is waiting on us", not "how many rows
+   *  are on screen". */
+  list(opts?: {
+    status?: EventReportStatus;
+    reason?: EventReportReason;
+    page?: number;
+    perPage?: number;
+  }) {
+    const query = new URLSearchParams();
+    if (opts?.status) query.set("status", opts.status);
+    if (opts?.reason) query.set("reason", opts.reason);
+    if (opts?.page) query.set("page", String(opts.page));
+    if (opts?.perPage) query.set("per_page", String(opts.perPage));
+    const suffix = query.toString() ? `?${query}` : "";
+
+    return api.get<{
+      reports: ApiEventReportGroup[];
+      meta: ApiPageMeta;
+      open_count: number;
+    }>(`/admin/event_reports${suffix}`);
+  },
+
+  /** Deliberately unfiltered — a reviewer deciding whether an event stays up
+   *  wants everything said about it, not the slice that matched the filter
+   *  they arrived through. `reports` is capped server-side; `total_count` is
+   *  what's actually there, so a truncated list can't read as the whole. */
+  event(eventId: string) {
+    return api.get<{
+      event: ApiReportedEventSummary;
+      reports: ApiEventReport[];
+      total_count: number;
+    }>(`/admin/event_reports/events/${eventId}`);
+  },
+
+  /** Closes every live report on the event at once, because the decision was
+   *  about the event. Deliberately does NOT suspend or unpublish — taking an
+   *  event down is `adminApi.suspendEvent`, its own act with its own audit
+   *  entry, so the record shows it was chosen rather than implied by closing
+   *  a ticket. */
+  resolve(eventId: string, status: "actioned" | "dismissed", note?: string) {
+    return api.post<{ resolved: number; status: string }>(
+      `/admin/event_reports/events/${eventId}/resolve`,
+      { status, note: note?.trim() || undefined },
     );
   },
 };
