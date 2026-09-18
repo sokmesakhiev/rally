@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_18_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -156,6 +156,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_18_010000) do
     t.index ["event_id", "status"], name: "index_event_plan_payments_on_event_id_and_status"
     t.index ["event_id"], name: "index_event_plan_payments_on_event_id"
     t.index ["tran_id"], name: "index_event_plan_payments_on_tran_id", unique: true
+  end
+
+  create_table "event_reports", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "details"
+    t.uuid "event_id", null: false
+    t.string "reason", null: false
+    t.uuid "reporter_id"
+    t.datetime "reviewed_at"
+    t.uuid "reviewed_by_id"
+    t.text "reviewer_note"
+    t.string "status", default: "open", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id", "reporter_id"], name: "index_event_reports_one_open_per_reporter", unique: true, where: "((reporter_id IS NOT NULL) AND ((status)::text = ANY ((ARRAY['open'::character varying, 'reviewing'::character varying])::text[])))"
+    t.index ["event_id"], name: "index_event_reports_on_event_id"
+    t.index ["reporter_id"], name: "index_event_reports_on_reporter_id"
+    t.index ["reviewed_by_id"], name: "index_event_reports_on_reviewed_by_id"
+    t.index ["status", "created_at"], name: "index_event_reports_on_status_and_created_at"
+    t.check_constraint "reason::text = ANY (ARRAY['political'::character varying, 'gambling'::character varying, 'violence'::character varying, 'discrimination'::character varying, 'other'::character varying]::text[])", name: "event_reports_reason_valid"
+    t.check_constraint "status::text = ANY (ARRAY['open'::character varying, 'reviewing'::character varying, 'actioned'::character varying, 'dismissed'::character varying]::text[])", name: "event_reports_status_valid"
   end
 
   create_table "event_types", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -531,6 +551,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_18_010000) do
   add_foreign_key "event_memberships", "users", column: "invited_by_id"
   add_foreign_key "event_plan_payments", "events"
   add_foreign_key "event_plan_payments", "users"
+  add_foreign_key "event_reports", "events"
+  add_foreign_key "event_reports", "users", column: "reporter_id", on_delete: :nullify
+  add_foreign_key "event_reports", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "event_types", "events"
   add_foreign_key "events", "organizations"
   add_foreign_key "events", "surveys"

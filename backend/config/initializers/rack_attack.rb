@@ -134,6 +134,27 @@ class Rack::Attack
     end
   end
 
+  # Reporting an event accepts anonymous submissions, so the rate limit is
+  # doing the job an account requirement would otherwise do. Two limits with
+  # different jobs: the per-IP one is the only thing standing between an
+  # anonymous reporter and a flood, so it's the tighter of the two; the
+  # per-user one is looser because a signed-in reporter is already capped at
+  # one open report per event by a partial unique index, and someone
+  # legitimately reporting several different events in a sitting shouldn't be
+  # stopped.
+  #
+  # Neither limit is a moderation control. Report *count* only sets queue
+  # priority — no volume of reports ever hides an event; see EventReport.
+  throttle("event_reports/ip", limit: 3, period: 1.hour) do |req|
+    req.ip if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/reports\z})
+  end
+
+  throttle("event_reports/user", limit: 5, period: 1.hour) do |req|
+    if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/reports\z})
+      user_id_from(req)
+    end
+  end
+
   throttle("invitations/email", limit: 5, period: 1.hour) do |req|
     if req.post? && req.path.match?(%r{\A/api/v1/events/[^/]+/invitations\z})
       email_from(req)

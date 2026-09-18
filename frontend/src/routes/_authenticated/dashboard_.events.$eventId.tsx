@@ -279,7 +279,7 @@ function ManageEvent() {
   // Declared here, above the queries that read it. "participants" is always
   // permitted (panelVisibility.participants is unconditional), so the initial
   // tab needs nothing from the role — which is what lets it sit above `can`.
-  const [tab, setTab] = useState<string>("participants");
+  const [tab, setTab] = useState<string>("setup");
 
   // One page/search pair shared by the three list tabs. They show the same
   // underlying rows, so carrying separate state per tab would mean three
@@ -674,6 +674,23 @@ function ManageEvent() {
   const overflowPanels = (["responses", "activity", "members"] as const).filter(
     (k) => panelVisibility[k],
   );
+
+  // The initial tab is "setup" — first in the bar, and what an organizer most
+  // often came to do. But Setup is the one tab that can be *absent*: its
+  // trigger and its content both render only when something inside it is
+  // visible to this role, so a Check-in member or a Viewer would otherwise
+  // land on a tab with no trigger and no panel — a blank page with nothing
+  // selected and no obvious way back.
+  //
+  // Corrected here rather than derived at the `<Tabs value>` call site,
+  // because `tab` is read by more than the tab bar: `participantsQuery` gates
+  // on it, so a displayed tab that disagreed with the state would render the
+  // participants table with nothing fetched. One source of truth, fixed one
+  // render in. The state itself can't consult `setupPanels` where it's
+  // declared — that sits above `can`, deliberately.
+  useEffect(() => {
+    if (tab === "setup" && setupPanels.length === 0) setTab("participants");
+  }, [tab, setupPanels.length]);
 
   const primaryTabs = [
     { value: "participants", icon: Users, label: t("manageEvent.tabParticipants") },
@@ -1164,16 +1181,16 @@ function ManageEvent() {
                   silently mis-sized itself when a tab was added. */}
               <div className="flex flex-wrap items-center gap-2">
                 <TabsList className="h-auto flex-wrap justify-start">
-                  {primaryTabs.map(({ value, icon: Icon, label }) => (
-                    <TabsTrigger key={value} value={value}>
-                      <Icon className="h-4 w-4 mr-1.5" /> {label}
-                    </TabsTrigger>
-                  ))}
                   {setupPanels.length > 0 && (
                     <TabsTrigger value="setup">
                       <Settings className="h-4 w-4 mr-1.5" /> {t("manageEvent.tabSetup")}
                     </TabsTrigger>
                   )}
+                  {primaryTabs.map(({ value, icon: Icon, label }) => (
+                    <TabsTrigger key={value} value={value}>
+                      <Icon className="h-4 w-4 mr-1.5" /> {label}
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
 
                 {overflowPanels.length > 0 && (

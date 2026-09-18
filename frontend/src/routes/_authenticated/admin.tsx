@@ -36,6 +36,7 @@ import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { AdminOverview } from "@/components/admin-overview";
 import { AdminSupport } from "@/components/admin-support";
+import { AdminEventReports } from "@/components/admin-event-reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -57,14 +58,34 @@ import { formatDate, formatPrice, categoryLabel } from "@/lib/event-utils";
 
 const PER_PAGE = 25;
 
+const ADMIN_TABS = ["overview", "users", "events", "reports", "support"] as const;
+type AdminTab = (typeof ADMIN_TABS)[number];
+
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Admin — Rally" }] }),
+  /**
+   * `?tab=` exists so a notification can deep-link into the console —
+   * `Notifications::ModerationNotifier` sends `/admin?tab=reports`, and a
+   * moderation alert that drops a reviewer on the Overview tab makes them go
+   * and find the thing they were alerted about.
+   *
+   * Unknown values fall through to the default rather than erroring: a stale
+   * link in an old notification should open the console, not break it.
+   */
+  validateSearch: (search: Record<string, unknown>): { tab?: AdminTab } => {
+    const tab = search.tab;
+    return typeof tab === "string" && (ADMIN_TABS as readonly string[]).includes(tab)
+      ? { tab: tab as AdminTab }
+      : {};
+  },
   component: AdminConsole,
 });
 
 function AdminConsole() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = Route.useNavigate();
+  const { tab } = Route.useSearch();
 
   if (user && !user.admin) {
     return (
@@ -88,13 +109,20 @@ function AdminConsole() {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{t("admin.subtitle")}</p>
 
-        <Tabs defaultValue="overview" className="mt-8">
+        {/* Controlled rather than `defaultValue`, so the URL is the source of
+            truth and a deep-linked notification opens the right tab. */}
+        <Tabs
+          value={tab ?? "overview"}
+          onValueChange={(value) => navigate({ search: { tab: value as AdminTab }, replace: true })}
+          className="mt-8"
+        >
           <TabsList>
             <TabsTrigger value="overview">
               <LayoutDashboard className="h-4 w-4 mr-1.5" /> {t("admin.tabOverview")}
             </TabsTrigger>
             <TabsTrigger value="users">{t("admin.tabUsers")}</TabsTrigger>
             <TabsTrigger value="events">{t("admin.tabEvents")}</TabsTrigger>
+            <TabsTrigger value="reports">{t("admin.tabReports")}</TabsTrigger>
             <TabsTrigger value="support">{t("admin.tabSupport")}</TabsTrigger>
           </TabsList>
 
@@ -109,6 +137,9 @@ function AdminConsole() {
           </TabsContent>
           {/* Extracted like AdminOverview rather than inlined — this file is
               already ~700 lines of moderation tables. */}
+          <TabsContent value="reports" className="mt-6">
+            <AdminEventReports />
+          </TabsContent>
           <TabsContent value="support" className="mt-6">
             <AdminSupport />
           </TabsContent>
@@ -614,7 +645,9 @@ function SuspendEventDialog({ event, onDone }: { event: ApiAdminEvent; onDone: (
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("admin.suspendEventTitle", { title: event.title })}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("admin.suspendEventTitle", { title: event.title })}
+          </AlertDialogTitle>
           <AlertDialogDescription>{t("admin.suspendEventDesc")}</AlertDialogDescription>
         </AlertDialogHeader>
 

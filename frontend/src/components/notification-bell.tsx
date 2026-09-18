@@ -31,7 +31,8 @@ export function NotificationBell() {
 
   function open(notification: ApiNotification) {
     if (!notification.read) markRead.mutate(notification.id);
-    if (isKnownNotificationPath(notification.url)) void navigate({ to: notification.url });
+    const destination = notificationDestination(notification.url);
+    if (destination) void navigate(destination);
   }
 
   return (
@@ -116,18 +117,25 @@ export function NotificationBell() {
   );
 }
 
-// Every kind Notifications::RegistrationNotifier produces currently deep-links
-// to "/dashboard" (see the backend's #deliver) — but `url` comes over the
-// wire as a plain string, untyped against the router's route literals. If a
-// future kind ever sends a path this list doesn't know about, silently not
-// navigating is far safer than handing an arbitrary string to `navigate`:
-// worst case is a click that only marks the row read, not a runtime throw or
-// (if the string were ever attacker-influenced) an open redirect.
-const KNOWN_NOTIFICATION_PATHS = [ "/dashboard" ] as const;
-type KnownNotificationPath = (typeof KNOWN_NOTIFICATION_PATHS)[number];
+// `url` comes over the wire as a plain string, untyped against the router's
+// route literals. An allowlist rather than a pass-through: if a future kind
+// ever sends a path this map doesn't know about, silently not navigating is far
+// safer than handing an arbitrary string to `navigate` — worst case is a click
+// that only marks the row read, not a runtime throw or (if the string were ever
+// attacker-influenced) an open redirect.
+//
+// The values are full navigate options rather than bare paths because
+// `ModerationNotifier` deep-links to a *tab* (`/admin?tab=reports`), and
+// TanStack's `to` takes a route literal with `search` passed separately. Doing
+// the split here keeps the URL the backend stores readable as a URL.
+const NOTIFICATION_DESTINATIONS = {
+  "/dashboard": { to: "/dashboard" },
+  "/admin?tab=reports": { to: "/admin", search: { tab: "reports" } },
+} as const;
 
-function isKnownNotificationPath(url: string | null | undefined): url is KnownNotificationPath {
-  return !!url && (KNOWN_NOTIFICATION_PATHS as readonly string[]).includes(url);
+function notificationDestination(url: string | null | undefined) {
+  if (!url) return null;
+  return NOTIFICATION_DESTINATIONS[url as keyof typeof NOTIFICATION_DESTINATIONS] ?? null;
 }
 
 /**
