@@ -1,504 +1,160 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) working in this repository.
+
+**This file is loaded on every turn, so it stays small.** The detail — why each
+subsystem is shaped the way it is — lives in `.claude/rules/`, loaded only when
+the work touches it. Use the trigger table below.
+
+> **Do not convert the rule list into `@` imports.** Claude Code inlines
+> `@path` references into this file, which would put all ~14,000 words back
+> into every turn and undo the point of the split. The paths below are
+> instructions to *go and read*, not imports.
 
 ## Project overview
 
-"Rally" is an event registration platform (running/cycling/swimming/triathlon/etc.) with three parts:
+"Rally" is an event registration platform (running/cycling/swimming/triathlon)
+with three parts:
 
 - `backend/` — Rails 8.1 API-only app (Ruby 4.0.1, PostgreSQL, RSpec)
 - `frontend/` — TanStack Start (React 19, file-based routing, Vite, Tailwind v4, shadcn/ui)
 - `infrastructure/` — Terraform for AWS (ECS backend, S3+CloudFront frontend)
 
-The backend and frontend are deployed independently; CI (`.github/workflows/ci.yml`) only runs a subproject's jobs when files under that subproject changed.
+Backend and frontend deploy independently; CI (`.github/workflows/ci.yml`) only
+runs a subproject's jobs when files under it changed.
 
 ## Commands
 
-### Backend (run from `backend/`)
+### Backend (from `backend/`)
 
 ```
-bin/setup                          # install gems, prepare db
-bin/rails server -p 3000           # run the API (default port 3000)
+bin/setup                                      # install gems, prepare db
+bin/rails server -p 3000                       # run the API
 bin/rails db:create db:migrate db:seed
 
-bundle exec rspec                  # run the whole test suite
-bundle exec rspec spec/models/event_spec.rb        # single file
-bundle exec rspec spec/models/event_spec.rb:42      # single example at a line
+bundle exec rspec                              # whole suite
+bundle exec rspec spec/models/event_spec.rb    # one file
+bundle exec rspec spec/models/event_spec.rb:42 # one example
 
-bin/rubocop                        # lint (Omakase Rails style)
-bin/rubocop -A                     # autocorrect
-bin/brakeman                       # static security scan
-bin/bundler-audit                  # dependency vulnerability scan
+bin/rubocop          # lint (Omakase Rails style); -A to autocorrect
+bin/brakeman         # static security scan
+bin/bundler-audit    # dependency vulnerabilities
 ```
 
-RSpec is the real test suite (factories in `spec/factories`, request specs in `spec/requests`, model specs in `spec/models`). `backend/test/` is unused default Rails/Minitest scaffolding — don't add tests there.
+RSpec is the real suite (`spec/factories`, `spec/requests`, `spec/models`).
+`backend/test/` is unused Minitest scaffolding — don't add tests there.
 
-### Frontend (run from `frontend/`)
+### Frontend (from `frontend/`)
 
 ```
-npm ci                # NOT bun — see below
-npm run dev           # vite dev server, default port 8080
-npm run build         # production build (outputs to dist/client/, deployed to S3 — see vite.config.ts)
-npm run test          # vitest (jsdom + Testing Library, config in vitest.config.ts)
-npm run test:coverage # what CI runs
-npm run lint          # eslint — currently fails on a pre-existing backlog; not run in CI
-npm run format        # prettier --write .
+npm ci               # NOT bun — bun.lock is stale to the point of being unusable
+npm run dev          # vite, port 8080
+npm run build        # → dist/client/, deployed to S3
+npm run test         # vitest
+npm run test:coverage  # what CI runs
+npm run lint         # eslint — fails on a pre-existing backlog; not in CI
+npm run format       # prettier --write .
 ```
 
-**Use npm, not bun.** Both lockfiles are committed but `bun.lock` is stale to the point of being unusable — it contains neither `vitest` nor `i18next`, so it predates the test suite and i18n, and pins TypeScript 5.9/ESLint 9 against the 6.x/10.x actually in use. Dependabot only updates `package-lock.json` and CI installs with `npm ci`, so that is the lockfile that reflects reality. `bun.lock` is a candidate for deletion.
-
-Vitest is the frontend test runner (`vitest.config.ts`, deliberately standalone rather than extending `vite.config.ts`; setup in `src/test/setup.ts`). Coverage excludes `src/components/ui/**` and generated files. Note ESLint is **not** part of `ci.yml` — `npm run lint` currently exits non-zero on a backlog of pre-existing violations, mostly new `eslint-plugin-react-hooks` v7 rules applied to older code.
-
-## Architecture
-
-### Backend: Rails API, JWT auth, no sessions
-
-- All routes are namespaced under `/api/v1` (`config/routes.rb`), controllers live in `app/controllers/api/v1/`.
-- Auth is stateless JWT (`lib/json_web_token.rb`), not Rails sessions/Devise. `ApplicationController#authenticate_user!` reads `Authorization: Bearer <token>`, decodes it, and sets `@current_user`. Add `before_action :authenticate_user!` per-action (see `EventsController`) rather than app-wide, since browsing events is public.
-- Two ways to get a JWT: email/password (`AuthController#signup`/`#signin`) and "Sign in with Google" (`AuthController#google`, `POST /api/v1/auth/google` with `{ id_token }`). The Google flow verifies the ID token server-side with `Google::Auth::IDTokens.verify_oidc(token, aud: ENV["GOOGLE_CLIENT_ID"])` (signature/expiry/issuer/audience) — the frontend only ever gets a token from Google Identity Services, it never sees or sets `GOOGLE_CLIENT_ID`'s matching secret because there isn't one (ID-token verification, not the redirect/authorization-code flow, so no client secret is needed at all). `User.find_or_create_from_google!` does the account matching: existing `google_uid` → sign in; no `google_uid` but a matching `email` → link Google to that password account; otherwise create a new account with a random unusable password (keeps `has_secure_password`'s NOT NULL `password_digest` invariant without schema special-casing). Gated behind `GOOGLE_CLIENT_ID` being set — see "Frontend: Google Identity Services sign-in" below for the matching frontend gate.
-- `AuthController#signup` also runs `RecaptchaVerifier.verify` (`app/services/recaptcha_verifier.rb`) against an optional `recaptcha_token` param before creating the account, rejecting with `code: "recaptcha_failed"` on failure. Gated behind `RECAPTCHA_SECRET_KEY` — unset, `.verify` always returns a passing result, so signup works with no captcha check in dev/test/CI. Score threshold is `RecaptchaVerifier::MIN_SCORE` (0.5, Google's own suggested default for reCAPTCHA v3). See "Frontend: reCAPTCHA v3 on signup" below for the matching frontend gate.
-- Authorization is manual per-controller (e.g. `EventsController#authorize_creator!` checks `@event.creator_id == current_user.id`) — there is no Pundit/CanCanCan.
-- Controllers hand-build JSON response hashes (`event_json`, `user_payload`, etc.) rather than using serializers/jbuilder — follow that pattern when adding endpoints.
-- **Request schemas: `.maybe`, not `.value`, for anything the frontend can send as null.** `dry-schema`'s `.value(:string)` rejects nil; `.maybe(:string)` accepts it. The create form posts `null` for every blank field, so a single `.value` is a 422 for everyone who left that field empty — which is what `EventRequestSchema`'s `description` did, while `EventUpdateRequestSchema` had `.maybe` for the same column. `.filled` is right only for genuine query params and booleans.
-- **A `.maybe` field over a NOT NULL column with a default is a 500, not a 422** — and the fix is `ApplicationRecord.reject_nils_for_defaulted_columns`, which controllers run params through before assigning. `NotNullViolation` is a `StatementInvalid`, *not* a `RecordInvalid`, so the `rescue ActiveRecord::RecordInvalid` that controllers wrap saves in never catches it. Sending null for an optional field is ordinary client behaviour (a cleared form input; a JSON client that writes the key rather than omitting it), so an explicit null now means "use the default", identical to omitting the key. Reachable today on `events.brand_color`/`currency`/`price_cents` and `registrations.amount_paid_cents`. The list is derived from `columns_hash`, so adding a NOT NULL column with a default can't silently reopen it. **NOT NULL columns *without* a default are deliberately left alone** — a null `title` should still 422 from the model, because the caller asked for something impossible rather than asking for a default.
-- **A schema 422 names the field** (`ValidateParams#build_error_response`). `error` is `"event.description must be a string"` and `details` is `[{field, message}]` for per-input highlighting. The wrapper key (`event.`) is deliberately kept, because not every schema wraps — the query-param ones are flat — so stripping the first segment would mislabel fields in exactly the schemas where the guess was wrong. Note `errors` (plural) is **always `["general_error"]`** in practice: it reads `message.meta[:code]`, and no schema in the app sets one. `ApplicationRequestSchema` registers a `validate_email` macro that would, and nothing uses it.
-- File uploads (banner/logo/avatar images) go through `Api::V1::UploadsController`, which validates content-type/size and stores via Active Storage (`has_one_attached` on `Event`/`Profile`), not a custom S3 client. Storage backend is Disk locally/test, S3 (`amazon`) in production via ECS IAM role (`config/storage.yml`).
-
-### Backend: domain model
-
-Core relationships (see `app/models/`):
-
-- `User` has one `Profile`, many `Event`s (as creator), many `Registration`s, many `Survey`s (as creator). `google_uid`/`provider` are set only for accounts that have signed in with Google at least once (see "Backend: Rails API, JWT auth, no sessions" above) — both are nullable, Postgres allows multiple NULLs under `google_uid`'s unique index, and a password-only account has neither.
-- `Profile` holds display name/avatar plus an organizer's own ABA PayWay merchant credentials (`payway_merchant_id`, encrypted `payway_api_key`) — see "Backend: payments" below.
-- `Event` belongs to a creator (`User`) and optionally one `Survey`; has many `EventType`s (e.g. "5K", "10K" sub-races with their own capacity/price) and many `Registration`s and `EventPlanPayment`s.
-- `Registration` joins a `User` to an `Event`, and through `RegistrationEventType` to the specific `EventType`(s) chosen. Capacity enforcement happens in model validations (`Registration#event_not_full`, `RegistrationEventType#event_type_not_full`), not at the DB or controller layer — both add a machine-readable `errors.add(:base, :event_full, ...)`, which the relevant controller maps to `code: "full"` in the JSON error response so the frontend can react (lock the UI, refresh capacity) instead of string-matching the message.
-- `Survey`/`SurveyQuestion`/`RegistrationAnswer`: an organizer attaches an optional survey to an event; `SurveyQuestion.options` and `RegistrationAnswer.answer_options` are `jsonb` arrays of `{id, label}`; validity of selected option IDs is checked in `RegistrationAnswer#valid_options_selected`.
-- Money is always stored as `*_cents` integers; an `EventType#effective_price_cents` falls back to the parent event's price when the type has no price of its own.
-
-When changing pricing/capacity logic, check both the `Event`-level and `EventType`-level paths — most events support both a single flat price/capacity and per-type overrides. Also check `Event#combined_event_type_capacity` (sum of each type's own capacity) against `Event::PLANS[plan][:capacity]` — publishing under a plan too small for the event's types is rejected server-side (`Event#capacity_covers_event_types`) before any payment is attempted, not just disabled client-side.
-
-`Event#location` (free-text address) stays the source of truth for display; `latitude`/`longitude` are optional and only ever set by the frontend's Google Maps location picker (nil for events created before this existed, or when the picker fell back to plain text — see "Frontend: Google Maps location picker" below). `Event#lat_lng_present_together` enforces both-or-neither. `route_map_url` is just an optional link (e.g. a Google My Maps URL) for point-to-point events — there's no server-side route drawing/waypoints.
-
-### Backend: closing registration
-
-An organizer can stop taking sign-ups before an event is full — for printing bibs, confirming catering, closing a permit headcount. Two nullable columns on `events`, and registration is shut when **either** applies: `registration_closed_at` (someone pressed Close) or `registration_closes_at` (an announced deadline that has passed). `Event#registration_closed?` is the predicate; `Event#accepting_signups?` is the question both sign-up paths ask, so they can't drift into disagreeing about what closed means.
-
-- **Not the same as `full?`, and not folded into it.** A closed event can have hundreds of free spots. They mean different things to a participant ("no spots left" vs "the organizer closed this"), the UI says so, and — the load-bearing difference — **a full event offers the waitlist, a closed one offers nothing**. `WaitlistEntry` validates `accepting_signups?` too: the waitlist exists to catch people when spots might still free up, and once the organizer has closed sign-ups there is nothing to wait for.
-- **Not the same as unpublishing**, which is the wrong tool and was previously the only one available. Unpublish hides the event from everyone, including the people already registered who still need the page for the date, the venue and later their results. A closed event stays fully visible. Closing sits with `:update_event` (owner + manager) rather than the owner-only `:unpublish_event` — a manager who can change the date can close sign-ups.
-- **The deadline is evaluated, never stored as a flag.** A boolean would have needed a cron job flipping it across every event on the platform, plus a window where the deadline had passed but the flag hadn't caught up. Comparing a timestamp needs neither. `#reopen_registration!` clears the deadline *as well as* the manual flag — reopening while a passed deadline stayed set would re-close the event on the next read, which reads as the button being broken.
-- **Both validations are `on: :create`, and that is the "let in-flight registrations finish" decision.** A paid registration's row is written *before* the KHQR payment succeeds (`RegistrationsController#create`), so validating on every save would mean closing registration while someone is at the payment screen causes the ABA webhook to fail when it marks them paid — taking their money and then refusing the spot. Closing stops *new* sign-ups; it does not reach backwards.
-- `registration_closed_at` is deliberately **absent from `EventUpdateRequestSchema`** — it's set only by the close/reopen endpoints, so "when was this closed" can't be back-dated by anyone editing the event form. `registration_closes_at` is in the schema, since it's an ordinary editable field.
-- The error code is `registration_closed`, checked **before** `full` in both controllers' error mapping: an event can be closed *and* full, and the closed reason is the more accurate one.
-
-**Closing ends the waitlist, and that was a silent bug for a while.** Promotion creates a `Registration`, `Registration` validates `registration_is_open` on create, so on a closed event every promotion raised `RecordInvalid` — which `Waitlists::PromoteNext` swallowed under a rescue written for lost capacity races. Each entry sat `waiting` forever with nothing logged, nothing visible to the organizer and nothing said to the person. `WaitlistEntry`'s own comment asserted the opposite ("an entry that already exists can still be promoted, so closing doesn't strand people"); it was wrong, and the comment is why nobody looked.
-
-- **Closing is final for the queue.** Organizers close to fix a headcount — printing bibs, confirming catering, a permit — so a promotion afterwards adds someone already counted. A spot freed on a closed event stays empty. `Waitlists::CancelForClosedEvent` cancels every `waiting` entry and notifies its owner once (`Notifications::WaitlistNotifier`, kind `waitlist_closed`).
-- **Two triggers, one service, because the deadline path has no moment.** `registration_closed_at` is a discrete act the controller hooks inline, so the organizer watches the queue clear. `registration_closes_at` is *evaluated, never stored* — nothing runs when it passes — so `CancelWaitlistsForClosedEventsJob` sweeps hourly for that path and backstops a manual close interrupted by a crash or deploy. Hooking only the manual path would leave every deadline-closed event stranding its queue exactly as before. Same shape as `payment_received` firing from both the poll and the ABA webhook.
-- **The sweep expresses "closed" in SQL** rather than calling `Event#registration_closed?` per row. Two definitions of one predicate in two languages drift, so a spec pins them against each other across all four cases.
-- **`PromoteNext` now distinguishes permanent from transient failures.** A lost capacity race still leaves the entry `waiting` for the next pass; a closed-registration failure is logged, checked by *error type* (`:registration_closed`) rather than message text. It also bails early when the event is closed, warning if anyone is still queueing — which means `CancelForClosedEvent` didn't run.
-- **`Notifications::WaitlistNotifier` is a sibling of `RegistrationNotifier`, not a method on it** — every entry point there takes a `registration` and reads `registration.event.title`. Same reasoning as `SupportNotifier`. It reuses the `notify_promoted_from_waitlist` preference (same channel, and this is the message that channel ends with) and follows the house rule: push respects the preference, **the in-app row is always written**.
-
-### Backend: event visibility (public / unlisted)
-
-`events.visibility` decides whether a **published** event appears in the public catalogue. Orthogonal to `is_published`, which answers a different question: unpublished means "not finished, not paid for"; unlisted means "finished, live, and not for the catalogue". An unlisted event takes registrations, issues certificates and shows results exactly like any other.
-
-- **The value is `unlisted`, not `private`, and the naming is the design.** Access is the URL — anyone holding the link can view and register, and a forwarded link works for whoever receives it. Labelling that "private" invites an organizer to post the link in a public channel believing it's gated, so the word itself would be doing the damage. The UI copy says "anyone with the link can still open the page and register" for the same reason. It's a string enum rather than a boolean so real access control (a rotatable code, an invite list) can be a third value later without a migration or an API break.
-- **The whole implementation is one `where` in `Event.publicly_visible`.** That scope was already the single chokepoint every public read goes through — `events#index`, `organizers#show`, and `Organization`'s two public "events run" counters — so one filter hides an unlisted event from all four. **Anything that lists events to strangers in future has to go through that scope**; a spec exercises the paths rather than the scope so a fifth listing that bypasses it fails rather than ships.
-- **`#show` and the registration path are deliberately untouched.** `EventsController#show` is `Event.kept.find(id)` and `RegistrationsController#set_event` is the same — no published check on either. That's what makes a link work, and it's also why "unlisted by URL" was already the accidental behaviour before this existed. Note the consequence: **an unpublished draft is readable by anyone with its id**, which was a deliberate decision to leave alone, not an oversight.
-
-**Separately: sign-ups on a suspended event are now refused.** `Event#suspend!` forces `is_published` false and freezes the organizer out via `SUSPENDED_ALLOWED_CAPABILITIES`, but neither `Registration` nor `WaitlistEntry` looked at `suspended_at` and neither controller checks published-ness — so anyone with the event id could register for an event an admin had taken down, and pay for it. Both models now validate `event_not_suspended` `on: :create`.
-
-- **Its own error type, not folded into `accepting_signups?`.** An organizer closing sign-ups and an admin suspending the event are different facts; reporting a suspension as `registration_closed` sends the participant to ask the organizer to reopen something the organizer cannot reopen.
-- **Code precedence is suspended → closed → full**, in both controllers. An event can be all three at once and only the first is reported, so the ordering is the message, and the least-recoverable reason wins.
-- **`on: :create`**, matching the other two rules: a registration's row is written before its KHQR payment settles, so a suspension landing mid-payment must not make the ABA webhook fail when it marks them paid.
-
-### Moderation: reporting an event
-
-Rally refuses to host gatherings for four purposes — political, gambling, violence, discrimination. `EventReport` is how it finds out about them: anyone who can see an event can report it, staff review, staff decide.
-
-- **Notice-and-takedown, deliberately not a classifier.** The original proposal was to run every event's text through an AI and hold anything the model flagged for a support manager. Two problems killed it. The four refused categories have the worst possible legitimate overlap on a *sports* platform — boxing and MMA, charity casino nights, women-only and disability-category races, charity runs for a political cause — so a model precise enough to be useful would hold a meaningful share of real events on a product whose organizers pay to publish. And it doesn't match the stated threat: the motivating case was a hijacked organizer account, which is an authentication problem that a content filter answers only after the damage is already published. **The enforcement half already existed** (`Event#suspend!`, unpublish, user suspension, `admin_actions`); the gap was intake, and reporting is intake at a fraction of the cost and none of the false positives.
-- **Report count sets queue priority and hides nothing.** `EventReport.priority_for` returns urgent ≥ 10, high ≥ 3, normal — it orders a reviewer's day, and that is its entire authority. An auto-hide threshold hands anyone with a handful of accounts a button that takes a competitor's paying event down, and a platform strangers can make delete an organizer's work is worse than one that takes an hour to read a complaint. **Nothing in the report path ever changes an event's state.**
-- **Resolving a report is not taking the event down.** `Admin::EventReportsController#resolve` closes every live report on the event (the decision was about the event, so leaving half of them open would read in the queue as unfinished work) and writes one `resolve_event_reports` audit entry. Suspension stays `Admin::EventsController`, its own act with its own entry — so the record shows a reviewer chose it, rather than it being implied by closing a ticket. `actioned` vs `dismissed` records what they concluded.
-- **The endpoint is not an oracle.** `Api::V1::EventReportsController#create` returns an identical response for a first report, a duplicate from the same person, and an event that is already suspended. Otherwise anyone could probe it to learn what Rally has flagged and what it hasn't — including the organizer of an event under review. The frontend `ReportEventDialog` carries the same rule: never render "already reported", never require an account, never promise an outcome.
-- **Anonymous reports are accepted on purpose**, which is why the route has no `authenticate_user!` and the controller uses `authenticate_user_optional!`. Someone frightened by a gathering is exactly the person least likely to want an account first. The abuse budget is `rack_attack.rb` instead (`event_reports/ip` 3/hour, `event_reports/user` 5/hour), and the one-open-report-per-reporter partial unique index is scoped `WHERE reporter_id IS NOT NULL` because "one per anonymous" is not a thing that can be enforced.
-- **`Admin::EventReportsController`, not `ReportsController`** — `Api::V1::Admin::ReportsController` is already the analytics dashboard. The queue is grouped by event because a reviewer's unit of work is "should this event stay up", and twelve reports on one event are one decision.
-- **Everything about a report row is bounded, because the worst event is the biggest one.** A brigaded event is precisely what a reviewer opens the queue to find, so the code paths that touch it must not scale with the number of reports: `#index` aggregates counts in SQL rather than loading rows to count them, `#show` caps at `DETAIL_LIMIT` (200) and returns `total_count` so a truncated list can't read as the whole story, and `#resolve` is a single `update_all` rather than one `UPDATE` per report. Every column `resolve` writes is a plain attribute with no callbacks, which is what makes the set-based version equivalent rather than merely faster.
-- **`report_count` and `reasons` describe the *filtered* rows; `open_count` and `priority` ignore the filter.** The first pair explains why a row is in the list you're looking at, so computing them over every report would contradict the filter. The second pair answers "is there work left on this event", which is a fact about the event — an event with twelve open reports must not read as normal priority because someone filtered to one reason.
-- **`Notifications::ModerationNotifier` is the first staff-facing notifier.** No push (the `notify_*` preferences are a participant's), one unread row per admin per event, and the whole notification is wrapped in a savepoint and swallowed on failure — a broken notification must never lose the report. Its `url` is `/admin?tab=reports`, which is why `admin.tsx` has a `validateSearch` and the notification bell's allowlist maps a URL to navigate options rather than being a bare list of paths.
-- **Unlisted events have no reporters, and that's the hole this can't cover.** Reporting scales with audience; an event absent from the catalogue and from search has none — and "invite-only, unlisted, carefully worded" is the exact shape of the gatherings being guarded against. The compensating control is `Event::UNLISTED_VERIFICATION_THRESHOLD` (50): publishing (or flipping) an unlisted event above that capacity requires a verified organization, refused before any charge with `code: "verification_required"`. It guards **transitions only** (`will_save_change_to_visibility?`, `..._to_is_published?`, `..._to_capacity?`), never the resting state, so an event that predates the rule stays editable — otherwise its organizer couldn't fix a typo. **`capacity` is the non-obvious third trigger**: without it an unlisted event published on the free tier (20) could be upgraded to 30,000 and never re-enter the rule, since neither `visibility` nor `is_published` moves on that save — it would cross the threshold this exists to guard without ever transitioning into the guarded state by either obvious route. A one-step `create` of a published, large, unlisted event *is* a transition and is refused; nothing in the app does that today (events are drafted then published through a plan payment) but the Partner API will create events, and a rule watching only updates would be bypassable by whichever path landed first. The consequence for specs: a grandfathered row has to be written with `update_columns`, because the validation is what stops it existing any other way.
-- The other known limit, written into `EventReport`'s header so it isn't rediscovered as a bug: **low traffic means few reports**. A brand-new event with no audience yet is not meaningfully covered by any of this.
-
-### Backend: publishing & payments (ABA PayWay / KHQR)
-
-Two separate payment flows share one gateway (`app/services/aba_payway/client.rb`), and it's easy to conflate them:
-
-- **`Payment`** — an attendee paying to register for an event. Created per-`Registration`.
-- **`EventPlanPayment`** — an organizer paying Rally to *publish* an event under one of `Event::PLANS` (`free`/`small`/`medium`/`large`/`extra_large`, each with a fixed `capacity` and `price_cents`). `EventPlanPayment#mark_paid!` is what actually sets `event.is_published = true` and stamps the event's `plan`/`capacity`. The free tier publishes immediately with no pending payment to poll.
-
-Gateway credentials are two-tiered:
-
-- **Platform defaults** live in `config/payway.yml` (per-environment, `ERB`-evaluated, same `Rails.application.config_for` pattern as `config/database.yml`) — these are Rally's own PayWay account and are what `EventPlanPayment`s always use, and what `Payment`s fall back to.
-- **Per-organizer credentials** live encrypted on `Profile` (`payway_merchant_id` / `payway_api_key`, via Active Record encryption). When `Profile#payway_configured?` is true, that organizer's own event registration payments route through their credentials instead of the platform default — see `AbaPayway::Client.for_event`. `ProfilesController#profile_json` only ever exposes `payway_api_key_masked`, never the real key.
-
-### Backend: background jobs & cache (Solid Queue / Solid Cache)
-
-`config/environments/production.rb` sets `config.active_job.queue_adapter = :solid_queue` and `config.cache_store = :solid_cache_store`, and `config/database.yml` has matching `queue`/`cache` roles (plus `cable`, unused — see below) pointed at separate databases on the same RDS instance as `primary` (same `url: ENV["DATABASE_URL"]`, just an overridden `database:` name — the standard Rails multi-database-on-one-server pattern). The `solid_queue`/`solid_cache` gems themselves live in Gemfile's `:production` group — development/test use the in-memory/null adapters instead (`config/environments/development.rb`, `test.rb`), so nothing extra is needed to run specs or `bin/rails server` locally.
-
-- **Jobs run in their own ECS service**, not inside Puma. `aws_ecs_service.worker` runs the same image with `command = ["./bin/jobs"]`, no port mapping and no load balancer. `config/puma.rb` still has `plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]` for single-process local/dev use, but `SOLID_QUEUE_IN_PUMA` is deliberately **absent** from `infrastructure/ecs.tf` — setting it would put the supervisor back inside the web task alongside the separate one, so jobs would be processed twice over (harmlessly, since claims are uniquely indexed, but at double the cost and with the CPU contention this split exists to remove). The concrete driver was `Certificates::RenderPdf`, which shells out to LibreOffice and was doing that inside the process serving requests.
-
-  Four things follow from there being two services:
-
-  - **The web task owns migrations.** `bin/docker-entrypoint` runs `db:prepare` only when the command is `./bin/rails server` (overridable with `RUN_DB_PREPARE=true|false`). Both services boot from the same image and a deploy rolls both, so letting each migrate means N concurrent runs; Rails' advisory lock makes that safe but not free — the losers block, and on the web side that blocking is spent inside the health check's `startPeriod`. `scripts/deploy.sh` and `deploy-backend` in `.github/workflows/deploy.yml` therefore roll **web first, wait for stable, then worker**, so the schema is current before new job code runs. A job that does land in that window fails and is retried rather than lost.
-  - **A backend deploy must redeploy both services.** Two `update-service --force-new-deployment` calls, not one. Miss the second and jobs keep running the previous image silently and indefinitely. CI needs the `ECS_WORKER_SERVICE` repo secret (the `ecs_worker_service_name` output); the step emits a `::warning::` rather than failing if it's unset, which is the one way this can go wrong quietly.
-  - **The worker task has no `healthCheck`, on purpose.** The supervisor is PID 1, so if it dies the container exits and ECS replaces the task; if a forked child dies the supervisor replaces it. The gap a probe couldn't close either — supervisor alive but wedged — shows up only as `solid_queue_processes.last_heartbeat_at` going stale, which wants a CloudWatch alarm. One consequence: the deployment circuit breaker sees "reached RUNNING" as success, so it catches crash-on-boot but not a worker that boots and then fails every job.
-  - **Recurring jobs moved with it.** `config/recurring.yml`'s hourly sweeps now run on the worker, so `ecs_worker_desired_count = 0` stops them — including `ReleaseAbandonedRegistrationsJob`, which is what frees capacity held by abandoned registrations. Scaling *up* is safe: `solid_queue_recurring_executions` is uniquely indexed on `(task_key, run_at)`, so N schedulers still enqueue each occurrence once, and `solid_queue_claimed_executions` is uniquely indexed on `job_id`, so N workers split jobs rather than duplicating them.
-
-- **Terraform owns the task definitions again.** `aws_ecs_task_definition.app` used to carry `ignore_changes = [container_definitions]` and the service `ignore_changes = [task_definition]`, on the grounds that the deploy script managed them. It doesn't — both deploy paths only force a new deployment of the revision the service already points at, and `var.rails_image_tag` is the mutable `":latest"`, so container definitions never actually drifted. What the ignores did instead was make every environment change unappliable, which is why `SOLID_QUEUE_IN_PUMA` couldn't simply be deleted and why `ENABLE_PING_CHANNEL` was awkward to set. Both are gone; `desired_count` stays ignored on both services because that genuinely is adjusted out of band. **Read the plan on the next `terraform apply`** — if anyone hand-registered a revision while the ignores were in place, this is the apply that reverts it.
-- `db:prepare` (run automatically on container boot, see `bin/docker-entrypoint`) creates and schema-loads all databases declared under `production:` in `database.yml`, including `cable`. That database sat empty and unused for a long time — `cable.yml` named `solid_cable` while neither the gem nor ActionCable itself was loaded — but as of the support-chat work it is live. See "Backend: ActionCable" below.
-- `config/recurring.yml` schedules two hourly jobs in production: `SolidQueue::Job.clear_finished_in_batches`, and `ReleaseAbandonedRegistrationsJob`. The latter frees capacity held by paid-event registrations abandoned before payment — `RegistrationsController#create` writes the row *before* any KHQR payment succeeds, and `Registration::active` (what `Event#full?` counts) excludes only cancelled rows, so an unpaid registration holds a real slot indefinitely. See `Registrations::ReleaseAbandoned`: an hour's grace from the most recent payment attempt (or from the registration itself when the payment screen was never opened), re-checked under a row lock so a late ABA webhook can't get a paid registration cancelled. Free registrations are created with `payment_status: "paid"` and so can never match — there's a spec pinning that, because if the default changed this job would cancel every free registration on the platform.
-- Related: the unique index on `registrations(event_id, user_id)` is **partial** (`WHERE deleted_at IS NULL`), and `Registration`'s uniqueness validation carries a matching `conditions:`. `#discard!` keeps the row for its payment history but the person is no longer registered, so they must be able to sign up again — this was a live bug before, reachable via `RegistrationsController#destroy`.
-- `app/jobs/` holds the real jobs (certificates, event-change notifications, the ABA webhook processor, push delivery, and the sweep above); mailers additionally use `deliver_later`, which exercises the same adapter.
-
-### Certificates: templates, checking and preview
-
-An organizer uploads a `.odt`; `Certificates::MergeOdt` substitutes four tokens into it (`participant_name`, `event_title`, `event_date`, `event_location` — `Certificates::RenderPdf#placeholder_values` is the only source of that list) and `Certificates::OdtToPdf` shells out to LibreOffice. `docs/templates/rally-certificate-modern.odt` is a working example, built by `scripts/build-certificate-template.py` — the script is the reviewable source, since an ODT is a zip of XML and therefore opaque in a diff.
-
-Organizers get **two different kinds of feedback, because they answer different questions at wildly different cost**:
-
-- **The token check runs inline at upload** (`Certificates::InspectTemplate`, returned as `template_check` from `POST /uploads`). It answers "will the placeholders be filled in?" in milliseconds with no LibreOffice. It exists for the one failure MergeOdt warns about and cannot defend against: substitution is a literal gsub over raw XML, so a token split across two `<text:span>`s never matches and the braces print on every certificate. Detection is cheap — **a split token is absent from the raw XML but present once tags are stripped**, because stripping tags is exactly what rejoins the runs the word processor separated. A split token is *reported, not rejected* (a heuristic false positive would leave the organizer with no way around it); an unreadable archive **is** rejected, before the blob is written, which is also the first thing in this codebase that actually verifies an upload is an ODT rather than trusting the browser's content-type.
-- **The rendered preview is a job** (`RenderCertificatePreviewJob` → `Certificates::RenderPreview`), polled via `POST`/`GET /events/:event_id/certificate_preview`. It is the only thing that catches layout problems — a long name or event title wrapping and pushing content onto a second page. Measured cost is why it can't be synchronous: **~0.25–1.2s and ~180 MB peak RSS per conversion**, against a web task with 3 Puma threads on 0.5 vCPU / 1 GB. It is also precisely the work the Solid Queue worker split exists to keep off the web task.
-
-Four decisions worth knowing:
-
-- **The preview endpoint takes an Active Storage `signed_id`, never a URL.** An endpoint that accepts a URL and fetches it is an SSRF hole, and the renderer runs inside the VPC. `UploadsController` returns `signed_id` alongside `url` for this reason; `find_signed` rejects a tampered one without any validation code. It also means no outbound HTTP at all — unlike `RenderPdf`, which legitimately downloads `event.certificate_template_url` because by then the template is saved.
-- **Preview runs on an uploaded-but-unsaved template.** That is the point — looking before committing — so it cannot read `event.certificate_template_url`.
-- **One row per organizer per event**, by unique index. That is the entire storage-growth story: re-previewing overwrites, so the table is bounded by (organizers × events) rather than by clicks. Per *organizer*, not per event, so two managers of the same event don't overwrite each other's half-finished renders.
-- **`Certificates::SweepPreviews` (hourly) is not optional.** The row keeps only the newest URL, so every re-render orphans the previous PDF in S3 — unreferenced, invisible, and billed for.
-
-**Blob URLs built outside a request must use `Storage::BlobUrl`, never `action_mailer.default_url_options`.** A controller's `url_for(blob)` takes the host from the request — the API domain — and is correct. A job has no request, and the obvious fallback is the mailer host, which is deliberately `FRONTEND_URL`. But `/rails/active_storage/blobs/redirect/...` is served by *Rails*, on the API domain: pointed at the frontend it becomes a CloudFront path that doesn't exist. Both `RenderPdf` and `RenderPreview` shipped with that bug (the second copied it from the first), storing 404 URLs for every certificate and preview. It survived because in development and test the mailer host *is* the Rails host, so only production was wrong. `Storage::BlobUrl` reads `BACKEND_URL` — the same value the ABA webhook callbacks already use — and falls back to the mailer options only when it's unset. **Certificate rows written before the fix still hold the bad host.**
-
-`Certificates::RenderPdf::ConversionError` is deliberately **the same class** as `OdtToPdf::ConversionError`, not a sibling. `RenderCertificateJob` rescues it to log-and-swallow a bad template; when the soffice call moved into `OdtToPdf`, a separate class would have quietly stopped that rescue catching conversion failures, turning a logged warning into a crashed job.
-
-### Bib numbers, and the certificate job that never ran
-
-Both landed together as Phase 0 of `docs/partner-api-design.md` (the Partner
-API), but neither is about the API — they're gaps the product already had.
-
-- **`GenerateCertificatesJob` was dead code until 2026-09-16.** Its own header
-  said it "runs on a schedule (see `config/recurring.yml`)"; it was not in
-  `recurring.yml` and nothing called it, so **no certificate had ever been
-  generated in production**. Comments that describe intent are not evidence
-  that the wiring exists.
-- **It could not simply be switched on.** `eligible_registrations` filtered on
-  status, payment, template and end date — but not on `registrations.deleted_at`,
-  `events.deleted_at` or `events.suspended_at`, while every other read of
-  registrations in this codebase goes through `.kept`. Its first run would have
-  issued certificates to people who withdrew and to events an admin had taken
-  down, each one a PDF in S3 that the participant can see. The bug survived
-  review *because* the job was dead: the existing spec passed throughout, since
-  it only covered the filters that were there. Suspension is treated as
-  deferral rather than denial — unsuspending makes those registrations eligible
-  on the next run.
-- **`MAX_PER_RUN` (200) is what makes a no-cutoff backfill safe.** Every
-  finished event qualifies however old, so the first runs face the whole
-  history; each render is ~180 MB RSS and 0.25–1.2 s of LibreOffice on the
-  worker. Hourly + capped drains the backlog over hours instead of starving
-  the queue of the registration and payment jobs people are waiting on.
-  Ordering is oldest-finished-first so a capped run is predictable.
-- **`registrations.bib_number` is a string, not an integer** — real bibs are
-  `"A1042"`, `"10K-233"`, `"0007"` with the leading zeros printed on them, and
-  nothing sorts or sums this column. The unique index is partial and per-event
-  (`WHERE bib_number IS NOT NULL`), the same shape as the `(event_id, user_id)`
-  index. `normalizes` turns `""` and whitespace into NULL, without which the
-  second participant to have their bib cleared would collide with the first.
-- **Unlike the `user_id` index, the bib index is deliberately *not* scoped to
-  kept rows.** A withdrawn runner's number must not be silently reissued while
-  their result and certificate still reference it; freeing a number is an
-  explicit edit.
-- **`Results::ImportCsv` matches on bib first, then email**, and reports a
-  bib/email pair that names two different people as an error rather than
-  picking a side. Email was the only key before, which was always wrong for the
-  file organizers actually have: chip-timing systems export bib and time and no
-  timing exporter emits entrant email addresses. The export CSV leads with
-  `Bib` so export → fill in times → re-import is a round trip with no VLOOKUP.
-  Its lookups are now `.kept`-scoped, which they weren't.
-
-### Monitoring: the worker liveness alarm
-
-`infrastructure/monitoring.tf` holds the stack's first alarms. They exist for
-one gap: the worker task has no ECS `healthCheck` on purpose, so "supervisor
-alive but not doing work" is invisible from the ECS side — and that became
-load-bearing when certificate generation moved onto the worker.
-
-- **The signal is a log line, not `solid_queue_processes.last_heartbeat_at`.**
-  Two reasons, and the second is the real one. Practically, that column is in
-  Postgres and CloudWatch can't read Postgres — bridging it needs a VPC Lambda
-  or a reporter thread in the *web* task, since the worker can't report on
-  itself and a recurring job is the very thing being tested. Substantively,
-  **the heartbeat is written by its own thread and says nothing about whether
-  jobs run**: a worker wedged on a stuck LibreOffice render keeps its heartbeat
-  perfectly fresh. `WorkerLivenessJob` runs every 5 minutes and logs one JSON
-  line, so the line appearing proves scheduler → dispatcher → claim → execute
-  all work.
-- **The metric filter matches the JSON field** (`{ $.event = "solid_queue.liveness" }`),
-  not a substring, so the string appearing inside a stack trace can't forge an
-  "everything is fine". `default_value = 0` makes an empty period report zero
-  rather than no-data, which is what makes the alarm's own history honest.
-- **`treat_missing_data = "breaching"` on liveness, `"missing"` on the ECS task
-  count.** Opposite settings, deliberately: a worker that stopped logging and a
-  log pipeline that stopped delivering are indistinguishable and both mean "you
-  don't know if jobs run", but Container Insights legitimately stops publishing
-  for a service scaled to zero, where `breaching` would page forever.
-- **15 minutes = three expected lines.** One missed period is a deploy severing
-  the worker mid-schedule; three is not. **`config/recurring.yml`'s
-  `worker_liveness` schedule and this window are coupled across two
-  repositories of truth**, so a spec pins the schedule — lengthening it without
-  widening the window turns a healthy worker into a page.
-- **A deep backlog logs a second line, it never raises.** A liveness probe that
-  raised when the numbers got interesting would turn "the worker is behind"
-  into "the worker looks dead" — different alarm, different response.
-- **`alarm_email` is a variable and defaults to empty**, so the topic and alarms
-  exist with nothing subscribed. Worth knowing: an email subscription sits in
-  `PendingConfirmation` until the link is clicked and **`terraform apply`
-  reports success either way** — `terraform output alarm_subscription_check`
-  prints the command that distinguishes configured from working. It currently
-  points at the account owner's own address; move it to a shared alias the day
-  a second person is on call.
-- **Deploy the backend *before* applying the liveness alarm.** The alarm treats
-  missing data as breaching, and `WorkerLivenessJob` only exists once the image
-  carrying it is running. Apply first and the alarm goes to ALARM about fifteen
-  minutes later and stays there — a false page on day one, which is the fastest
-  way to teach yourself to ignore it. Order: deploy backend → confirm the line
-  is flowing → `terraform apply`. The check is:
-
-  ```
-  aws logs tail /ecs/rally-production --since 15m \
-    --filter-pattern '{ $.event = "solid_queue.liveness" }'
-  ```
-
-  `tail` is the subcommand that takes a human `--since`; `filter-log-events`
-  does not, and wants `--start-time` in epoch *milliseconds* instead
-  (`--start-time $(( ($(date +%s) - 900) * 1000 ))`). Expect roughly three
-  lines per fifteen minutes. **No output means don't apply yet** — either the
-  worker hasn't got the image or it isn't running jobs, and both are exactly
-  what the alarm is for.
-- **A missing `ECS_WORKER_SERVICE` secret now fails the deploy** rather than
-  emitting a `::warning::` and exiting 0. That step is the only path by which
-  `WorkerLivenessJob` reaches production, so skipping it means the alarm fires
-  forever against a deploy that reported success — and the old `exit 0` also
-  let the "✅ Rally backend deployed" Telegram message go out. Failing routes
-  to the `if: failure()` notification instead, so the channel anyone actually
-  reads says what really happened.
-
-### Backend: ActionCable
-
-Enabled for support chat (`support-chat-tickets.md`, Ticket 0). `config/application.rb` requires `action_cable/engine` explicitly — this app lists railties individually rather than using `rails/all`, so ActionCable does not appear just because it's in the Rails gem. `solid_cable` is in the `:production` gem group beside `solid_queue`/`solid_cache`; development uses `:async` and test uses `:test`, so neither needs it.
-
-Four pieces of configuration are load-bearing, and three of them fail *silently in development and only in production*:
-
-- **`allowed_request_origins`** (`ACTION_CABLE_ALLOWED_ORIGINS`, set in `infrastructure/ecs.tf`). The frontend is served from CloudFront, a different origin than the API, so ActionCable's forgery protection applies to every real connection. Unset, every one is refused with nothing but `Request origin not allowed` in the log. Development sets an explicit localhost pattern for the same reason (Vite on 8080, Rails on 3000).
-- **Connection pools, on two roles not one.** ActionCable's worker pool (`ACTION_CABLE_WORKER_POOL_SIZE`, default 4) runs channel callbacks and broadcasts, and each of those threads checks out an Active Record connection. It touches **`primary`** (channel code loads application models) *and* **`cache`** (`Cable::Ticket#redeem` is a `Rails.cache` read), alongside Puma's request threads. (Solid Queue used to contend for the same pool; since the worker split it runs in its own task, which sets `RAILS_DB_POOL=6` for its own `queue` pool.) `config/database.yml` derives both roles' `max_connections` from `RAILS_MAX_THREADS + ACTION_CABLE_WORKER_POOL_SIZE`, so raising either knob can't starve them. The `default:` block deliberately keys on **`RAILS_DB_POOL`, not `RAILS_MAX_THREADS`** — when it keyed on the latter, setting that variable explicitly silently shrank `queue`/`cable` from 5 to 3, which is enough to starve Solid Queue's own 3 worker threads plus its dispatcher. Note `max_connections` is the canonical Rails 8.1 key; **`pool` is a deprecated alias and setting both to different values raises**.
-- **`polling_interval`** in `cable.yml`. Solid Cable is polled pub/sub: every process queries the cable database on this interval forever, connected or not. Lowered from the scaffold's 0.1s (10 queries/sec/process) to 0.5s.
-- **Connection auth is a ticket, not the JWT.** Browsers can't set headers on a WebSocket, and this app's JWTs last 30 days — far too long to put in a URL that lands in ALB access logs and browser history. Clients `POST /api/v1/cable/ticket` with the normal Bearer token for a single-use, 30-second ticket (`Cable::Ticket`), then connect to `/cable?ticket=…`. `ApplicationCable::Connection` redeems it, deletes it, and re-checks `suspended?`/`discarded?`.
-
-Two things that follow from sockets being long-lived, both easy to get wrong:
-
-- **`connect` runs once, so authorization must still be checked per subscription** in each channel's `subscribed`. There is no `before_action` equivalent.
-- **rack-attack cannot see channel actions.** Rack::Attack is Rack middleware and ActionCable hijacks the socket at connect time, so no message sent over an established WebSocket ever re-enters the Rack stack. Only the HTTP side is throttleable (`cable_ticket/user` in `config/initializers/rack_attack.rb`); any per-message rate limiting has to live inside the channel. This is also why `PingChannel` — the temporary Ticket 0 diagnostic — is reachable only by admins (or with `ENABLE_PING_CHANNEL=true`, which opens it to every authenticated user and is only worth it for a load run needing several accounts): its `echo` action INSERTs into `solid_cable_messages`, and nothing in the request path could rate-limit a loop. The env var is deliberately absent from `infrastructure/ecs.tf`. (It used to be unsettable there as well as unset — `ignore_changes = [container_definitions]` meant Terraform stopped managing env vars after the first apply, so changing task env required hand-registering a revision. That was removed with the Solid Queue worker split, so adding it is now a normal `terraform apply`. The admin gate in the channel is still the reason not to.)
-- **The socket is an optimization; REST is the source of truth.** Every deploy (`ecs update-service --force-new-deployment`) severs every connection, so clients must refetch what they missed on reconnect rather than trusting delivery. Same principle as push-vs-email in the notification work below.
-
-`Cable::Ticket` stores in `Rails.cache` because production's Solid Cache is Postgres-backed and therefore shared across ECS tasks — the task issuing a ticket is often not the task terminating the socket. Test uses `:null_store`, where writes vanish, so specs touching it need the `:with_cache` tag (`spec/support/cache_helpers.rb`).
-
-### Support chat: Conversation and Message
-
-Participant ↔ Rally staff only (`support-chat-tickets.md`). Organizer ↔ participant chat is explicitly out of scope, and nothing is built generically in anticipation of it.
-
-**Staff are not members of a conversation.** A `Conversation` belongs to one `user` — the participant — and any admin can read or answer any thread, since `Api::V1::Admin::BaseController`'s `require_admin!` is the whole gate. `assigned_admin` is a soft claim ("someone is looking at this"), not ownership, and is nullified rather than cascaded if that admin's account goes away.
-
-Four decisions that look arbitrary until they bite:
-
-- **One live thread per participant**, enforced by a partial unique index on `user_id WHERE status <> 'resolved'` *and* a matching `conditions:` on the model's uniqueness validation. Same shape and same reasoning as the registrations kept-index — a model that rejects what the database allows is the more confusing half of that bug. `open` and `pending` both count as live; only `resolved` frees the slot.
-- **Read state is two timestamps on the conversation** (`participant_last_read_at`, `staff_last_read_at`), not a join table. There is exactly one participant and staff act as a *pool*, so "has the participant seen this" and "has anyone on the team seen this" are the only questions asked. Unread always means unread *from the other side* — comparing against `last_message_at` would be cheaper and wrong, since your own reply is the newest message and must not light up your own badge. `Conversation.awaiting_staff` is the same predicate in SQL for the inbox, and a spec pins the two against each other.
-- **`messages.sender_role` is snapshotted at write time**, derived from *position in the thread* (`sender_id == conversation.user_id`), never from `users.admin`. An admin who opens their own support thread is the participant in it, and revoking someone's admin flag must not retroactively relabel months of their replies. Same reasoning as `Registration#snapshot_refund_policy`.
-- **`messages.sender_id` is nullable with `ON DELETE SET NULL`.** A staff reply lives inside some participant's thread and has to outlive the person who wrote it (`Message#orphaned_sender?` renders it as a deleted account). There is deliberately no CHECK requiring a sender on non-system messages — that constraint and `ON DELETE SET NULL` are mutually exclusive, and it would turn deleting a staff account into a foreign key error. The model enforces it `on: :create` instead, which is the only point where it can be true.
-
-`Message.after_id` (the reconnect catch-up) and `Message.before_id` (scrolling back) both compare the `(created_at, id)` pair, not `created_at` alone: timestamps collide, and a plain `>` would drop one of a colliding pair forever while `>=` would replay it. **Their fallbacks for an unplaceable cursor deliberately differ** — `after_id` returns the whole thread, because the caller may have lost messages and a resync is recoverable where an empty result looks like data loss; `before_id` returns nothing, because falling back to the newest page would be an infinite scroll that never advances.
-
-**Participant endpoints** live under `Api::V1::Support::` (`GET`/`POST /api/v1/support/conversation`, `POST /api/v1/support/read`, `GET`/`POST /api/v1/support/messages`). `GET /support/messages` has three modes and `has_more` answers the question belonging to each: no cursor gives the newest page (`has_more` → older history exists, fetch with `?before=`), `?after=` is the reconnect catch-up (`has_more` → more still waiting), `?before=` scrolls back. `after` wins if both are given. The staff side goes under `Api::V1::Admin::` with a different base class, so an endpoint can't become reachable by the wrong audience just by sitting in the wrong file. **No route carries an `:id`** — a participant has at most one live thread, so "which conversation" is never theirs to choose and there is nothing to authorize per record. `GET /support/conversation` returns `null` rather than 404 for someone with no thread, since that's the normal state for almost everyone and the launcher polls it for its badge. The participant serializer deliberately omits any sender name: a participant needs to know which *side* spoke, not which employee, so staff messages render from `sender_role` alone.
-
-Two services carry the logic both sides share:
-
-- **`Conversations::Start`** — idempotent find-or-create. It rescues *both* `RecordInvalid` and `RecordNotUnique`, because which one fires depends on how the race lands: the uniqueness validation does its own SELECT, so the usual loser gets `RecordInvalid`, while a caller whose SELECT ran before the winner's INSERT committed is stopped by the index instead. Handling only one leaves a rare 500 that can't be reproduced on demand. A `RecordInvalid` for any *other* reason is re-raised. The INSERT sits in its own savepoint (`requires_new: true`) so that a unique violation raised inside an enclosing transaction doesn't abort it — otherwise the rescue's own follow-up SELECT would fail with `PG::InFailedSqlTransaction`, exactly the trap `Notifications::RegistrationNotifier` hit.
-- **`Conversations::PostMessage`** — the single write path, row-locked, used by both the participant endpoint and (Ticket C) the staff one. It flips status (`participant writes → open`, `staff writes → pending`, resolved threads stay resolved) and stamps the *sender's own* read timestamp — without which a staff reply would leave the thread sitting in its own "awaiting staff" inbox forever. That stamp is **monotonic** (`max` of the existing value and the message's `created_at`): `created_at` comes from the app server, so two ECS tasks with skewed clocks, or any backfill, could otherwise move a read stamp backwards and make seen messages unread again. This is also where Ticket D's broadcast and Ticket G's notification hook in, so neither has to touch a controller.
-
-`POST /support/messages` starts a thread if there isn't a live one, so a participant's first message doesn't require a separate setup call. Both POST endpoints are throttled per user in `rack_attack.rb` — and note those throttles cover only the REST path, since messages sent over the WebSocket never re-enter Rack.
-
-**Staff endpoints** are `Api::V1::Admin::ConversationsController` (`index`, `show`, `reply`, `assign`/`unassign`, `resolve`, `read`), inheriting `Admin::BaseController` so `require_admin!` — which renders 404, not 403 — is the whole authorization story. Every route takes an `:id`, unlike the participant side, because staff read *other people's* threads.
-
-- **What gets audited, and what deliberately doesn't.** `assign`, `unassign` and `resolve` write to `admin_actions`. Replies do **not** — the message row is already a permanent attributed record of what that admin did, and duplicating every reply would drown the moderation history that table exists to make queryable. `read` isn't audited either: an agent scrolling an inbox would otherwise out-produce every other audit source combined.
-- **One scope, two uses.** `Conversation.with_unread_from_participant` backs both the inbox's unread *filter* and `Conversation.unread_ids_among`, which computes the unread flag for a whole page in one query rather than one per row. Sharing the scope is the point: if the filter and the dot ever disagree, nobody reports it — the page just looks wrong. It's deliberately *not* constrained to live threads (a thread can be resolved with the participant's last message unread, and an agent wants to see that); `awaiting_staff` is `live.with_unread_from_participant` for the inbox's "needs action" sense. The role is a **bind parameter, not interpolated** — an earlier version interpolated it into a `select` and Brakeman flagged it. That was a false positive, but "safe because of where the value happens to come from" stops being true after a refactor, so binding removes the question.
-- **Assignment is a soft claim, self-only.** Anyone can take a thread someone else holds; enforcing exclusivity would strand threads on whoever went on holiday. Assigning work *to another admin* is deliberately unbuilt pending Open Question 1 in `support-chat-tickets.md` ("how many staff, and are they concurrent?") — with one or two people it's pure overhead. `assign` is refused on a **resolved** thread (a claim means "I'm working this", and there's no work left) while `unassign` is not — releasing a stale claim on a thread that got resolved while assigned is exactly the cleanup worth allowing.
-- **The admin reply route has no rack-attack throttle**, unlike the participant one. That endpoint faces arbitrary internet users; this one needs `users.admin`, granted only from a console. A per-user limit would mostly punish an agent working a backlog, and singling out chat replies would be strange when suspending a user or deleting an event aren't throttled either. The blanket `req/ip` limit still applies.
-- **`Conversations::Resolve`** closes the thread and writes the app's first `system` message (the role existed from Ticket A with nothing generating it). It sets the status *before* the note, because `PostMessage`'s status rule would otherwise flip a live thread to `pending` and put the conversation the agent just closed straight back in front of them.
-
-The `show` response carries the participant's recent registrations, payment states and refunded totals — that context beside the thread is the whole argument for building this rather than embedding a hosted widget, so it's in v1 rather than "later". Refunds are one grouped query, not a lookup per registration.
-
-**Live delivery (Ticket D)** is two channels, and the shape of them removes more problems than it adds:
-
-- **Both channels are receive-only.** Neither defines a single client-callable action — every write still goes through the throttled REST endpoints, and the socket only *delivers*. This is what makes rack-attack's blindness to channel actions a non-issue for chat: there is nothing to send over the socket, so there is nothing to rate limit. Specs assert `action_methods` is empty on both, because adding one would silently reopen that hole.
-- **`subscribed` is declared `private` in every channel, and that is load-bearing.** `ActionCable::Channel::Base` declares it private, and `.action_methods` is "public methods of this class, minus Base's public methods, **plus this class's own public methods**". Defining `subscribed` as public — which every Rails example does, and which the class's own doc-comment claims is safe — therefore puts it back into the callable set, so a client can send `{"action":"subscribed"}` on demand. Each call re-runs `stream_from`, which does `streams[broadcasting] = handler` (a Hash) but calls `pubsub.subscribe` with a *fresh* handler object every time: the previous handler stays subscribed in pubsub while no longer being tracked, so the client gets duplicate deliveries **and** `stop_all_streams` can no longer reach the orphan. Nothing in the request path can throttle it. `subscribe_to_channel` invokes `subscribed` with an implicit receiver, so private works fine. `PingChannel#echo` is the one deliberately public action in the app.
-- **`SupportInboxChannel` re-checks access on a timer** (`ACCESS_RECHECK`, 5 minutes), calling `stop_all_streams` once the account is no longer an admin. `subscribed` runs exactly once and a socket lives for hours, so without it, revoking someone's admin flag would leave them streaming every support conversation on the platform until they closed the tab or a deploy severed the connection — i.e. right through an offboarding. `ChatChannel` deliberately has no equivalent: its stream carries only that user's own messages, so a stale permission there exposes nothing they weren't already entitled to. This is the channel-level counterpart to the connection-level gap noted in `ApplicationCable::Connection` (suspension/deletion are still only checked at connect).
-- **`ChatChannel` takes no parameters at all.** It streams `support:user:<current_user.id>`, derived from the connection (which came from a single-use ticket), so there is no id for a caller to tamper with and "can this person read this stream" cannot be gotten wrong. Keying on the *user* rather than the conversation also means the subscription survives a thread being resolved and a new one starting.
-- **`SupportInboxChannel`** is admin-gated in `subscribed` and streams one shared `support:inbox` for all staff, who filter client-side. Per-conversation streams would avoid the fan-out but cost a subscribe round trip every time an agent opens a different thread; at a handful of messages a day that's the wrong trade. No privacy cost — admins can already read every conversation over REST. `Conversations::Broadcast` is the only place that would change if volume ever justifies splitting.
-- **`Conversations::Broadcast` publishes inside `ActiveRecord.after_all_transactions_commit`**, not merely after the `with_lock` block. It yields immediately outside a transaction, defers to the outermost commit inside one, and **never fires on rollback** — that last property is the point, since a caller wrapping `PostMessage` in its own transaction would otherwise announce a message that ends up not existing. A failed broadcast is logged and swallowed: the row is committed and REST will serve it, so losing a push degrades to "slightly stale", not to lost data.
-- **`Support::Serializers`** holds the wire shapes for both audiences, shared by the REST controllers and the broadcaster. The client merges live and fetched messages into one list, so drift between the two would surface as messages rendering differently depending on how they arrived.
-
-**Reaching someone who closed the tab (Ticket G)** is `Notifications::SupportNotifier`, called from `PostMessage` beside the broadcast. The socket reaches people with the panel open; this reaches everyone else.
-
-- **Only a staff message notifies, and only the participant.** The participant just typed theirs, staff have the console badge, and `system` messages (the resolve notice) don't notify at all — the thread's new state is visible the moment they next look, and a push saying "your conversation was closed" is noise rather than news.
-- **A sibling of `RegistrationNotifier`, not a method on it.** Every entry point there takes a `registration` and reads `registration.event.title`; a support thread has neither. Sharing the file would mean threading a nil registration through code written to assume one.
-- **Push is unconditional, unlike most kinds.** There is deliberately no `notify_support_reply` column: a reply is the answer to a question this person asked, which puts it with the transactional registration confirmation rather than with the payment and waitlist announcements you might reasonably mute. Offering to mute the answer to your own question would be strange. The in-app row is always written, as everywhere else.
-- **`SupportReplyFallbackEmailJob`** is enqueued with `wait: DELAY` (3 minutes) and re-checks on the way out — it mails only if `participant_last_read_at` is still older than the reply. The check has to happen on completion, not at enqueue, because at enqueue nobody has read a message written a microsecond ago. It also stands down if a *newer* staff reply exists, so three replies in a row produce one email rather than three.
-- **The email deliberately doesn't quote the reply.** Support threads carry whatever people paste, which on a payments product means card complaints and personal details; email is the least controlled channel and the most likely to be forwarded or archived unencrypted. A nudge to come read it in the app costs one click and leaks nothing.
-
-### Support chat: deletion and retention
-
-Two things a support product has to get right, both of which were missing.
-
-- **`User#discard!` is a soft delete, so no `dependent: :destroy` on `User` ever fired.** The model declares it on `conversations`, `notifications`, `push_subscriptions`, `waitlist_entries` and more, but `#discard!` is written with `update!`. Deleting your account therefore anonymised the user row and left every support message you had written intact and readable in the staff console, indefinitely. The declarations above the method read as though it didn't. **When adding a `dependent:` to `User`, decide explicitly whether `#discard!` should do it too** — the association alone does nothing on this path.
-- **What `#discard!` now destroys, and the line between the lists.** Conversations (and their messages, staff replies included), notifications, push subscriptions, waitlist entries. Registrations deliberately **stay** — they carry payment and refund history the organizer needs and the business has to keep, so the participant is anonymised in place instead. Notifications are not the harmless "you have a reply" rows they look like: `SupportNotifier` writes `preview(message.body)` into `Notification#body`, so purging the thread while keeping those would delete the archive and keep the extracts. Waitlist entries are not just hygiene either — `Waitlists::PromoteNext` has no discarded-user guard, so an entry left behind can still be promoted into a real registration for an account that asked to be deleted.
-- **Retention is `Conversation::RETENTION_PERIOD` (12 months after resolution)**, enforced by `Conversations::SweepResolved` daily. Only *resolved* threads are ever in scope: an unclosed thread is still someone's open question however old, and deleting it would answer them by making the question disappear.
-- **The clock is `resolved_at`, a column added for this.** `updated_at` moves when an agent so much as reads a thread; `last_message_at` is activity, is nullable, and moves again if the participant writes into an already-resolved thread. The migration backfills existing rows from `last_message_at` — leaving them NULL would have silently exempted the oldest data from the policy it most needs to apply to, since `Conversation.purgeable` requires the timestamp to be present.
-- **The number is published, and a spec pins it.** `spec/models/conversation_retention_spec.rb` reads the frontend locale files and asserts the privacy policy states the same figure `RETENTION_PERIOD` enforces, in both `en` and `km` (transliterating to Khmer numerals — ១២ — rather than forcing Arabic digits into Khmer prose). A backend spec reading frontend files is a deliberate boundary crossing: the failure mode it prevents is a privacy policy that makes a false statement, and a comment has never stopped anyone changing a constant.
-
-### Admin impersonation ("view as")
-
-A staff admin can open the app as a user to see what they see. Full design in `docs/impersonation-design.md`; the parts worth knowing before touching auth:
-
-- **The token keeps `user_id` meaning the *target*** and adds `act` (the admin), `imp` and `sid`. That one choice is why this feature is small: `authenticate_user!` sets `current_user` to the target, so every controller, every `authorize_creator!` and every `publicly_visible` scope already answers "what may this person see" — which is exactly what impersonation is asking. Threading a separate `impersonated_user` through the app would mean editing every authorization site, and the first one missed would be a hole. It is a **separate 30-minute token**, never a claim on the normal one, because Rally's JWTs live 30 days and a month-long skeleton key in ALB logs is not a support tool.
-- **Read-only is enforced on the HTTP verb, default-deny, inside `adopt_impersonation!`** — not as its own `before_action`, which would have to be ordered after authentication in every controller and would silently miss the one that forgot. The rule is the verb and not a list of endpoints, so a controller written next year is covered by someone who never read the design. Two consequences: **password change, email change, account deletion and admin promotion are blocked with no rule of their own** (they're writes), and `POST /cable/ticket` is a write, so **a support session gets no WebSocket** — right anyway, since staff are the other side of support chat.
-- **`require_admin!` 404s under an impersonation token, checked before `admin?`.** Without it, impersonating an admin would launder one staff member's actions through another's identity. Starting a session against an admin is *additionally* refused at the endpoint, so the intent lands in the audit log rather than being inferred from a 404 — two mechanisms deliberately, because this is the privilege escalation.
-- **The *actor* is re-checked on every request, not just the session row** (`#adoptable?`). A token proves who opened the session; it says nothing about whether they are still staff. Without this, demoting, suspending or deleting an admin left their open session working for the rest of its 30 minutes — i.e. straight through an offboarding. `SupportInboxChannel`'s `ACCESS_RECHECK` is the same lesson on the socket side.
-- **`strict:` is why the optional token readers still never render.** `authenticate_user_optional!` and `identify_current_user!` both promise that a bad token leaves `current_user` nil rather than producing an error, because a public event page and guest checkout were never gated on sign-in. A dead impersonation session therefore degrades to anonymous there. What does *not* soften is the write refusal: a **live** session on a non-GET is refused in both modes, since proceeding anonymously would let a support session perform a guest-checkout write — read-only failing open exactly where it matters.
-- **PayWay identifiers are nulled, the booleans are not** (`ApplicationController#payway_identity_fields`, the only place in `app/controllers/` allowed to serialize them — a spec fails if a third file does, because the behavioural spec can only cover endpoints someone remembered to list). `payway_hidden` rides along so the UI can say "hidden in a support session" instead of rendering the not-configured empty state, which would tell a support admin that an organizer hasn't set up payments when they have. Read-only protects the user's data from staff; it does nothing about their secrets, which are readable by definition. But "is my payment setup complete" is one of the most common support questions and `payway_configured` answers it — a flag saying *whether* a credential exists is not the credential. 403ing the whole endpoint would have hidden the answer along with the secret.
-- **The session row exists because a stateless token can't be withdrawn.** Every impersonated request re-reads `impersonation_sessions` by `sid`; ordinary requests pay nothing. `#live?` is **evaluated, never stored** (`ended_at`/`revoked_at`/`expires_at`), the same decision as `registration_closes_at` — no job has to run for a session to stop working. `ImpersonationSession.live` is the SQL counterpart and a spec pins the two against each other. One live session per admin, by partial unique index plus a matching `conditions:`.
-- **The notification and the session are created in one transaction, and `ImpersonationNotifier` deliberately does *not* swallow its failures** — unlike every other notifier, where losing a bell row beats losing a registration. Here the notification *is* the feature: "a session existed that the user was never told about" must not be a state the database can hold. Sent at the *start*, which needs no sweep job and can't be skipped by a session that ends in a crash. There is no `notify_*` preference and no push: this isn't an announcement anyone may reasonably mute, and a push would be an alarm rather than transparency.
-- **The frontend never overwrites `rally_token`.** The impersonation token lives in its own key and `getToken()` prefers it; `api.asAdmin` sends the admin's own credentials for the four impersonation endpoints (three are writes, all four are admin-console). The obvious alternative — overwrite and restore — logs the admin out of their own account on any crash mid-session, and **an admin must always be able to leave**.
-- The banner (`ImpersonationBanner`, mounted in `__root.tsx`) **doesn't disable anything**. Graying out every mutating control means a second, parallel model of "what is a write" in the client — the list that goes stale. The refusal comes from the one place that enforces it.
-
-### Notifications: three channels, one notifier
-
-`Notifications::RegistrationNotifier` is the single place the wording of each participant-facing event lives. It writes an in-app `Notification` row (what the header bell counts) and enqueues a web push; the `RegistrationMailer` call stays at the trigger site. `payment_received` alone fires from two paths — the polling endpoint and the ABA webhook — which is why the copy isn't inlined at call sites.
-
-**Preferences diverge by channel, deliberately.** The notifier is called *outside* the caller's `wants_notification?` guard, unlike the mailer. Push respects `notify_*` exactly as email does — both are interruptions. The **in-app row is always written**: the bell is something you go and look at, and suppressing it would leave someone who muted payment emails with no way to discover their payment cleared. There's a spec pinning both halves.
-
-"Real time" for the badge is two mechanisms, not one: `public/sw.js` posts a `rally:notification` message to open tabs when a push arrives, which invalidates the react-query cache immediately, plus a 60-second poll for everyone who declined permission or is on a browser without push. **Deliberately not SSE or long-polling** — production runs `RAILS_MAX_THREADS=3` on a **single** ECS task (`infrastructure/terraform.tfvars` sets `ecs_desired_count = 1`; `variables.tf` merely *defaults* to 2), so three request threads is the whole budget and a held-open Rack response per user would saturate it at single-digit concurrency. Moving Solid Queue to its own service freed CPU in that task but not threads — the three are still the ceiling. ActionCable is a different shape and is now loaded — it hijacks the socket off Puma's threads, so open connections don't consume request capacity. See "Backend: ActionCable" above.
-
-### Frontend: Google Identity Services sign-in
-
-`GoogleSignInButton` (`src/components/google-sign-in-button.tsx`), rendered on `auth.tsx`, wraps Google's official Identity Services "Sign in with Google" button. Unlike the Google Maps integration, it loads Google's `<script src="https://accounts.google.com/gsi/client">` directly rather than an npm package — no new frontend dependency.
-
-- **Gated behind `VITE_GOOGLE_CLIENT_ID`** (see `.env.example`), same fallback philosophy as `LocationPicker`: unset, the component renders `null` and `auth.tsx` hides the button + "or with email" divider entirely, leaving email/password as the only sign-in path. Must be the same Client ID as the backend's `GOOGLE_CLIENT_ID` (`infrastructure/variables.tf`'s `google_client_id` — not a secret, it's compiled into the frontend bundle either way).
-- On credential (an ID token, not an access token), the button's callback calls `authApi.google(idToken)` → `POST /api/v1/auth/google`, which does all real verification server-side — the frontend never validates or trusts the token itself.
-
-### Frontend: reCAPTCHA v3 on signup
-
-`getRecaptchaToken()` (`src/lib/recaptcha.ts`), called from `auth.tsx`'s `handleSignUp` right before `authApi.signup`, gets an invisible reCAPTCHA v3 token scoped to the `"signup"` action and sends it as `recaptcha_token`. Like `GoogleSignInButton`, it loads Google's `<script src="https://www.google.com/recaptcha/api.js?render=...">` directly rather than an npm package.
-
-- **Gated behind `VITE_RECAPTCHA_SITE_KEY`** (see `.env.example`) — unset, `getRecaptchaToken()` resolves to `undefined` immediately with no script ever loaded, and signup still works with no captcha check (the backend only enforces verification once `RECAPTCHA_SECRET_KEY` is also set — see "Backend: Rails API, JWT auth, no sessions" above). Both sides must be configured for the check to actually run; setting only one has no effect.
-- Sign-in and sign-up are otherwise plain `<form onSubmit>`s (not just `<Button onClick>`s) so pressing Enter in a field submits, same as clicking the button.
-- The sign-up form also validates a "confirm password" field client-side (`validateSignUp` in `auth.tsx`) before ever calling `authApi.signup` — there's no matching server-side confirmation param; the backend only ever sees the one `password` value.
-
-### Frontend: support chat (Ticket E)
-
-`SupportChat` (`src/components/support-chat.tsx`) is mounted once from `__root.tsx`, so the launcher is reachable from every page — someone who needs help is usually stuck where they got stuck, not willing to find a support section first. **It renders `null` for anonymous visitors**: no bubble, no poll, no socket, and no `@rails/actioncable` in their bundle.
-
-`useSupportChat` (`src/lib/use-support-chat.ts`) is the only thing that touches ActionCable; components never do. That's the seam that makes a fallback to polling a one-file change.
-
-- **The socket opens with the panel, not with the session.** The unread badge comes from a 60-second REST poll (same cadence and same reasoning as the notification bell). The WebSocket only exists while the panel is on screen, so live socket count tracks people *actively chatting* rather than people logged in — which matters on a single-task deployment. The cost is that a reply arriving while the panel is shut appears on the badge within a minute rather than instantly, which is the right latency budget for a badge.
-- **A consumer is single-use and gets rebuilt on every reconnect.** The ticket in its URL is spent the moment the server redeems it, so ActionCable's own reconnect — which replays the same URL — would retry forever against a dead credential. `useSupportChat` therefore tears the consumer down on `disconnected` and calls `openCableConsumer()` again with its own capped backoff. `rejected` is treated as terminal rather than retryable: the session itself is no longer valid.
-- **Every (re)connect refetches `?after=<last known id>` and merges.** Deploys sever every socket, so delivery is never guaranteed. Merging de-duplicates by id, because the same message legitimately arrives twice when a catch-up overlaps a live push.
-- **Sends are optimistic with a visible failed state and retry.** A composer that silently swallows a message someone spent a paragraph on is the worst outcome this component can produce; connection state is surfaced for the same reason, and "connected" renders nothing because it needs no announcement.
-- `@rails/actioncable` is dynamically imported, and its types are hand-declared in `src/types/rails-actioncable.d.ts` (the package ships none, and `compilerOptions.types` is an explicit allowlist so an ambient `@types` package wouldn't be picked up anyway).
-- The message list scrolls with `scrollTop = scrollHeight`, not `scrollTo({...})` — the latter isn't implemented on elements in jsdom, so it throws inside the effect under test, and an effect that throws takes the whole panel down.
-
-### Frontend: staff support console (Ticket F)
-
-`AdminSupport` (`src/components/admin-support.tsx`) is the fourth tab in `_authenticated/admin.tsx`, extracted to its own file like `AdminOverview` rather than added to a route file that's already ~700 lines of moderation tables. Two panes: a filterable conversation list, and the selected thread with the participant-context sidebar beside it. Access control is entirely server-side — every `adminSupportApi` call 404s for a non-admin.
-
-- **`useSupportInbox` only signals; it doesn't carry data.** `SupportInboxChannel` is one shared stream, so every admin receives every message regardless of which thread they have open. Splicing those payloads into the right list row *and* the right open thread would mean reimplementing the server's filtering and ordering client-side and getting it subtly wrong the first time a sort changes. Invalidating the queries instead costs one refetch per message — cheap at this volume, and it can't drift from what the API would return. The socket buys latency, not state.
-- It is deliberately **not** `useSupportChat`. That hook owns a participant's own thread — merging, a cursor, optimistic sends — none of which applies to an inbox, and sharing one would mean a pile of `if (staff)` branches for two things that only superficially resemble each other. Both do share `openCableConsumer`, including its rebuild-on-every-reconnect contract.
-- Filters compose and are passed straight through to the API (`status`, `assignment`, `unread`) rather than filtered client-side, so the list matches what the server considers `awaiting_staff`. `awaiting_count` is deliberately independent of the active filter — it means "how much is waiting on us", not "how many rows are on screen".
-- The **participant context sidebar** (recent registrations, payment state, refunded totals) is the visible payoff of building in-house rather than embedding a hosted widget, so a test pins it: if it stops rendering, that argument is gone.
-
-### The participant list: pagination and the summary
-
-`GET /events/:event_id/registrations` is **paginated** (`?page=`/`?per_page=`/`?q=`, `meta` envelope, same convention as `events#index`) and `GET .../registrations/summary` returns the aggregates. The two exist as a pair and neither works without the other.
-
-- **The summary is what makes pagination safe, not a nicety.** The manage dashboard used to load every registration and compute the stat cards in JavaScript with `.filter`/`.reduce` — including **revenue**. Paginating the list without moving those to SQL would have left the revenue card summing one page, under-reporting takings on a product that handles real money. `Registrations::Summary` does it in a handful of indexed counts, so it is also strictly cheaper than what it replaced (which serialised every row plus its user, profile, event types, certificate and result).
-- **Six things depended on the full list**, not just the table: the five stat cards, the plan-capacity guard, the Check-in list and its search, the per-type breakdown percentages, `EventDetailsEditor`'s registered count, and the export button's disabled state. All read the summary now. `participants` in that route is **one page** — a `.length` on it reports 25.
-- **The summary counts `kept`, deliberately not `active`.** A cancelled registration is excluded from capacity (`Event#full?`) but still shown in the organizer's list, so the figures have to describe the same rows the table does or the count under it won't match.
-- **Search moved server-side** (`Registration.search`, name or email, `sanitize_sql_like`) because filtering an array that holds only the current page finds nobody past row 25. It `left_joins(user: :profile)` rather than an inner join: a profile is auto-created with every user so an inner join works today, but a missing associated row silently dropping a paying participant from the organizer's view is much worse than showing a blank name.
-- **Nothing loads until its tab opens** — `participantsQuery` is `enabled: LIST_TABS.includes(tab)`, so Setup and Activity Logs fetch no participants at all. The summary always loads, because the stat cards sit above the tabs.
-- **`invalidateParticipants` must invalidate both queries.** Refreshing only the list would update the row an organizer just checked in while leaving the checked-in and revenue cards stale — a divergence nobody reports, because each half looks right on its own.
-
-### Frontend: the manage-event tab bar
-
-`dashboard_.events.$eventId.tsx` has nine panels but only **four top-level tabs** — Participants, Check-in, Results, Setup — plus a "More" dropdown. Branding, Registration and Certificate live inside Setup behind a nested `Tabs` (a separate Radix root, so keyboard and ARIA behaviour matches); Survey Responses, Activity Logs and Members sit in the overflow menu.
-
-- **The grid it replaced was structurally fragile.** `TabsList` was `grid grid-cols-N` with `N` looked up from a hand-maintained `TAB_GRID_CLASSES` table keyed on `visibleTabKeys.length`. Adding a trigger without adding a matching key silently sized the grid one column short and the last tab wrapped onto its own row — which is exactly what happened when the Registration tab was added gated on `tabVisibility.certificate`. Auto-width triggers in a flex row have no count to keep in sync.
-- **Nine tabs never fit anyway**: measured at 1048px of labels inside an 856px container. Four tabs plus More is 544px.
-- **The Setup sub-nav is underlined, not pills, and that is the whole point of it.** It first shipped with the default `TabsList` styling, which made it byte-for-byte the same control as the bar above it: two identical trays of pills, stacked, with nothing saying one was subordinate to the other. Filled pill for the primary level and underline for the secondary is the conventional pairing. `SETUP_TABS_LIST_CLASS`/`SETUP_TAB_TRIGGER_CLASS` override shadcn's defaults **at the call site** rather than editing `components/ui/tabs.tsx`, which stays vendored; `-mb-px` on the trigger pulls its `border-b-2` onto the list's rule so the active underline sits *in* the divider. Active state is colour plus underline and deliberately **not** a weight change — bolding the label widens it and shunts every tab after it sideways.
-- **`panelVisibility` is per-panel; a group renders only when something inside it does.** Otherwise a Viewer (no `update_event`) would get a Setup tab containing nothing. `setupPanels`/`overflowPanels` are the filtered lists, and their emptiness is what hides Setup and More respectively. The Check-in role still sees exactly Participants and Check-in and nothing else, which is that role's acceptance criterion.
-- **The Tabs root is controlled (`value`/`onValueChange`), not `defaultValue`.** The overflow items are `DropdownMenuItem`s, not `TabsTrigger`s, so selecting one has to set the value directly. The dropdown trigger deliberately sits **outside** `TabsList` — a non-trigger child inside it breaks Radix's roving focus — and shows the active overflow panel's label so the bar still indicates what's open.
-
-### Frontend: banners
-
-`HeroBanner` (`src/components/hero-banner.tsx`) is the full-bleed strip on the event detail and organizer profile pages, and the preview inside `ImageUpload`. All three go through it so they cannot drift — the event and organizer pages previously carried byte-identical `object-cover` markup, and a preview that crops differently from the live page is worse than no preview.
-
-- **`object-cover` was the bug.** It fills a fixed-height strip by cropping whatever doesn't fit, so a banner designed at one ratio and viewed at another lost its top and bottom — on a wide monitor, headline text and sponsor strips sliced in half. Organizers design these deliberately and the page was silently discarding the edges.
-- **Two layers of the same image**: behind, `object-cover` blurred and `scale-110`; in front, `object-contain` centred. The blur means there is never a hard letterbox bar, and it reads as an extension of the artwork because it is literally the same pixels. **The `scale-110` is load-bearing** — a large blur radius samples past the element's edges and leaves a lighter rim otherwise; over-scaling pushes that artifact outside the overflow clip. The backdrop is `aria-hidden` with empty alt so a screen reader hears one image, not two.
-- **Recommended banner size is 1600 × 400 (4:1)**, exported as `BANNER_RECOMMENDED_WIDTH`/`HEIGHT` and shown under the dropzone. Derived from the strip being 288px tall on desktop: at a 1280–1600px viewport a 4:1 image fills it almost exactly, leaving ~64px of blur per side. Other ratios still work — nothing is cropped, there is just more blur. (The old `ImageUpload` prop comment claimed "a wide 16:5 container", which was never true of the markup; there was no accurate size guidance anywhere before this.)
-
-### Frontend: TanStack Start file-based routing
-
-- **Production build is a static SPA, not an SSR app**, despite this being TanStack Start. `vite.config.ts` is a plain Vite config (no `@lovable.dev/vite-tanstack-config` wrapper — removed 2026-08-19; everything that package added beyond assembling `tailwindcss`/`vite-tsconfig-paths`/`tanstackStart`/`viteReact` only activated inside Lovable's own hosted sandbox, which this app never runs in) that registers no `nitro()` plugin at all, so TanStack Start's own per-request SSR build (which would otherwise default to a `cloudflare-module` preset — a Cloudflare Workers SSR target, output to `.output/`) never gets wired up. `tanstackStart.spa.enabled` instead prerenders one HTML shell at build time (crawling from `/`) to `dist/client/index.html`; every route then hydrates and renders client-side from that same shell, same as a classic Vite SPA. This matches the actual deploy target (`infrastructure/frontend.tf` — S3 + CloudFront, which can only serve static files, not run a server) — `src/server.ts`'s Workers `fetch` handler is dead code as a result, unused unless a `nitro()` plugin is added back. Only `dist/client/` gets synced to S3 (`dist/server/` is just the build-time prerender driver); see `.github/workflows/deploy.yml` and `scripts/deploy.sh`.
-- Routing follows `src/routes/README.md` conventions: every file in `src/routes/` is a route, `$id` for dynamic segments, `_layout.tsx` for layout routes, `__root.tsx` is the app shell. `routeTree.gen.ts` is generated — never hand-edit it.
-- `src/routes/_authenticated/` is a layout route gating dashboard pages behind auth (`route.tsx` checks auth state before rendering children).
-- All backend communication goes through `src/lib/api-client.ts`, a hand-written fetch wrapper (not React Query directly, though `@tanstack/react-query`'s `QueryClient` is wired into the router context). It reads `VITE_API_URL` (defaults to `http://localhost:3001` — note this differs from the Rails default port 3000, so set `VITE_API_URL=http://localhost:3000` or run Rails on 3001 locally) and stores the JWT in `localStorage` under `rally_token`. `src/lib/use-auth.tsx` wraps this in an `AuthProvider`/`useAuth()` context.
-- This project started from a Lovable/Supabase scaffold; that origin is now fully cleaned up — there's no `src/integrations/` directory anymore, and `api-client.ts`'s own header comment ("replaces all Supabase queries") is the only trace left. Real app data and auth flow through the Rails API via `api-client.ts`/`use-auth.tsx` — don't reintroduce a Supabase path for new features.
-- UI components in `src/components/ui/` are shadcn/ui primitives — prefer composing these over adding new UI libraries. These are treated as vendored/out-of-scope for app-specific work (e.g. i18n) the same way `src/components/ui/chart.tsx` already had pre-existing, unrelated TS errors before any of this session's work.
-- `SiteHeader` (`src/components/site-header.tsx`) renders a "Welcome, {name}" avatar dropdown (Edit profile / Payment settings / Sign out) once logged in, replacing a plain sign-out button; `use-auth.tsx`'s `refresh()` is called after profile saves so the header updates immediately. The dropdown's "Payment settings" item deep-links to `profile.tsx`'s `#payment-settings` anchor.
-
-### Frontend: i18n (English + Khmer)
-
-The frontend is fully wired for translation via `i18next`/`react-i18next` — every user-facing string in `src/routes/` and `src/components/*.tsx` (excluding `src/components/ui/` shadcn primitives) goes through `t("namespace.key")`, not hardcoded literals.
-
-- `src/lib/i18n.ts` initializes the i18next singleton and exports `SUPPORTED_LANGUAGES` (`en`, `km`), `setLanguage()`, and `applyStoredLanguage()`. **It always boots to English on both server and the client's first render** — the production build is one HTML shell prerendered once at build time (see "Frontend: TanStack Start file-based routing" above) and reused for every visitor, so it has no way to know any individual visitor's stored language, and applying one synchronously would cause a hydration mismatch against that shell anyway. The stored preference (`localStorage["rally_lang"]`) is only applied client-side, in a `useEffect` in `__root.tsx`, after mount.
-- Locale files are `src/i18n/locales/en.json` (source of truth) and `src/i18n/locales/km.json` (Khmer), namespaced roughly one-per-route/component (`header`, `home`, `auth`, `eventDetail`, `dashboard`, `manageEvent`, `eventForm`, `profile`, `surveyBuilder`, etc.). Keep both files in lockstep — every key added to `en.json` needs a `km.json` counterpart, or the UI silently falls back to the English string when `km` is active.
-- `LanguageSwitcher` (`src/components/language-switcher.tsx`) is the globe-icon control in `SiteHeader`; it calls `setLanguage()`, which updates `localStorage`, `i18n.changeLanguage()`, and `document.documentElement.lang`.
-- Non-component code that needs translated strings (e.g. `src/lib/event-utils.ts`'s `formatPrice`/`formatDate`/`categoryLabel`) imports the `i18n` default export directly and calls `i18n.t(...)` / reads `i18n.language`, rather than needing the `useTranslation()` hook — this only works because these functions are called synchronously inside a component's render body, so they naturally re-run on re-render after a language change.
-- Zod validation schemas (`auth.tsx`, `forgot-password.tsx`, etc.) intentionally carry no error message strings (e.g. `z.string().min(8)`, not `.min(8, "...")`) — the translated message is chosen at the `safeParse` call site based on which check failed, since zod's own message API isn't translation-aware.
-- Route `head()` meta (page `<title>`, SEO `<meta description>`) is deliberately left in English — it's not run through `t()`.
-- `EVENT_CATEGORIES` (a `{value, label}[]` constant) no longer exists in `event-utils.ts`; use `eventCategoryOptions()` (a function, so it re-evaluates per-render/per-language) or the bare `EVENT_CATEGORY_VALUES` string array instead.
-
-### Frontend: Google Maps location picker
-
-`LocationPicker` (`src/components/location-picker.tsx`), used on the create-event form (`events.new.tsx`), is a search-as-you-type Places Autocomplete input plus a draggable pin on an embedded map. It's built on `@googlemaps/js-api-loader`'s v2 functional API (`setOptions()` once, then `importLibrary("places" | "maps" | "marker")`), not the older `Loader` class.
-
-- **Gated entirely behind `VITE_GOOGLE_MAPS_API_KEY`** (see `.env.example`). Without it, `LocationPicker` renders a plain text `<Input>` instead — no map, no autocomplete, `latitude`/`longitude` stay `null` — so event creation still works with zero Google Cloud setup. Don't assume the key is present when touching this component.
-- The text input is deliberately **uncontrolled** (`defaultValue`, not `value`) once the map key is present — Google's `Autocomplete` widget writes directly into the input's DOM value when a suggestion is picked, which would fight a React-controlled value. The authoritative source for the selected address is the `place_changed` listener, not the input's `onChange` (which only tracks manual free-typing between selections).
-- Uses the classic `google.maps.Marker` (via `importLibrary("marker")`), not `AdvancedMarkerElement` — the latter needs a Cloud Console "Map ID" to be configured, which is one more setup step this intentionally avoids.
-- `tsconfig.json`'s `compilerOptions.types` explicitly includes `"google.maps"` (alongside `"vite/client"`) — without that, `@types/google.maps`'s global `google` namespace won't resolve even though the package is installed, since `types` being present at all restricts automatic global type inclusion to just what's listed.
-- `googleMapsViewUrl()` in `event-utils.ts` builds a plain `https://www.google.com/maps?q=lat,lng` link for the "View on map" links on the event detail/manage pages — this needs no API key at all (it's just an outbound link, not an embed), so those pages work regardless of whether `VITE_GOOGLE_MAPS_API_KEY` is configured.
-
-### Infrastructure
-
-Terraform (`infrastructure/`) provisions: ECS (backend container), ECR, RDS-style database, S3+CloudFront (frontend static hosting), IAM, networking, secrets. `backend/config/deploy.yml` (Kamal) is unconfigured Rails-generated scaffolding (placeholder IP, local registry) — it is not the real deploy path and shouldn't be treated as one.
-
-CD is `.github/workflows/deploy.yml`, triggered on push to `main`, gated by the same path-based change detection as CI (`dorny/paths-filter`, so a push only deploys the subproject(s) that actually changed):
-
-- **`deploy-frontend`** — `npm run build`, then `aws s3 sync` to the frontend bucket and a CloudFront invalidation.
-- **`deploy-backend`** — builds the `backend/Dockerfile` image for `linux/amd64` (Fargate), pushes it to ECR tagged `:${{ github.sha }}` and `:latest`, then `aws ecs update-service --force-new-deployment` on **both** backend services — the API first, waited to stable, then the Solid Queue worker (see "background jobs" above for why that order matters and why a skipped worker deploy is the quiet failure to watch for). This mirrors `scripts/deploy.sh --backend-only`, the manual/local equivalent (which additionally reads cluster/service/repo names from `terraform output` — CI can't do that since Terraform state isn't available there, so those are GitHub secrets instead). Migrations run automatically on container boot via `bin/docker-entrypoint` (`db:prepare`), on the web task only, not as a separate CD step. Both task definitions always point at the `:latest` tag (`infrastructure/ecs.tf` → `var.rails_image_tag`, default `"latest"`), so a deploy is just "push a new `:latest` and force ECS to re-pull it" — Terraform is what changes anything else about a task definition.
-
-Both jobs read AWS credentials from the same `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_REGION` secrets. `deploy-backend` additionally needs `ECR_REPOSITORY` (repo name, e.g. `rally-production-api` — see `infrastructure/ecr.tf`'s `${local.prefix}-api`), `ECS_CLUSTER`, `ECS_SERVICE`, and `ECS_WORKER_SERVICE` (`${local.prefix}-cluster` / `${local.prefix}-api` / `${local.prefix}-worker` by default — see `infrastructure/outputs.tf`) as repo secrets; the IAM credentials need ECR push + `ecs:UpdateService`/`ecs:DescribeServices` permissions on top of whatever the frontend job already requires.
+`bun.lock` contains neither `vitest` nor `i18next`, so it predates both the test
+suite and i18n. Dependabot only updates `package-lock.json` and CI uses
+`npm ci`. ESLint is **not** in `ci.yml`.
+
+## Which rules to read
+
+Read the file before writing code in the matching area. One file is usually
+enough; they're written to stand alone.
+
+| Working on | Read |
+|---|---|
+| Any controller, request schema, auth, `User`/`Event`/`Registration` | `.claude/rules/backend-conventions.md` |
+| Sign-up limits, closing registration, waitlist, participant list | `.claude/rules/registration-and-capacity.md` |
+| Event visibility, unlisted events, reporting, suspension, the admin queue | `.claude/rules/events-and-moderation.md` |
+| Anything touching money, PayWay, KHQR, plans | `.claude/rules/payments.md` |
+| Jobs, `recurring.yml`, Solid Queue/Cache, CloudWatch alarms | `.claude/rules/jobs-and-monitoring.md` |
+| Certificate templates, PDF rendering, bib numbers | `.claude/rules/certificates.md` |
+| ActionCable, channels, cable tickets | `.claude/rules/realtime.md` |
+| `Conversation`/`Message`, support chat either side, retention | `.claude/rules/support-chat.md` |
+| `ImpersonationSession`, "view as", anything in `ApplicationController`'s auth | `.claude/rules/impersonation.md` |
+| Notification kinds, the bell, push, notifier services | `.claude/rules/notifications.md` |
+| Routing, `api-client.ts`, `use-auth`, i18n | `.claude/rules/frontend-conventions.md` |
+| Tab bars, banners, Google Maps/sign-in, reCAPTCHA | `.claude/rules/frontend-ui.md` |
+| Terraform, ECS, deploy workflows | `.claude/rules/infrastructure.md` |
+
+Touching auth, payments or moderation? Read the file **first**, not after the
+first failing test. Those three are where a wrong assumption is expensive.
+
+## House invariants
+
+These apply everywhere, which is why they're here rather than in a rule file.
+Each one has drawn blood at least once. Each line is a trigger — go read the
+detail when it fires.
+
+**Data and schema**
+
+- Money is always `*_cents` integers. Never floats.
+- A **partial unique index needs a matching `conditions:`** on the model's
+  uniqueness validation, *and* callers must rescue both `RecordInvalid` and
+  `RecordNotUnique` — which one fires depends on how the race lands, and
+  handling one leaves a 500 nobody can reproduce.
+- Predicates like "closed", "live", "expired" are **evaluated, never stored as
+  a flag**. A boolean needs a cron job to maintain and has a window where it's
+  wrong.
+- `User#discard!` is a soft delete written with `update!`, so **no
+  `dependent: :destroy` on `User` ever fires**. Adding one means deciding
+  explicitly whether `#discard!` should do it too.
+- Migration timestamps must **not be in the future** — Rails 8.1 refuses them,
+  and hand-dating a file `YYYYMMDD010000` breaks the moment it lands past
+  midnight. Use `bin/rails generate migration`.
+
+**Rails**
+
+- Request schemas: `.maybe`, not `.value`, for anything the frontend can send
+  as null. A `.maybe` over a NOT NULL-with-default column is a **500, not a
+  422** — run params through `ApplicationRecord.reject_nils_for_defaulted_columns`.
+- Controllers hand-build JSON hashes; there are no serializers. Authorization
+  is manual per-controller; there is no Pundit.
+- `%w[]` has **no comment syntax** — a `#` line between the brackets becomes
+  array elements.
+
+**Frontend**
+
+- `routeTree.gen.ts` is generated. Never hand-edit it.
+- Every key added to `en.json` needs a `km.json` counterpart or the UI silently
+  falls back to English. Khmer omits `_one` plural forms.
+- `src/components/ui/` is vendored shadcn — override at the call site rather
+  than editing it.
+- Never use `localStorage`/`sessionStorage` in artifacts rendered in
+  conversation (the real app uses them normally).
+
+**Working agreement**
+
+- **Executable guards beat prose rules.** A rule someone must remember gets
+  violated; a spec that fails at the moment of violation doesn't. When a rule
+  has to hold across files, write the test — see the PayWay serializer guard in
+  `spec/requests/impersonation_spec.rb`.
+- **Comments that describe intent are not evidence the wiring exists.**
+  `GenerateCertificatesJob` documented a schedule it wasn't on and had never
+  run in production; its spec passed throughout because it only covered the
+  filters that were there.
+- Claude has **no git push access**. Hand over exact commands instead.
+
+## What Claude cannot verify in this sandbox
+
+Worth stating plainly, because it shapes how much a "looks right" claim is
+worth:
+
+- **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.1,
+  and `bundle install` isn't available. `ruby -c` (syntax only) is the ceiling.
+  RuboCop and Brakeman are equally unavailable.
+- **Vitest cannot run.** `node_modules/@rolldown/` ships only
+  `binding-darwin-arm64`.
+- `npx tsc --noEmit` and `npx prettier` **do** work. There is a standing
+  baseline of pre-existing TS errors (`src/components/ui/chart.tsx`,
+  `vite.config.ts`, and others) — compare counts against the baseline rather
+  than expecting zero.
+- The sandbox clock can differ from the host's by a day, so anything
+  time-sensitive (migration timestamps) needs checking on your machine.
+
+So: specs Claude writes are unrun until you run them. Treat a green claim about
+Ruby or Vitest as "syntax parses", nothing more.
