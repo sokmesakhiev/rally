@@ -14,11 +14,7 @@ the work touches it. Use the trigger table below.
 ## Project overview
 
 "Rally" is an event registration platform (running/cycling/swimming/triathlon)
-<<<<<<< HEAD
 with five parts:
-=======
-with three parts:
->>>>>>> 5f27a54 (Spict CLAUDE.md to Claude rules)
 
 - `backend/` — Rails 8.1 API-only app (Ruby 4.0.7, PostgreSQL, RSpec)
 - `frontend/` — TanStack Start (React 19, file-based routing, Vite, Tailwind v4, shadcn/ui)
@@ -41,10 +37,7 @@ bin/rails db:create db:migrate db:seed
 bundle exec rspec                              # whole suite
 bundle exec rspec spec/models/event_spec.rb    # one file
 bundle exec rspec spec/models/event_spec.rb:42 # one example
-<<<<<<< HEAD
 bin/coverage                                   # whole suite + coverage → coverage/index.html
-=======
->>>>>>> 5f27a54 (Spict CLAUDE.md to Claude rules)
 
 bin/rubocop          # lint (Omakase Rails style); -A to autocorrect
 bin/brakeman         # static security scan
@@ -54,7 +47,6 @@ bin/bundler-audit    # dependency vulnerabilities
 RSpec is the real suite (`spec/factories`, `spec/requests`, `spec/models`).
 `backend/test/` is unused Minitest scaffolding — don't add tests there.
 
-<<<<<<< HEAD
 **Coverage is `bin/coverage`, not a flag you remember.** It sets `COVERAGE=1`
 and runs the whole suite. Forgetting the env prefix produces a clean run with
 no report and no explanation — which is exactly what happened the first time,
@@ -69,8 +61,6 @@ moved lower it silently reports most of `app/` as uncovered), and there is
 deliberately **no `minimum_coverage` threshold** until someone picks one from a
 real figure.
 
-=======
->>>>>>> 5f27a54 (Spict CLAUDE.md to Claude rules)
 ### Frontend (from `frontend/`)
 
 ```
@@ -124,10 +114,7 @@ enough; they're written to stand alone.
 | Routing, `api-client.ts`, `use-auth`, i18n | `.claude/rules/frontend-conventions.md` |
 | Tab bars, banners, Google Maps/sign-in, reCAPTCHA | `.claude/rules/frontend-ui.md` |
 | Terraform, ECS, deploy workflows | `.claude/rules/infrastructure.md` |
-<<<<<<< HEAD
 | Playwright journeys, the `e2e` environment, the fake PayWay gateway | `e2e/README.md`, then `docs/e2e-testing-design.md` |
-=======
->>>>>>> 5f27a54 (Spict CLAUDE.md to Claude rules)
 
 Touching auth, payments or moderation? Read the file **first**, not after the
 first failing test. Those three are where a wrong assumption is expensive.
@@ -193,10 +180,14 @@ Worth stating plainly, because it shapes how much a "looks right" claim is
 worth:
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 - **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.7,
 =======
 - **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.1,
 >>>>>>> 5f27a54 (Spict CLAUDE.md to Claude rules)
+=======
+- **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.7,
+>>>>>>> 5cd769d (Upgrade Ruby from 4.0.1 to 4.0.7 (#490))
   and `bundle install` isn't available. `ruby -c` (syntax only) is the ceiling.
   RuboCop and Brakeman are equally unavailable.
 - **Vitest cannot run.** `node_modules/@rolldown/` ships only
