@@ -83,7 +83,8 @@ function OrganizationsPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["organizations"] });
-    if (activeSlug) queryClient.invalidateQueries({ queryKey: ["organization-members", activeSlug] });
+    if (activeSlug)
+      queryClient.invalidateQueries({ queryKey: ["organization-members", activeSlug] });
   };
 
   return (
@@ -115,9 +116,7 @@ function OrganizationsPage() {
           )}
         </div>
 
-        {listQuery.isLoading && (
-          <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>
-        )}
+        {listQuery.isLoading && <p className="mt-8 text-muted-foreground">{t("common.loading")}</p>}
 
         {!listQuery.isLoading && organizations.length === 0 && (
           <CreateFirstOrganization onCreated={invalidate} />
@@ -129,9 +128,7 @@ function OrganizationsPage() {
             <IdentityCard organization={active} onSaved={invalidate} />
             <ContactCard organization={active} onSaved={invalidate} />
             <MembersCard organization={active} />
-            {active.role === "owner" && (
-              <PaymentCard organization={active} onSaved={invalidate} />
-            )}
+            {active.role === "owner" && <PaymentCard organization={active} onSaved={invalidate} />}
           </div>
         )}
       </main>
@@ -270,8 +267,13 @@ function IdentityCard({
     setDescription(organization.description ?? "");
     setLogoUrl(organization.logo_url ?? "");
     setBannerUrl(organization.banner_url ?? "");
-  }, [organization.slug, organization.name, organization.description,
-      organization.logo_url, organization.banner_url]);
+  }, [
+    organization.slug,
+    organization.name,
+    organization.description,
+    organization.logo_url,
+    organization.banner_url,
+  ]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -411,9 +413,10 @@ function ContactCard({
     mutationFn: () =>
       organizationsApi.update(
         organization.slug,
-        Object.fromEntries(
-          Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
-        ) as Record<string, string | null>,
+        Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim() || null])) as Record<
+          string,
+          string | null
+        >,
       ),
     onSuccess: () => {
       toast.success(t("organization.toastSaved"));
@@ -671,48 +674,75 @@ function PaymentCard({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div>
-          <Label htmlFor="org-payway-merchant-id">{t("organization.merchantId")}</Label>
-          <Input
-            id="org-payway-merchant-id"
-            value={merchantId}
-            onChange={(e) => setMerchantId(e.target.value)}
-            className="mt-2"
-          />
-        </div>
-        <div>
-          <Label htmlFor="org-payway-api-key">{t("organization.apiKey")}</Label>
-          <Input
-            id="org-payway-api-key"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={
-              organization.payway_api_key_masked
-                ? t("organization.apiKeySaved", { masked: organization.payway_api_key_masked })
-                : t("organization.apiKeyPlaceholder")
-            }
-            className="mt-2"
-          />
-        </div>
-      </CardContent>
+      {/* The one place the app deliberately hides a control in a support
+          session, against the general rule that the server does the refusing.
+          The difference is that these two fields don't merely stop *working*
+          under impersonation — they'd display the wrong thing. The server
+          nulls the identifiers, so the inputs would render empty and the
+          placeholder would read "no key saved", telling a support admin (and
+          anyone watching over their shoulder on a screen share) that this
+          organizer hasn't set up payments when they have. The "Connected"
+          badge above stays, because `payway_configured` is still true and
+          that's the question support is actually asked. */}
+      {organization.payway_hidden ? (
+        <CardContent>
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            {t("organization.paymentHiddenInSupport")}
+          </p>
+        </CardContent>
+      ) : (
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="org-payway-merchant-id">{t("organization.merchantId")}</Label>
+            <Input
+              id="org-payway-merchant-id"
+              value={merchantId}
+              onChange={(e) => setMerchantId(e.target.value)}
+              className="mt-2"
+            />
+          </div>
+          <div>
+            <Label htmlFor="org-payway-api-key">{t("organization.apiKey")}</Label>
+            <Input
+              id="org-payway-api-key"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                organization.payway_api_key_masked
+                  ? t("organization.apiKeySaved", { masked: organization.payway_api_key_masked })
+                  : t("organization.apiKeyPlaceholder")
+              }
+              className="mt-2"
+            />
+          </div>
+        </CardContent>
+      )}
 
-      <CardFooter className="gap-2">
-        <Button
-          onClick={() => save.mutate()}
-          disabled={save.isPending || merchantId.trim().length === 0}
-          className="gap-2"
-        >
-          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t("common.save")}
-        </Button>
-        {organization.payway_configured && (
-          <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
-            {t("organization.disconnect")}
+      {/* Hidden with the fields, not because saving is blocked — the server
+          refuses that — but because a Save button under a notice explaining
+          there's nothing to save is just confusing. */}
+      {!organization.payway_hidden && (
+        <CardFooter className="gap-2">
+          <Button
+            onClick={() => save.mutate()}
+            disabled={save.isPending || merchantId.trim().length === 0}
+            className="gap-2"
+          >
+            {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t("common.save")}
           </Button>
-        )}
-      </CardFooter>
+          {organization.payway_configured && (
+            <Button
+              variant="outline"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+            >
+              {t("organization.disconnect")}
+            </Button>
+          )}
+        </CardFooter>
+      )}
     </Card>
   );
 }

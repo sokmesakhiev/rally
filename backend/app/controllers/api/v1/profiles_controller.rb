@@ -89,9 +89,9 @@ module Api
           # settings page loads this endpoint, not /auth/me, to render its
           # own fields.
           email_auto_generated: current_user.email_auto_generated?,
-          # Never the plaintext key — only enough to confirm what's saved.
-          payway_merchant_id: organization&.payway_merchant_id,
-          payway_api_key_masked: organization&.payway_api_key_masked,
+          # Never the plaintext key — only enough to confirm what's saved, and
+          # not even that in a support session (see #payway_identity_fields).
+          **payway_identity_fields(organization),
           payway_configured: organization&.payway_configured? || false,
           # Not a secret (it's a public key — see Organization#payway_refund_configured?)
           # so no masking needed, but the frontend only needs to know refund

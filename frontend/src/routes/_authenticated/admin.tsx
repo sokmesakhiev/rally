@@ -12,7 +12,7 @@
  * bother rendering the UI, it is not the thing keeping anyone out.
  */
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   ShieldAlert,
@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   BadgeCheck,
   ShieldOff,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -319,6 +320,12 @@ function UsersPanel() {
                           ) : (
                             <SuspendUserDialog user={u} onDone={invalidate} />
                           )}
+
+                          {/* Not offered for admins or suspended accounts —
+                              the server refuses both (see
+                              Admin::ImpersonationsController#refusal_for), so
+                              hiding the button just spares a pointless 422. */}
+                          {!u.admin && !u.suspended && <ImpersonateUserDialog user={u} />}
                         </div>
                       )}
                     </td>
@@ -418,6 +425,88 @@ function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
           >
             {suspend.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {t("admin.confirmSuspend")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Opening a staff support session — see docs/impersonation-design.md.
+ *
+ * The reason field is required (10–500 chars, enforced server-side too) and is
+ * **quoted verbatim in the email the user receives**. The dialog says so
+ * plainly, because that is the entire reason the field works: writing "checking
+ * the publish error from ticket #412" takes four seconds, and writing it
+ * knowing the organizer will read it is what makes idle curiosity feel like
+ * what it is. Free text rather than a dropdown — a dropdown is a list of
+ * excuses to click through.
+ */
+function ImpersonateUserDialog({ user }: { user: ApiAdminUser }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { startImpersonation } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const start = useMutation({
+    mutationFn: () => startImpersonation(user.id, reason.trim()),
+    onSuccess: () => {
+      setOpen(false);
+      setReason("");
+      // Leave the admin console immediately. Staying would show a 404 shell —
+      // require_admin! refuses an impersonation token — which reads as a
+      // broken page rather than as the intended "you are someone else now".
+      void navigate({ to: "/dashboard" });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const tooShort = reason.trim().length < 10;
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1">
+          <Eye className="h-3.5 w-3.5" />
+          {t("admin.impersonate")}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("admin.impersonateTitle", { email: user.email })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("admin.impersonateDesc")}</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor={`imp-reason-${user.id}`}>{t("admin.impersonateReason")}</Label>
+          <Textarea
+            id={`imp-reason-${user.id}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            minLength={10}
+            maxLength={500}
+            placeholder={t("admin.impersonateReasonPlaceholder")}
+          />
+          <p className="text-xs text-muted-foreground">{t("admin.impersonateReasonNotice")}</p>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              // Radix closes the dialog on action by default; the mutation
+              // owns closing so a failed start leaves the typed reason intact.
+              e.preventDefault();
+              start.mutate();
+            }}
+            disabled={start.isPending || tooShort}
+            className="gap-2"
+          >
+            {start.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t("admin.confirmImpersonate")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
