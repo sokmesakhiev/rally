@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# Runs the whole suite with coverage measurement on.
+#
+# This exists because `COVERAGE=1 bundle exec rspec` is a rule you have to
+# remember, and the first person to try it (me) forgot the prefix and got a
+# clean run with no report and no explanation. A script can't be forgotten —
+# same reasoning as preferring a failing test over a documented convention.
+#
+# It deliberately takes no arguments. Coverage over a *subset* of the suite is
+# worse than no coverage: `bin/coverage spec/models` would report every
+# controller, service and job as uncovered and hand you a number that means
+# nothing. If you want to run one file, use `bundle exec rspec` — without
+# coverage, which is the default for exactly this reason.
+require "rubygems"
+require "bundler/setup"
+
+unless ARGV.empty?
+  abort <<~MSG
+    bin/coverage takes no arguments — it always runs the whole suite.
+
+    A coverage figure from a subset of specs reports everything the subset
+    doesn't touch as uncovered, which is a misleading number rather than a
+    partial one. To run part of the suite, use:
+
+      bundle exec rspec #{ARGV.join(' ')}
+  MSG
+end
+
+ENV["COVERAGE"] = "1"
+
+puts "Running the full suite with coverage — see backend/coverage/index.html when it finishes."
+puts
+
+load Gem.bin_path("rspec-core", "rspec")

@@ -35,6 +35,7 @@ bin/rails db:create db:migrate db:seed
 bundle exec rspec                              # whole suite
 bundle exec rspec spec/models/event_spec.rb    # one file
 bundle exec rspec spec/models/event_spec.rb:42 # one example
+bin/coverage                                   # whole suite + coverage → coverage/index.html
 
 bin/rubocop          # lint (Omakase Rails style); -A to autocorrect
 bin/brakeman         # static security scan
@@ -43,6 +44,20 @@ bin/bundler-audit    # dependency vulnerabilities
 
 RSpec is the real suite (`spec/factories`, `spec/requests`, `spec/models`).
 `backend/test/` is unused Minitest scaffolding — don't add tests there.
+
+**Coverage is `bin/coverage`, not a flag you remember.** It sets `COVERAGE=1`
+and runs the whole suite. Forgetting the env prefix produces a clean run with
+no report and no explanation — which is exactly what happened the first time,
+so the script exists to make it unforgettable. It refuses arguments on purpose:
+coverage over a subset reports everything the subset doesn't touch as
+uncovered, which is misleading rather than partial.
+
+Two things about the SimpleCov block in `spec/spec_helper.rb`: it must stay at
+the **very top of the file** (`rails_helper` loads `config/environment` on its
+third line, and SimpleCov only instruments files required *after* it starts —
+moved lower it silently reports most of `app/` as uncovered), and there is
+deliberately **no `minimum_coverage` threshold** until someone picks one from a
+real figure.
 
 ### Frontend (from `frontend/`)
 

@@ -98,6 +98,11 @@ group :development, :test do
 end
 
 group :test do
+  # `require: false` is load-bearing: SimpleCov has to be required and started
+  # by hand at the top of spec/spec_helper.rb, before config/environment loads
+  # the app. Bundler requiring it for us would be too late to instrument
+  # anything. Opt in with COVERAGE=1; see the block in spec_helper.rb.
+  gem "simplecov", require: false
   gem "shoulda-matchers", "~> 8.0"
   gem "database_cleaner-active_record"
   gem "concurrent-ruby", "~> 1.2"
