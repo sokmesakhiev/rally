@@ -243,6 +243,17 @@ Rails.application.routes.draw do
         get  "event_reports/events/:event_id",         to: "event_reports#show"
         post "event_reports/events/:event_id/resolve", to: "event_reports#resolve"
 
+        # Staff support sessions — see docs/impersonation-design.md.
+        # `current` rather than an :id on destroy because an admin has at most
+        # one live session (partial unique index), so which one to end is never
+        # theirs to choose — the same reasoning that keeps :id off the
+        # participant side of support chat. Revoke *does* take an :id, because
+        # that one acts on somebody else's session.
+        get    "impersonations",             to: "impersonations#index"
+        post   "impersonations",             to: "impersonations#create"
+        delete "impersonations/current",     to: "impersonations#destroy"
+        post   "impersonations/:id/revoke",  to: "impersonations#revoke"
+
         get    "events",              to: "events#index"
         post   "events/:id/unpublish", to: "events#unpublish"
         # Suspend: the moderation lever stronger than unpublish — not

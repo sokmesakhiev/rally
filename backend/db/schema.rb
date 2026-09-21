@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -248,6 +248,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_010000) do
     t.index ["organization_id", "created_at"], name: "index_host_ledger_entries_on_organization_id_and_created_at"
     t.index ["source_type", "source_id"], name: "index_host_ledger_entries_on_source_type_and_source_id"
     t.check_constraint "amount_cents <> 0", name: "host_ledger_entries_amount_non_zero"
+  end
+
+  create_table "impersonation_sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "admin_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "ended_at"
+    t.datetime "expires_at", null: false
+    t.string "ip"
+    t.text "reason", null: false
+    t.datetime "revoked_at"
+    t.uuid "revoked_by_id"
+    t.datetime "updated_at", null: false
+    t.string "user_agent"
+    t.uuid "user_id", null: false
+    t.index ["admin_id"], name: "index_impersonation_sessions_on_admin_id"
+    t.index ["admin_id"], name: "index_impersonation_sessions_one_live_per_admin", unique: true, where: "((ended_at IS NULL) AND (revoked_at IS NULL))"
+    t.index ["revoked_by_id"], name: "index_impersonation_sessions_on_revoked_by_id"
+    t.index ["user_id", "created_at"], name: "index_impersonation_sessions_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_impersonation_sessions_on_user_id"
   end
 
   create_table "messages", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -559,6 +578,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_010000) do
   add_foreign_key "events", "surveys"
   add_foreign_key "events", "users", column: "creator_id"
   add_foreign_key "host_ledger_entries", "organizations"
+  add_foreign_key "impersonation_sessions", "users"
+  add_foreign_key "impersonation_sessions", "users", column: "admin_id"
+  add_foreign_key "impersonation_sessions", "users", column: "revoked_by_id", on_delete: :nullify
   add_foreign_key "messages", "conversations"
   add_foreign_key "messages", "users", column: "sender_id", on_delete: :nullify
   add_foreign_key "notifications", "events"

@@ -186,9 +186,9 @@ module Api
           # What the caller may do, so the frontend doesn't re-derive the
           # rules and drift from the server's answer.
           role: role_for(organization),
-          # Never the plaintext key — only enough to confirm what's saved.
-          payway_merchant_id: organization.payway_merchant_id,
-          payway_api_key_masked: organization.payway_api_key_masked,
+          # Never the plaintext key — only enough to confirm what's saved, and
+          # not even that in a support session (see #payway_identity_fields).
+          **payway_identity_fields(organization),
           payway_configured: organization.payway_configured?,
           payway_refund_configured: organization.payway_refund_configured?,
           events_count: organization.events.kept.count,

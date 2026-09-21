@@ -24,10 +24,26 @@ const BASE_URL = RAW_API_URL + "/api/v1";
 
 const TOKEN_KEY = "rally_token";
 
+/**
+ * A staff support session lives in its own key, and `rally_token` is never
+ * touched while one is open.
+ *
+ * The obvious implementation — overwrite `rally_token`, stash the old one,
+ * restore it on exit — has an obvious failure: a crash, a closed tab, or a
+ * refresh at the wrong moment logs the admin out of their *own* account, and
+ * the recovery is a password sign-in. An admin must always be able to leave an
+ * impersonated session, and the way to guarantee that is to never have left
+ * their own. Exiting is one `removeItem`.
+ */
+const IMPERSONATION_TOKEN_KEY = "rally_impersonation_token";
+
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
+/** Prefers the impersonation token when one is present, so every existing
+ *  caller is impersonation-aware without knowing it. */
 export function getToken(): string | null {
-  return typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(IMPERSONATION_TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
@@ -36,6 +52,25 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getImpersonationToken(): string | null {
+  return typeof window !== "undefined" ? localStorage.getItem(IMPERSONATION_TOKEN_KEY) : null;
+}
+
+export function setImpersonationToken(token: string): void {
+  if (typeof window !== "undefined") localStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
+}
+
+export function clearImpersonationToken(): void {
+  if (typeof window !== "undefined") localStorage.removeItem(IMPERSONATION_TOKEN_KEY);
+}
+
+/** The admin's own token, ignoring any impersonation in progress. Ending a
+ *  session is an admin action and a write — both refused under an
+ *  impersonation token — so it has to be sent with this. */
+export function getOwnToken(): string | null {
+  return typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
 }
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
@@ -58,9 +93,12 @@ async function request<T>(
   path: string,
   body?: unknown,
   isFormData = false,
+  /** Send the admin's own credentials rather than the impersonation token.
+   *  Only the impersonation endpoints need this — see getOwnToken. */
+  useOwnToken = false,
 ): Promise<T> {
   const headers: Record<string, string> = {};
-  const token = getToken();
+  const token = useOwnToken ? getOwnToken() : getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (!isFormData) headers["Content-Type"] = "application/json";
 
@@ -86,6 +124,11 @@ const api = {
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
   upload: <T>(path: string, form: FormData) => request<T>("POST", path, form, true),
+  asAdmin: {
+    get: <T>(path: string) => request<T>("GET", path, undefined, false, true),
+    post: <T>(path: string, body?: unknown) => request<T>("POST", path, body, false, true),
+    delete: <T>(path: string) => request<T>("DELETE", path, undefined, false, true),
+  },
 };
 
 /**
@@ -377,9 +420,16 @@ export interface ApiProfile {
   /** See ApiUser.email_auto_generated — same signal, surfaced here too
    * since profile.tsx loads this endpoint rather than /auth/me. */
   email_auto_generated: boolean;
-  /** Never the plaintext key — see payway_api_key_masked. */
+  /** Never the plaintext key — see payway_api_key_masked. Both identifiers
+   *  come back null in a staff support session; `payway_hidden` is how you
+   *  tell that apart from "nothing saved yet", which is a different fact and
+   *  a different empty state. */
   payway_merchant_id: string | null;
   payway_api_key_masked: string | null;
+  /** True only during a staff support session (see the impersonation design).
+   *  The booleans below stay truthful either way — whether a credential exists
+   *  is not the credential. */
+  payway_hidden: boolean;
   payway_configured: boolean;
   /** Opt-out notification preferences — all default true. Only cover
    * RegistrationMailer's non-essential emails; password resets, email
@@ -445,8 +495,12 @@ export const authApi = {
     return res;
   },
 
+  /** `impersonation` is present only during a staff support session. The
+   *  banner is driven from here rather than from whatever the client stashed
+   *  when the session opened, so a page refresh can't leave an admin browsing
+   *  someone's account with nothing on screen saying so. */
   async me() {
-    return api.get<{ user: ApiUser }>("/auth/me");
+    return api.get<{ user: ApiUser; impersonation?: ApiImpersonationState }>("/auth/me");
   },
 
   /** See ApiUser.terms_accepted_at's doc comment — the Google sign-in
@@ -1020,9 +1074,16 @@ export interface ApiOrganization {
   identity_complete: boolean;
   missing_identity_fields: string[];
   identity_required: boolean;
-  /** Never the plaintext key — see payway_api_key_masked. */
+  /** Never the plaintext key — see payway_api_key_masked. Both identifiers
+   *  come back null in a staff support session; `payway_hidden` is how you
+   *  tell that apart from "nothing saved yet", which is a different fact and
+   *  a different empty state. */
   payway_merchant_id: string | null;
   payway_api_key_masked: string | null;
+  /** True only during a staff support session (see the impersonation design).
+   *  The booleans below stay truthful either way — whether a credential exists
+   *  is not the credential. */
+  payway_hidden: boolean;
   payway_configured: boolean;
   payway_refund_configured: boolean;
   events_count: number;
@@ -1970,6 +2031,72 @@ export const adminEventReportsApi = {
     return api.post<{ resolved: number; status: string }>(
       `/admin/event_reports/events/${eventId}/resolve`,
       { status, note: note?.trim() || undefined },
+    );
+  },
+};
+
+/** Present on `/auth/me` only while a staff support session is driving the
+ *  request. `by_admin` is always true when the object exists — it's there so
+ *  the shape reads correctly at the call site rather than as a bare truthiness
+ *  check on an options bag. */
+export interface ApiImpersonationState {
+  by_admin: true;
+  reason: string;
+  expires_at: string;
+}
+
+export interface ApiImpersonation {
+  id: string;
+  admin: { id: string; email: string };
+  user: { id: string; email: string };
+  reason: string;
+  expires_at: string;
+  ended_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  live: boolean;
+  ip: string | null;
+  created_at: string;
+}
+
+/**
+ * Staff support sessions — see docs/impersonation-design.md.
+ *
+ * Every call here goes out with the **admin's own** token (`api.asAdmin`),
+ * never the impersonation token. Three of the four are writes, which a support
+ * session refuses outright, and all four are admin-console endpoints, which
+ * 404 under an impersonation token. Sending the right credential is what makes
+ * "exit" work from inside a session rather than erroring.
+ */
+export const adminImpersonationApi = {
+  /** Returns the session token. The caller stores it under the impersonation
+   *  key — never over `rally_token`. */
+  start(userId: string, reason: string) {
+    return api.asAdmin.post<{ impersonation: ApiImpersonation; token: string }>(
+      "/admin/impersonations",
+      { user_id: userId, reason },
+    );
+  },
+
+  /** Idempotent: a session that already expired or was revoked still resolves.
+   *  The caller's intent is "I'm done", and an error would leave the frontend
+   *  holding a dead token and a toast it can do nothing about. */
+  end() {
+    return api.asAdmin.delete<{ ended: boolean }>("/admin/impersonations/current");
+  },
+
+  list() {
+    return api.asAdmin.get<{ impersonations: ApiImpersonation[]; live_count: number }>(
+      "/admin/impersonations",
+    );
+  },
+
+  /** Any admin may revoke any live session, including another admin's — the
+   *  case this exists for is the laptop left open, and a control only its own
+   *  holder can pull isn't one. */
+  revoke(id: string) {
+    return api.asAdmin.post<{ impersonation: ApiImpersonation }>(
+      `/admin/impersonations/${id}/revoke`,
     );
   },
 };

@@ -20,6 +20,7 @@ import { applyStoredLanguage } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
 import { SiteFooter } from "../components/site-footer";
 import { SupportChat } from "../components/support-chat";
+import { ImpersonationBanner } from "../components/impersonation-banner";
 import iconUrl from "@/assets/icon.png";
 
 function NotFoundComponent() {
@@ -148,6 +149,10 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        {/* Above everything, sticky, and null for everyone not in a staff
+            support session. Outside the flex column so it can't be scrolled
+            away from. */}
+        <ImpersonationBanner />
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <div className="flex min-h-screen flex-col">
           <Outlet />

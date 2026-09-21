@@ -131,6 +131,12 @@ export function NotificationBell() {
 const NOTIFICATION_DESTINATIONS = {
   "/dashboard": { to: "/dashboard" },
   "/admin?tab=reports": { to: "/admin", search: { tab: "reports" } },
+  // `Notifications::ImpersonationNotifier`. Adding a notification kind means
+  // adding its destination here, or the row renders as a dead click that only
+  // marks itself read — which this one did until someone noticed that the
+  // notification whose entire purpose is telling you staff opened your account
+  // went nowhere.
+  "/profile": { to: "/profile" },
 } as const;
 
 function notificationDestination(url: string | null | undefined) {
