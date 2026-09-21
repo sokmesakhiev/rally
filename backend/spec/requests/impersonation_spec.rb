@@ -192,9 +192,9 @@ RSpec.describe "Admin impersonation", type: :request do
     # Read-only protects the user's data from staff; it does nothing about the
     # user's secrets, which are readable by definition.
     it "does not expose PayWay credentials, but does say whether they're set up" do
-      organization = create(:organization, owner: organizer,
-                                           payway_merchant_id: "merchant_123",
-                                           payway_api_key: "secret-key-value")
+      create(:organization, owner: organizer,
+                            payway_merchant_id: "merchant_123",
+                            payway_api_key: "secret-key-value")
 
       # The control. Without it, the nils below would pass just as happily
       # against an endpoint that never returned these keys at all — which is

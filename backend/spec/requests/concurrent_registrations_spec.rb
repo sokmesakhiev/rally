@@ -155,10 +155,9 @@ RSpec.describe "Concurrent Event Registration", type: :request do
       test_event = create(:event, organization: organization, capacity: 2, price_cents: 0)
 
       num_attempts = 10
-      mutex = Mutex.new
       barrier = Concurrent::CyclicBarrier.new(num_attempts)
 
-      threads = num_attempts.times.map do |i|
+      threads = num_attempts.times.map do
         Thread.new do
           test_user = create(:user)
           # Wait for all threads to be ready
@@ -168,11 +167,7 @@ RSpec.describe "Concurrent Event Registration", type: :request do
             post "/api/v1/events/#{test_event.id}/registrations",
               headers: auth_headers(test_user),
               params: {}
-
-            mutex.synchronize do
-              # Just record the result
-            end
-          rescue => e
+          rescue StandardError
             # Expected to fail for most attempts
           end
         end
@@ -180,7 +175,13 @@ RSpec.describe "Concurrent Event Registration", type: :request do
 
       threads.each(&:join)
 
-      # Final capacity should not exceed limit
+      # FIXME: this assertion cannot fail in a useful way. The rescue above
+      # swallows everything, so a 500 on every request — or a typo in this
+      # block — leaves zero registrations, and "zero <= 2" passes. The test
+      # would stay green if capacity enforcement were deleted outright.
+      # Making it meaningful needs the outcomes recorded and asserted
+      # (exactly 2 succeeded, the rest refused with `code: "full"`), which is
+      # a real rewrite rather than a warning fix.
       expect(test_event.registrations.active.count).to be <= 2
     end
   end
