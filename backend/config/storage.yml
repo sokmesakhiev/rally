@@ -2,6 +2,13 @@ test:
   service: Disk
   root: <%= Rails.root.join("tmp/storage") %>
 
+# The Playwright suite. Its own root, not `local` — `local` is backend/storage,
+# which holds the developer's own development uploads, and the reset endpoint
+# empties this directory on every call.
+e2e:
+  service: Disk
+  root: <%= Rails.root.join("tmp/e2e_storage") %>
+
 local:
   service: Disk
   root: <%= Rails.root.join("storage") %>
