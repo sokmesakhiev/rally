@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  supportApi,
-  type ApiSupportConversation,
-  type ApiSupportMessage,
-} from "@/lib/api-client";
+import { supportApi, type ApiSupportConversation, type ApiSupportMessage } from "@/lib/api-client";
 import { openCableConsumer, type CableConsumer, type CableSubscription } from "@/lib/support-cable";
 import { useAuth } from "@/lib/use-auth";
 
@@ -56,10 +52,20 @@ export interface PendingMessage {
  * fails permanently, chat degrades to "refresh to see replies" rather than
  * silently losing them.
  */
-export function useSupportChat({ open }: { open: boolean }) {
+export function useSupportChat({
+  open,
+  /** Passed false during a staff support session. Hooks can't be called
+   *  conditionally, so the caller can't just stop calling this one — and
+   *  without the flag the badge would keep polling a participant's unread
+   *  count on behalf of the admin reading over their shoulder. */
+  enabled: callerEnabled = true,
+}: {
+  open: boolean;
+  enabled?: boolean;
+}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = Boolean(user);
+  const enabled = Boolean(user) && callerEnabled;
 
   const [messages, setMessages] = useState<ApiSupportMessage[]>([]);
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -208,7 +214,10 @@ export function useSupportChat({ open }: { open: boolean }) {
           },
           received(data: unknown) {
             if (mine !== generationRef.current) return;
-            const payload = data as { message?: ApiSupportMessage; conversation?: ApiSupportConversation };
+            const payload = data as {
+              message?: ApiSupportMessage;
+              conversation?: ApiSupportConversation;
+            };
             if (payload.message) mergeMessages([payload.message]);
             if (payload.conversation) {
               queryClient.setQueryData(SUPPORT_CONVERSATION_KEY, {

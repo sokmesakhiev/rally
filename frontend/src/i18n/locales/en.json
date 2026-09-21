@@ -896,7 +896,14 @@
     "toastEventDeleted": "Event deleted",
     "paginationLabel": "Table pagination",
     "tabSupport": "Support",
-    "tabReports": "Reports"
+    "tabReports": "Reports",
+    "impersonate": "View as",
+    "impersonateTitle": "View Rally as {{email}}?",
+    "impersonateDesc": "You'll see their account exactly as they do, for 30 minutes. The session is read-only — you can't change anything, and their payment credentials stay hidden.",
+    "impersonateReason": "Why do you need to look?",
+    "impersonateReasonPlaceholder": "e.g. Checking the publish error they reported in ticket #412",
+    "impersonateReasonNotice": "This is emailed to them word for word, along with the time you opened the session.",
+    "confirmImpersonate": "Start session"
   },
   "legal": {
     "lastUpdated": "Draft dated {{date}}",
@@ -998,7 +1005,8 @@
       "owner": "Owner",
       "admin": "Admin",
       "member": "Member"
-    }
+    },
+    "paymentHiddenInSupport": "Payment credentials are hidden in a support session. The organizer's saved details are unchanged — nothing here has been cleared."
   },
   "presentedBy": {
     "label": "Presented by",
@@ -1138,5 +1146,12 @@
       "discrimination": "Excluding or targeting people by race, religion, gender or similar.",
       "other": "Something that doesn't fit the categories above."
     }
+  },
+  "impersonation": {
+    "viewingAs": "Viewing Rally as {{name}}",
+    "readOnly": "Read-only support session",
+    "timeLeft": "{{time}} left",
+    "expired": "Session expired",
+    "exit": "Exit"
   }
 }

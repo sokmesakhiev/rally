@@ -1,0 +1,20 @@
+Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,
+
+A Rally support admin opened your account on <%= @started_at.strftime("%d %B %Y at %H:%M UTC") %>.
+
+The reason they gave was:
+
+  <%= @reason %>
+
+What this does and doesn't allow:
+
+  * They can see your account exactly as you see it, for up to 30 minutes.
+  * They cannot change anything. The session is read-only.
+  * They cannot see your payment credentials.
+  * They cannot sign in as you again without this email being sent again.
+
+If this doesn't look right, reply to this email or open the chat in Rally and
+tell us:
+<%= @support_url %>
+
+— The Rally team

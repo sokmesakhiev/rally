@@ -49,6 +49,21 @@ module UserPayload
       }
     }
     payload[:token] = token if token
+
+    # Only present when this request is a staff support session. It's what
+    # survives a page refresh: the banner is driven from /auth/me rather than
+    # from whatever the client stashed when the session opened, so reloading
+    # mid-session can't leave an admin browsing someone's account with no
+    # indication that they are. Not a security boundary either — the server
+    # enforces read-only regardless of what the client renders.
+    if respond_to?(:impersonating?, true) && impersonating?
+      payload[:impersonation] = {
+        by_admin: true,
+        reason: @impersonation.reason,
+        expires_at: @impersonation.expires_at
+      }
+    end
+
     payload
   end
 end

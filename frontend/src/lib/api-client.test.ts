@@ -2,12 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
   ApiError,
+  adminImpersonationApi,
   authApi,
   eventsApi,
   registrationsApi,
   getToken,
+  getOwnToken,
   setToken,
   clearToken,
+  setImpersonationToken,
+  clearImpersonationToken,
 } from "@/lib/api-client";
 
 /**
@@ -55,6 +59,51 @@ describe("api-client", () => {
       clearToken();
 
       expect(getToken()).toBeNull();
+    });
+
+    /**
+     * The two-key arrangement that keeps a staff support session from
+     * destroying the admin's own login. Each assertion here is a failure mode
+     * that has a real cost:
+     *
+     *   * if the impersonation token didn't win, the admin would keep browsing
+     *     as themselves while the banner claimed otherwise;
+     *   * if starting a session wrote over `rally_token`, any crash mid-session
+     *     would log the admin out and the recovery would be a password
+     *     sign-in;
+     *   * if `getOwnToken` followed the same preference, "Exit" would send the
+     *     impersonation token to an admin endpoint that 404s it, and the way
+     *     out of a session would be the one request that can't work.
+     */
+    it("prefers the impersonation token without disturbing the admin's own", () => {
+      setToken("admin-token");
+      setImpersonationToken("session-token");
+
+      expect(getToken()).toBe("session-token");
+      expect(getOwnToken()).toBe("admin-token");
+      expect(localStorage.getItem("rally_token")).toBe("admin-token");
+
+      clearImpersonationToken();
+
+      expect(getToken()).toBe("admin-token");
+      expect(getOwnToken()).toBe("admin-token");
+
+      clearToken();
+    });
+
+    it("sends the admin's own token to the impersonation endpoints", async () => {
+      setToken("admin-token");
+      setImpersonationToken("session-token");
+      (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+        jsonResponse({ ended: true }),
+      );
+
+      await adminImpersonationApi.end();
+
+      expect(lastCall().headers["Authorization"]).toBe("Bearer admin-token");
+
+      clearImpersonationToken();
+      clearToken();
     });
   });
 

@@ -39,6 +39,7 @@ class Notification < ApplicationRecord
     support_reply
     waitlist_closed
     event_reported
+    account_impersonated
   ].freeze
 
   # How many the bell shows before giving up on precision. A badge reading

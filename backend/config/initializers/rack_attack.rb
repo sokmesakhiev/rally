@@ -161,6 +161,17 @@ class Rack::Attack
     end
   end
 
+  # Opening a staff support session. The admin reply endpoint deliberately has
+  # no throttle — that one only punishes an agent working a backlog — but this
+  # is different in kind: it is the app's authentication bypass, every use
+  # emails a customer, and there is no support workflow that needs more than a
+  # handful an hour. A limit here is a tripwire on a compromised admin session
+  # as much as a rate limit; ten in an hour is somebody working through a list
+  # of accounts, which is exactly what should stop and be noticed.
+  throttle("impersonations/admin", limit: 10, period: 1.hour) do |req|
+    user_id_from(req) if req.post? && req.path == "/api/v1/admin/impersonations"
+  end
+
   # ── Write-heavy authenticated endpoints ──
   #
   # Registration creation and uploads both cost us storage/DB work. Keyed on

@@ -1,0 +1,28 @@
+<p>Hi<%= @user.profile&.display_name.present? ? " #{@user.profile.display_name}" : "" %>,</p>
+
+<p>
+  A Rally support admin opened your account on
+  <strong><%= @started_at.strftime("%d %B %Y at %H:%M UTC") %></strong>.
+</p>
+
+<p>The reason they gave was:</p>
+
+<blockquote style="margin: 0 0 1em; padding: 0.75em 1em; border-left: 3px solid #ddd;">
+  <%= @reason %>
+</blockquote>
+
+<p>What this does and doesn't allow:</p>
+
+<ul>
+  <li>They can see your account exactly as you see it, for up to 30 minutes.</li>
+  <li>They cannot change anything. The session is read-only.</li>
+  <li>They cannot see your payment credentials.</li>
+  <li>They cannot sign in as you again without this email being sent again.</li>
+</ul>
+
+<p>
+  If this doesn't look right, reply to this email or
+  <a href="<%= @support_url %>">open the chat in Rally</a> and tell us.
+</p>
+
+<p>— The Rally team</p>

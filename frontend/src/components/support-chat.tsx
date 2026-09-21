@@ -20,15 +20,22 @@ import { cn } from "@/lib/utils";
  * who'd then have to sign up mid-question would be worse than not offering it.
  */
 export function SupportChat() {
-  const { user } = useAuth();
+  const { user, impersonation } = useAuth();
   const [open, setOpen] = useState(false);
 
   // Hooks can't be called conditionally, so the gate is inside: with no user
   // the hook disables its query and never opens a socket.
-  const chat = useSupportChat({ open });
+  const chat = useSupportChat({ open, enabled: !impersonation });
   const { t } = useTranslation();
 
   if (!user) return null;
+
+  // Hidden in a staff support session. Staff are the *other side* of this
+  // conversation, so reading a participant's thread through the participant's
+  // own launcher is both unnecessary (the admin console shows every thread)
+  // and confusing (the composer would look available, while the server refuses
+  // the POST that sends and the POST that opens the socket).
+  if (impersonation) return null;
 
   return (
     <>
@@ -105,7 +112,13 @@ function SupportChatPanel({
           <p className="text-sm font-semibold">{t("supportChat.title")}</p>
           <ConnectionLine state={chat.connection} />
         </div>
-        <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label={t("common.close")}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label={t("common.close")}
+        >
           <X className="h-4 w-4" />
         </Button>
       </header>
@@ -137,7 +150,11 @@ function SupportChatPanel({
               {message.body}
             </p>
           ) : (
-            <Bubble key={message.id} mine={message.sender_role === "participant"} body={message.body} />
+            <Bubble
+              key={message.id}
+              mine={message.sender_role === "participant"}
+              body={message.body}
+            />
           ),
         )}
 
@@ -191,7 +208,12 @@ function SupportChatPanel({
             }
           }}
         />
-        <Button type="submit" size="icon" disabled={!draft.trim()} aria-label={t("supportChat.send")}>
+        <Button
+          type="submit"
+          size="icon"
+          disabled={!draft.trim()}
+          aria-label={t("supportChat.send")}
+        >
           <Send className="h-4 w-4" />
         </Button>
       </form>
