@@ -93,7 +93,7 @@ RSpec.describe Waitlists::PromoteNext do
       type = event.event_types.create!(name: "5K", capacity: 1, position: 0)
       holder = create(:registration, event: event)
       holder.registration_event_types.create!(event_type: type)
-      waiter = create(:waitlist_entry, event: event, event_type_ids: [ type.id ])
+      create(:waitlist_entry, event: event, event_type_ids: [ type.id ])
 
       holder.destroy!
       promoted = described_class.call(event).first

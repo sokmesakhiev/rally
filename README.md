@@ -13,7 +13,7 @@ The frontend ships in English and Khmer.
 
 | | |
 |---|---|
-| Backend | Rails 8.1 (Ruby 4.0.1), API-only, PostgreSQL, JWT auth |
+| Backend | Rails 8.1 (Ruby 4.0.7), API-only, PostgreSQL, JWT auth |
 | Frontend | TanStack Start (React 19), file-based routing, Vite, Tailwind v4, shadcn/ui |
 | Payments | ABA PayWay (KHQR) |
 | Infrastructure | Terraform on AWS — ECS (Fargate), RDS, S3 + CloudFront, Secrets Manager |
@@ -35,7 +35,7 @@ subproject's jobs when files under that subproject changed.
 
 ### Prerequisites
 
-- Ruby 4.0.1 (see `backend/.ruby-version`) and PostgreSQL
+- Ruby 4.0.7 (see `backend/.ruby-version`) and PostgreSQL
 - Node.js 24+ and `bun` (or `npm`)
 
 ### Backend

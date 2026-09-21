@@ -16,7 +16,7 @@ the work touches it. Use the trigger table below.
 "Rally" is an event registration platform (running/cycling/swimming/triathlon)
 with three parts:
 
-- `backend/` — Rails 8.1 API-only app (Ruby 4.0.1, PostgreSQL, RSpec)
+- `backend/` — Rails 8.1 API-only app (Ruby 4.0.7, PostgreSQL, RSpec)
 - `frontend/` — TanStack Start (React 19, file-based routing, Vite, Tailwind v4, shadcn/ui)
 - `infrastructure/` — Terraform for AWS (ECS backend, S3+CloudFront frontend)
 
@@ -144,7 +144,7 @@ detail when it fires.
 Worth stating plainly, because it shapes how much a "looks right" claim is
 worth:
 
-- **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.1,
+- **RSpec cannot run.** The sandbox has Ruby 3.0 against this project's 4.0.7,
   and `bundle install` isn't available. `ruby -c` (syntax only) is the ceiling.
   RuboCop and Brakeman are equally unavailable.
 - **Vitest cannot run.** `node_modules/@rolldown/` ships only

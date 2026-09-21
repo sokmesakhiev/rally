@@ -114,7 +114,6 @@ class ConcurrentRegistrationLoadTest
 
   def execute_request(user_index)
     start_time = Time.now
-    user = create_test_user(user_index)
 
     begin
       uri = URI("#{BASE_URL}/api/v1/events/#{@event_id}/registrations")
@@ -132,6 +131,10 @@ class ConcurrentRegistrationLoadTest
         read_timeout: 30
       )
 
+      # No Authorization header on purpose: this exercises guest checkout, so
+      # there are no accounts to create or sign in first. (There used to be a
+      # `create_test_user` call here whose method body was `nil` — it read as
+      # setup while doing nothing at all.)
       request = Net::HTTP::Post.new(uri.path, { 'Content-Type' => 'application/json' })
       request.body = {
         guest: {
@@ -166,12 +169,6 @@ class ConcurrentRegistrationLoadTest
         }
       end
     end
-  end
-
-  def create_test_user(index)
-    # In a real scenario, you'd create actual users or use existing ones
-    # For load testing, we're using guest checkout
-    nil
   end
 
   def print_results(total_time)
