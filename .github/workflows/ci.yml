@@ -15,6 +15,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      infrastructure: ${{ steps.filter.outputs.infrastructure }}
 
     steps:
       - uses: actions/checkout@v7
@@ -27,6 +28,8 @@ jobs:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+            infrastructure:
+              - 'infrastructure/**'
   vitest:
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
@@ -144,6 +147,9 @@ jobs:
         run: bin/rubocop -f github
 
   Rspec:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+
     runs-on: ubuntu-latest
 
     defaults:
@@ -197,3 +203,31 @@ jobs:
           SELENIUM_REMOTE_URL: http://localhost:4444/wd/hub
         run: |
           bundle exec rspec
+
+  Terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infrastructure == 'true'
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infrastructure
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.0
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
