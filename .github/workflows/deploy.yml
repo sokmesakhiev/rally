@@ -61,10 +61,16 @@ jobs:
         run: npm run build
         env:
           # VITE_* vars are inlined at build time, so anything the bundle needs
-          # has to be present here rather than at runtime. All optional — each
-          # feature degrades gracefully when its var is empty (see
-          # frontend/.env.example).
+          # has to be present here rather than at runtime. All optional *except*
+          # VITE_BASE_URL — each feature degrades gracefully when its var is
+          # empty (see frontend/.env.example).
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # NOT optional: `npm run build` runs scripts/build-sitemap.mjs, which
+          # exits non-zero without it. Every <loc> in sitemap.xml has to be an
+          # absolute URL, and the previous version defaulted to "" and shipped
+          # relative ones that crawlers discard. Set this repo variable to the
+          # public CloudFront origin, e.g. https://rally.example.
+          VITE_BASE_URL: ${{ vars.VITE_BASE_URL }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           # Site key, not the secret — same "not actually sensitive, meant to
