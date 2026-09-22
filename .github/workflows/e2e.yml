@@ -1,0 +1,165 @@
+name: E2E
+
+# **Deliberately not `on: pull_request`.** See docs/e2e-testing-design.md D3.
+#
+# End-to-end suites are slow and occasionally flaky, and a flaky test blocking
+# an unrelated PR teaches people to bypass the pipeline — which costs more
+# than the suite is worth. So it runs on demand and once a night.
+#
+# The nightly half is the part that matters. "Not in CI" usually decays into
+# "nobody knows when it broke", and this repository has the canonical example:
+# GenerateCertificatesJob documented a schedule it wasn't on, had never run in
+# production, and its spec passed throughout. A nightly run costs nothing on
+# anyone's critical path and bounds the damage to one day.
+on:
+  workflow_dispatch:
+    inputs:
+      journey:
+        description: "Path filter, e.g. journeys/03-register-and-pay.spec.ts (blank runs all)"
+        required: false
+        type: string
+  schedule:
+    # 18:00 UTC — 01:00 in Phnom Penh, so a failure is waiting in the morning
+    # rather than arriving mid-afternoon.
+    - cron: "0 18 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  # A nightly run that overlaps a manual one would have both truncating the
+  # same database — the suite runs `workers: 1` for exactly that reason, and
+  # the reason doesn't stop at the process boundary.
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      # postgres/postgres is what config/database.yml's `default:` block
+      # expects, so the e2e section needs no DATABASE_URL override — it
+      # names `rally_e2e` and inherits the credentials.
+      PGHOST: localhost
+      PGPORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: backend/.ruby-version
+          bundler-cache: true
+          working-directory: backend
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+
+      # libvips: Active Storage's variant_processor is :vips under
+      # config.load_defaults 8.1, and ruby-vips is bindings only — the native
+      # library comes from apt, same as the Rspec job and the production
+      # image.
+      - name: Install native dependencies
+        run: sudo apt-get install -y libpq-dev libvips
+
+      # The frontend is served by Vite in this suite, so its own dependencies
+      # are needed too. npm ci in both places — never npm install — so CI
+      # can't silently resolve different versions than a local run.
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      # --with-deps pulls the system libraries headless Chromium needs on a
+      # bare runner. Chromium only: see Open Question 1 in the design doc.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      # playwright.config.ts starts Rails, Vite and the fake gateway itself
+      # and runs `db:prepare` on the way up, so there is no database step
+      # here. That is the same path a developer takes locally, which is the
+      # point — a workflow with its own bespoke setup is a workflow that
+      # passes while `npm test` is broken.
+      - name: Run the journeys
+        working-directory: e2e
+        env:
+          CI: "true"
+          # Through the environment and quoted, never interpolated straight
+          # into the shell with `${{ }}`. A workflow_dispatch input is
+          # attacker-controlled text as far as the runner is concerned, and
+          # `${{ inputs.journey }}` in a `run:` block is the textbook script
+          # injection — the fact that only collaborators can dispatch this is
+          # a reason it's low-risk, not a reason to write it the wrong way.
+          JOURNEY: ${{ inputs.journey }}
+        run: |
+          # Branch rather than always passing "$JOURNEY": on the nightly
+          # schedule the input is unset, and `playwright test ""` is a filter
+          # matching no files, which exits non-zero. The nightly run would
+          # fail every night with "no tests found".
+          if [ -n "$JOURNEY" ]; then
+            npx playwright test "$JOURNEY"
+          else
+            npx playwright test
+          fi
+
+      # `always()`, because the trace is worth most from the run that failed.
+      # Retention is short: a trace nobody has looked at in a week is a trace
+      # nobody is going to look at, and these are large.
+      - name: Upload traces and report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Same channel as deploys, and the same shape — see deploy.yml's
+      # notification steps. continue-on-error so a broken bot token can't
+      # flip a red run green or a green run red; --fail-with-body so a
+      # Telegram API error still surfaces as a step warning instead of
+      # vanishing (a plain `curl --silent` exits 0 whatever Telegram says).
+      #
+      # **Failure only.** A nightly success message every single night is a
+      # message people learn to scroll past, and the next one they scroll
+      # past is the failure.
+      - name: Notify Telegram — failure
+        if: failure()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MESSAGE=$(printf '❌ Rally end-to-end journeys failed\nRepo: %s\nBranch: %s\nCommit: %s\nRun (traces attached): %s' \
+            "$REPO" "$BRANCH" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$MESSAGE"

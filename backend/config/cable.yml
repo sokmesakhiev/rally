@@ -8,6 +8,17 @@ development:
 test:
   adapter: test
 
+# The Playwright suite. `async` (in-process pub/sub), not `solid_cable`, which
+# is a `:production` bundle-group gem and isn't loaded here — and there is no
+# `cable` database in this environment for it to poll either.
+#
+# Support chat is out of scope for the v1 journeys (see the design doc), so
+# nothing exercises this yet. It is declared because ActionCable is loaded
+# unconditionally in config/application.rb and an environment missing from
+# this file has no adapter to build.
+e2e:
+  adapter: async
+
 production:
   adapter: solid_cable
   connects_to:

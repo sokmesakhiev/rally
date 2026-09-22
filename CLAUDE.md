@@ -75,6 +75,23 @@ npm run format       # prettier --write .
 suite and i18n. Dependabot only updates `package-lock.json` and CI uses
 `npm ci`. ESLint is **not** in `ci.yml`.
 
+### End-to-end (from `e2e/`)
+
+```
+npm install              # its own package — Playwright never enters frontend/'s tree
+npm run install:browsers # chromium, once per machine
+npm test                 # starts fake gateway + Rails(e2e) + Vite, then runs
+```
+
+Playwright against a real browser, a real Rails server and a real database.
+`npm test` starts all three servers itself and creates/migrates `rally_e2e` on
+the way up, so there is no setup step to forget. **Deliberately not on
+`pull_request`** — `workflow_dispatch` plus a nightly cron.
+
+`RAILS_ENV=e2e` is a value nothing deployed ever sets, and `POST /api/e2e/reset`
+(which truncates every table) is drawn inside `if Rails.env.e2e?`. A request
+spec fails if that stops being true.
+
 ## Which rules to read
 
 Read the file before writing code in the matching area. One file is usually
@@ -95,6 +112,7 @@ enough; they're written to stand alone.
 | Routing, `api-client.ts`, `use-auth`, i18n | `.claude/rules/frontend-conventions.md` |
 | Tab bars, banners, Google Maps/sign-in, reCAPTCHA | `.claude/rules/frontend-ui.md` |
 | Terraform, ECS, deploy workflows | `.claude/rules/infrastructure.md` |
+| Playwright journeys, the `e2e` environment, the fake PayWay gateway | `e2e/README.md`, then `docs/e2e-testing-design.md` |
 
 Touching auth, payments or moderation? Read the file **first**, not after the
 first failing test. Those three are where a wrong assumption is expensive.
@@ -168,6 +186,13 @@ worth:
   baseline of pre-existing TS errors (`src/components/ui/chart.tsx`,
   `vite.config.ts`, and others) — compare counts against the baseline rather
   than expecting zero.
+- **Call those binaries by path, not through `npx`.** `npx <name>` for a
+  package that isn't installed fetches it and rewrites the nearest
+  `package-lock.json` — the sandbox's npm strips the `libc` fields from
+  optional deps as it goes, which silently breaks `npm ci` everywhere else.
+  It has happened twice. Use `frontend/node_modules/.bin/tsc` and
+  `.../prettier`, and `git diff --stat -- '*package-lock.json'` before
+  handing anything over.
 - The sandbox clock can differ from the host's by a day, so anything
   time-sensitive (migration timestamps) needs checking on your machine.
 
