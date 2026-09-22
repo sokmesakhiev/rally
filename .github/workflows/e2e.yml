@@ -129,7 +129,7 @@ jobs:
       # nobody is going to look at, and these are large.
       - name: Upload traces and report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}
           path: |
