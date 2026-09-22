@@ -30,6 +30,32 @@
 # to write down — do not copy this pattern into production.
 ENV["SECRET_KEY_BASE"] ||= "e2e" * 32
 
+# JWT_SECRET, for the same reason and with one extra wrinkle.
+#
+# `lib/json_web_token.rb` reads it at *load* time:
+#
+#     SECRET_KEY = ENV.fetch("JWT_SECRET").presence || Rails.application.secret_key_base
+#
+# and `ENV.fetch` with no default **raises** when the key is absent, so the
+# `|| secret_key_base` fallback only ever fires for a key that is set but
+# blank. `config.eager_load = true` below means that line runs during boot,
+# which is why an unset JWT_SECRET is a stack trace on `bin/rails server`
+# rather than a 500 on the first sign-in.
+#
+# Development and test never notice, because `dotenv-rails` (Gemfile's
+# `:development, :test` group) loads backend/.env for them. This environment
+# is the first one to boot without it — so it has to say the value itself.
+#
+# **Deliberately not "fixing" that fetch to fall back quietly.** Crashing on
+# boot is the better behaviour for production: a silent fall back to
+# secret_key_base would re-key every issued token and sign out every user on
+# the platform, which is a worse Tuesday than a failed deploy.
+#
+# Fixed rather than random, so tokens minted before a server restart still
+# decode — a journey that signs in, restarts nothing, and then finds itself
+# logged out would be a confusing way to learn that.
+ENV["JWT_SECRET"] ||= "e2e-jwt-secret-not-a-real-key"
+
 Rails.application.configure do
   config.secret_key_base = ENV["SECRET_KEY_BASE"]
 

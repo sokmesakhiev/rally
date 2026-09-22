@@ -192,11 +192,40 @@ const pay = async (body) => {
   }
 };
 
+// GET /__transactions — everything this gateway has been asked to charge,
+// newest first.
+//
+// Exists because **Rally never shows the transaction id to a human.** The
+// plan-payment panel renders a QR canvas and nothing else, so a journey that
+// wants to settle the payment it just started has no way to name it.
+//
+// The alternative was leaking the id into the DOM for the tests' benefit,
+// which would mean production markup carrying a field that exists only
+// because the suite needed it. Asking the gateway instead keeps that
+// entirely inside the test harness — and it is also more faithful, since a
+// real payer never sees a tran_id either.
+//
+// The amount comes back too, so a journey can assert Rally asked to charge
+// the right money for the plan it picked. That assertion is worth more than
+// it looks: the amount is computed server-side from Event::PLANS minus
+// anything already paid, and nothing in the UI displays it before payment.
+const listTransactions = () =>
+  [...transactions.entries()].reverse().map(([tranId, tran]) => ({
+    tran_id: tranId,
+    amount: tran.amount,
+    currency: tran.currency,
+    status: tran.status,
+  }));
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
   if (req.method === "GET" && url.pathname === "/__health") {
     return json(res, 200, { ok: true, transactions: transactions.size });
+  }
+
+  if (req.method === "GET" && url.pathname === "/__transactions") {
+    return json(res, 200, { transactions: listTransactions() });
   }
 
   if (req.method !== "POST") {

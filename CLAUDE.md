@@ -186,6 +186,13 @@ worth:
   baseline of pre-existing TS errors (`src/components/ui/chart.tsx`,
   `vite.config.ts`, and others) — compare counts against the baseline rather
   than expecting zero.
+- **Call those binaries by path, not through `npx`.** `npx <name>` for a
+  package that isn't installed fetches it and rewrites the nearest
+  `package-lock.json` — the sandbox's npm strips the `libc` fields from
+  optional deps as it goes, which silently breaks `npm ci` everywhere else.
+  It has happened twice. Use `frontend/node_modules/.bin/tsc` and
+  `.../prettier`, and `git diff --stat -- '*package-lock.json'` before
+  handing anything over.
 - The sandbox clock can differ from the host's by a day, so anything
   time-sensitive (migration timestamps) needs checking on your machine.
 

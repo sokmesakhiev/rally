@@ -1,7 +1,9 @@
 # Rally end-to-end testing — design
 
-**Status:** accepted · **Date:** 2026-09-21 · **Scope:** v1
-**Progress:** Phase 0 built (see `e2e/README.md`); Phases 1–3 outstanding.
+**Status:** implemented · **Date:** 2026-09-21 · **Scope:** v1
+**Progress:** all four phases built (see `e2e/README.md`). **Not yet run** —
+the journeys were written against the components rather than against a
+passing browser.
 
 Rally has 1,728 RSpec examples covering the API at 94% line / 81% branch, and
 a frontend suite covering the components that carry logic. Neither answers the
@@ -95,8 +97,12 @@ Playwright is a separate process from Rails; it cannot call
 `DatabaseCleaner.clean`. So the e2e environment mounts one route:
 
 ```
-POST /api/e2e/reset    { scenario: "organizer_with_published_event" }
+POST /api/e2e/reset    { scenario: "paid_event" }
 ```
+
+*(Scenario names as built: `empty`, `participant`, `organizer`, `draft_event`,
+`paid_event`, `full_event`, `finished_event`, `admin` — see
+`backend/db/e2e_scenarios.rb`.)*
 
 It truncates and re-seeds to a named scenario, returning the ids and
 credentials the test needs.
@@ -168,10 +174,11 @@ requiring a second browser context.
 ```
 e2e/
   playwright.config.ts        # projects, webServer, trace on first retry
+  urls.ts                     # the three ports, in one place
   fixtures/
-    rally.ts                  # test fixture: resets to a scenario, returns ids
-    api.ts                    # direct API calls for setup and assertions
+    rally.ts                  # reset, signIn, pay, apiAs — the whole fixture
   journeys/
+    00-smoke.spec.ts          # the harness itself
     01-publish-free-event.spec.ts
     02-publish-paid-event.spec.ts
     03-register-and-pay.spec.ts
@@ -179,13 +186,20 @@ e2e/
     05-race-day.spec.ts
     06-moderation.spec.ts
   support/
-    fake-payway/              # the stub gateway (node, ~100 lines)
+    fake-payway/              # the stub gateway (node, one file)
   README.md                   # how to run it, what to do when it fails
 backend/
   config/environments/e2e.rb
-  app/controllers/api/e2e/    # reset + scenarios, e2e env only
+  app/controllers/api/e2e/    # reset, e2e env only
   db/e2e_scenarios.rb         # the named worlds
+  spec/models/e2e_scenarios_spec.rb      # every scenario builds
+  spec/requests/e2e_reset_absent_spec.rb # the route cannot exist elsewhere
+.github/workflows/e2e.yml     # dispatch + nightly, never on pull_request
 ```
+
+`fixtures/api.ts` from the original sketch was never built: `rally.api` and
+`rally.apiAs(user)` on the one fixture cover it, and a second module would
+have been indirection with nothing in it.
 
 `e2e/` sits at the repo root rather than inside `frontend/`, because it tests
 both halves and belongs to neither. It gets its own `package.json` so
@@ -198,9 +212,9 @@ Playwright never enters the frontend's dependency tree or its `npm ci`.
 | Phase | Ships |
 |-------|-------|
 | **0 — foundation** ✅ | `e2e` environment, reset endpoint + its absence-guard spec, fake gateway, Playwright config, one smoke test that signs in. Nothing else is possible until this works. |
-| **1 — the money paths** | Journeys 1, 2, 3. The highest-value half of the suite. |
-| **2 — the rest** | Journeys 4, 5, 6. |
-| **3 — automation** | The `workflow_dispatch` + nightly workflow, Telegram reporting, trace artefacts on failure. |
+| **1 — the money paths** ✅ | Journeys 1, 2, 3. The highest-value half of the suite. |
+| **2 — the rest** ✅ | Journeys 4, 5, 6. |
+| **3 — automation** ✅ | The `workflow_dispatch` + nightly workflow, Telegram reporting, trace artefacts on failure. |
 
 Phase 0 is the risky one and the only one worth estimating carefully: if
 standing up the environment turns out to be painful, that is worth knowing
