@@ -53,19 +53,34 @@ jobs:
           --health-retries=5
 
     env:
-      # postgres/postgres is what config/database.yml's `default:` block
-      # expects, so the e2e section needs no DATABASE_URL override — it
-      # names `rally_e2e` and inherits the credentials.
+      # **Deliberately not DATABASE_URL, unlike ci.yml's Rspec job.**
+      #
+      # config/database.yml's `e2e:` section names `database: rally_e2e` and
+      # inherits postgres/postgres from the `default:` block. Adding a
+      # DATABASE_URL would break that: as the long comment in database.yml
+      # records, when a config hash carries both `url:` and `database:`, this
+      # Rails/pg version resolves the connection from the URL's embedded
+      # database name and ignores the override — so the suite would quietly
+      # run against whatever database the URL named.
+      #
+      # PGHOST is still needed. The `default:` block sets no `host:`, so
+      # libpq falls back to a Unix socket at /var/run/postgresql, which a
+      # service container doesn't provide.
       PGHOST: localhost
       PGPORT: "5432"
 
     steps:
       - uses: actions/checkout@v7
 
+      # `.ruby-version` with no path, exactly as ci.yml does it. The action
+      # resolves the file relative to `working-directory`, and it parses this
+      # input as `engine-version` — so a path here gets split on the first
+      # hyphen and read as the engine name, which is why
+      # `backend/.ruby-version` failed with "Unknown engine backend/.ruby".
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: backend/.ruby-version
+          ruby-version: .ruby-version
           bundler-cache: true
           working-directory: backend
 
