@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -521,6 +521,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_090000) do
     t.datetime "password_reset_sent_at"
     t.string "password_reset_token"
     t.string "provider"
+    t.string "staff_role"
     t.datetime "suspended_at"
     t.string "suspension_reason"
     t.datetime "terms_accepted_at"
@@ -534,8 +535,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_090000) do
     t.index ["email_verification_token"], name: "index_users_on_email_verification_token", unique: true
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
     t.index ["password_reset_token"], name: "index_users_on_password_reset_token", unique: true
+    t.index ["staff_role"], name: "index_users_on_staff_role", where: "(staff_role IS NOT NULL)"
     t.index ["suspended_at"], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
     t.index ["verified_at"], name: "index_users_on_verified_at", where: "(verified_at IS NOT NULL)"
+    t.check_constraint "admin = (NOT staff_role::text IS DISTINCT FROM 'admin'::text)", name: "users_admin_matches_staff_role"
   end
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

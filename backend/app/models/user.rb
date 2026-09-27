@@ -82,11 +82,28 @@ class User < ApplicationRecord
   # DB has a matching unique index; this just gives a friendlier error.
   validates :google_uid, uniqueness: true, allow_nil: true
 
+  # ── Staff roles ─────────────────────────────────────────────────────────────
+  # docs/staff-roles-design.md, Phase 0. `nil` means "not staff"; the three
+  # values are ordered least- to most-privileged, which is only documentation
+  # today — the capability matrix (Phase 1) is what will actually read them.
+  #
+  # **Phase 0 changes no behaviour.** The only role in use is "admin", it is
+  # backfilled from the `users.admin` boolean, and #admin? below returns
+  # exactly what the column returned before. That equivalence is the whole
+  # point of the phase and spec/models/user_staff_role_spec.rb is what proves
+  # it.
+  STAFF_ROLES = %w[support moderator admin].freeze
+  ADMIN_ROLE = "admin"
+
+  validates :staff_role, inclusion: { in: STAFF_ROLES }, allow_nil: true
+
   before_validation { self.email = email.downcase.strip if email.present? }
+  before_save :reconcile_staff_role_and_admin_flag
   after_create :create_profile!
   after_create :generate_email_verification_token!
 
   scope :admins, -> { where(admin: true) }
+  scope :staff, -> { where.not(staff_role: nil) }
   scope :suspended, -> { where.not(suspended_at: nil) }
   scope :active, -> { where(suspended_at: nil) }
   scope :verified, -> { where.not(verified_at: nil) }
@@ -102,6 +119,23 @@ class User < ApplicationRecord
   def email_verified?
     email_verified_at.present?
   end
+
+  # ── Staff predicates ────────────────────────────────────────────────────────
+
+  # Overrides the `users.admin` attribute method Active Record generates.
+  #
+  # Reading the role rather than the boolean is the whole of Phase 0: every
+  # one of the thirteen call sites in docs/staff-roles-design.md §1 keeps
+  # working unchanged, and they start reading the new column without knowing
+  # it. The boolean is still written and still correct — see
+  # #reconcile_staff_role_and_admin_flag — so raw-column readers
+  # (`User.where(admin: true)` in ModerationNotifier, `scope :admins`) are
+  # equally unaffected until their own phase moves them.
+  def admin?
+    staff_role == ADMIN_ROLE
+  end
+
+  def staff? = staff_role.present?
 
   # ── Organizer verification ──────────────────────────────────────────────────
 
@@ -385,5 +419,35 @@ class User < ApplicationRecord
 
   def password_required?
     password_digest.nil? || password.present?
+  end
+
+  # Keeps `users.admin` and `users.staff_role` in step, in both directions,
+  # for as long as both exist (Phase 0 → 3 of docs/staff-roles-design.md).
+  #
+  # The direction that matters is `admin = true` → role, and it is not
+  # hypothetical. Admin is granted from a console with
+  # `user.update!(admin: true)` — the documented and only way it happens, since
+  # there is deliberately no endpoint for promotion (see
+  # Api::V1::Admin::BaseController). Without this callback, #admin? would read
+  # a `staff_role` that command never set, and the first person promoted after
+  # this deploy would be told they aren't an admin. That is precisely the
+  # lock-out D2 exists to prevent, and it would land on whoever was being
+  # onboarded rather than on whoever deployed.
+  #
+  # `staff_role` wins when both change in one save: it is the more expressive
+  # of the two, and the one Phase 2 onwards actually writes.
+  #
+  # Reads and writes `self[:admin]` rather than `admin` / `admin?`, because
+  # #admin? no longer reflects the column — going through the reader would
+  # make this quietly circular.
+  def reconcile_staff_role_and_admin_flag
+    if will_save_change_to_staff_role?
+      self[:admin] = (staff_role == ADMIN_ROLE)
+    elsif will_save_change_to_admin?
+      # Demotion clears the role outright. Stripping someone of `admin` is not
+      # demoting them to moderator — that would be a promotion for a support
+      # agent and a grant nobody asked for.
+      self.staff_role = self[:admin] ? ADMIN_ROLE : nil
+    end
   end
 end
