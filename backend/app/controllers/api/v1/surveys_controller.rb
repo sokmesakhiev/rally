@@ -3,7 +3,17 @@ module Api
     class SurveysController < BaseController
       before_action :authenticate_user!
       before_action :set_survey, only: [ :show, :update, :destroy ]
-      before_action :authorize_owner!, only: [ :update, :destroy ]
+      # `:show` belongs here for the same reason as the other two, and its
+      # absence was a hole rather than a decision: `set_survey` is an unscoped
+      # `Survey.kept.find`, so every authenticated account could read any
+      # survey it could name — title, questions and options — including drafts
+      # attached to no event at all.
+      #
+      # Participants are unaffected. They never call this endpoint; the survey
+      # they answer arrives nested in `EventsController#show`, which is where
+      # the "anyone registering may read the questions" decision actually
+      # lives and is the only place it should.
+      before_action :authorize_owner!, only: [ :show, :update, :destroy ]
 
       # GET /api/v1/surveys — current user's surveys
       def index
