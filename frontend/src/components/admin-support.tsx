@@ -53,7 +53,10 @@ export function AdminSupport() {
 
   // One subscription for the whole tab. It only signals; the queries refetch.
   useSupportInbox({
-    enabled: Boolean(user?.admin),
+    // Any staff role: support is the role this tab exists for, so gating
+    // the socket on `admin` would leave agents on the 60-second poll and
+    // make the console feel broken for its primary audience.
+    enabled: Boolean(user?.staff_role ?? user?.admin),
     queryKeys: [[...LIST_KEY], [...THREAD_KEY]],
   });
 
@@ -142,7 +145,9 @@ function FilterGroup({
           onClick={() => onChange(key)}
           className={cn(
             "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-            value === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+            value === key
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           {label}
@@ -287,9 +292,7 @@ function ConversationThread({ id }: { id: string }) {
       <div className="flex flex-col rounded-lg border">
         <header className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
           <div className="mr-auto">
-            <p className="text-sm font-semibold">
-              {participant.display_name || participant.email}
-            </p>
+            <p className="text-sm font-semibold">{participant.display_name || participant.email}</p>
             <p className="text-xs text-muted-foreground">{participant.email}</p>
           </div>
 
@@ -300,7 +303,11 @@ function ConversationThread({ id }: { id: string }) {
             disabled={act.isPending}
             onClick={() => act.mutate(mine ? "unassign" : "assign")}
           >
-            {mine ? <UserMinus className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
+            {mine ? (
+              <UserMinus className="mr-1.5 h-3.5 w-3.5" />
+            ) : (
+              <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+            )}
             {mine ? t("adminSupport.release") : t("adminSupport.claim")}
           </Button>
 
@@ -340,7 +347,12 @@ function ConversationThread({ id }: { id: string }) {
             aria-label={t("adminSupport.replyPlaceholder")}
             className="max-h-32 resize-none"
           />
-          <Button type="submit" size="icon" disabled={!draft.trim() || reply.isPending} aria-label={t("adminSupport.send")}>
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!draft.trim() || reply.isPending}
+            aria-label={t("adminSupport.send")}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </form>
@@ -363,7 +375,9 @@ function MessageRow({ message }: { message: ApiAdminSupportMessage }) {
   return (
     <div className={cn("flex flex-col", fromStaff ? "items-end" : "items-start")}>
       <span className="px-1 text-[10px] text-muted-foreground">
-        {fromStaff ? message.sender_name || t("adminSupport.deletedAccount") : t("adminSupport.participant")}
+        {fromStaff
+          ? message.sender_name || t("adminSupport.deletedAccount")
+          : t("adminSupport.participant")}
       </span>
       <p
         className={cn(

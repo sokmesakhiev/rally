@@ -32,7 +32,7 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { adminApi, type ApiAdminUser, type ApiAdminEvent } from "@/lib/api-client";
+import { adminApi, type ApiAdminUser, type ApiAdminEvent, type StaffRole } from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { AdminOverview } from "@/components/admin-overview";
@@ -62,6 +62,27 @@ const PER_PAGE = 25;
 const ADMIN_TABS = ["overview", "users", "events", "reports", "support"] as const;
 type AdminTab = (typeof ADMIN_TABS)[number];
 
+/**
+ * Which tabs each staff role sees — the client-side shadow of
+ * `StaffAuthorization::CAPABILITIES`. See docs/staff-roles-design.md D4.
+ *
+ * **This hides buttons; it does not grant anything.** Every endpoint behind
+ * every tab re-checks `require_staff!(capability)` server-side, and that is
+ * the only thing standing between a role and an action. Rendering a tab
+ * somebody can't use is a cosmetic bug; *not* rendering one they can is too.
+ * Neither is a security incident, which is exactly why this table is allowed
+ * to be a simplification of the server's matrix rather than a copy of it.
+ *
+ * Support gets Support and Users — a chat agent needs to look up the person
+ * they're talking to. Moderator adds the report queue, events, and the
+ * analytics on Overview. Admin sees everything.
+ */
+const TABS_BY_ROLE: Record<StaffRole, readonly AdminTab[]> = {
+  support: ["support", "users"],
+  moderator: ["overview", "users", "events", "reports", "support"],
+  admin: ADMIN_TABS,
+};
+
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Admin — Rally" }] }),
   /**
@@ -88,7 +109,13 @@ function AdminConsole() {
   const navigate = Route.useNavigate();
   const { tab } = Route.useSearch();
 
-  if (user && !user.admin) {
+  // `staff_role` when the backend sends it, falling back to the boolean so a
+  // client loaded before the backend deploy — or after Phase 3 removes the
+  // column — still resolves to something sensible.
+  const role: StaffRole | null = user?.staff_role ?? (user?.admin ? "admin" : null);
+  const visibleTabs = role ? TABS_BY_ROLE[role] : [];
+
+  if (user && visibleTabs.length === 0) {
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader />
@@ -99,6 +126,13 @@ function AdminConsole() {
       </div>
     );
   }
+
+  // A support agent deep-linked to ?tab=reports, or landing on the default
+  // "overview" they can't see, gets their own first tab instead of an empty
+  // panel. Same spirit as validateSearch accepting a stale tab rather than
+  // erroring: the console should open, not break.
+  const activeTab: AdminTab =
+    tab && visibleTabs.includes(tab) ? tab : (visibleTabs[0] ?? "overview");
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,18 +147,28 @@ function AdminConsole() {
         {/* Controlled rather than `defaultValue`, so the URL is the source of
             truth and a deep-linked notification opens the right tab. */}
         <Tabs
-          value={tab ?? "overview"}
+          value={activeTab}
           onValueChange={(value) => navigate({ search: { tab: value as AdminTab }, replace: true })}
           className="mt-8"
         >
           <TabsList>
-            <TabsTrigger value="overview">
-              <LayoutDashboard className="h-4 w-4 mr-1.5" /> {t("admin.tabOverview")}
-            </TabsTrigger>
-            <TabsTrigger value="users">{t("admin.tabUsers")}</TabsTrigger>
-            <TabsTrigger value="events">{t("admin.tabEvents")}</TabsTrigger>
-            <TabsTrigger value="reports">{t("admin.tabReports")}</TabsTrigger>
-            <TabsTrigger value="support">{t("admin.tabSupport")}</TabsTrigger>
+            {visibleTabs.includes("overview") && (
+              <TabsTrigger value="overview">
+                <LayoutDashboard className="h-4 w-4 mr-1.5" /> {t("admin.tabOverview")}
+              </TabsTrigger>
+            )}
+            {visibleTabs.includes("users") && (
+              <TabsTrigger value="users">{t("admin.tabUsers")}</TabsTrigger>
+            )}
+            {visibleTabs.includes("events") && (
+              <TabsTrigger value="events">{t("admin.tabEvents")}</TabsTrigger>
+            )}
+            {visibleTabs.includes("reports") && (
+              <TabsTrigger value="reports">{t("admin.tabReports")}</TabsTrigger>
+            )}
+            {visibleTabs.includes("support") && (
+              <TabsTrigger value="support">{t("admin.tabSupport")}</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">

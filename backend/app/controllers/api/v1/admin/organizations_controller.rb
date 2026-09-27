@@ -12,6 +12,19 @@ module Api
       # Shaped to match Admin::EventsController's suspend/unsuspend and
       # Admin::UsersController's, since it's the same concept one level up.
       class OrganizationsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        # Verification is reversible queue work; suspension takes down every
+        # event the organization presents at once.
+        ACTION_CAPABILITIES = {
+          "index"     => :read_organizations,
+          "suspend"   => :suspend_organization,
+          "unsuspend" => :suspend_organization,
+          "verify"    => :verify_organization,
+          "unverify"  => :verify_organization
+        }.freeze
+
         # GET /api/v1/admin/organizations
         MAX_RESULTS = 100
 

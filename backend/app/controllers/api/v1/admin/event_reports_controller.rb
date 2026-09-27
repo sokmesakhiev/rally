@@ -14,6 +14,15 @@ module Api
       # Inherits Admin::BaseController, so authenticate_user! + require_admin!
       # (404, not 403) are the whole authorization story.
       class EventReportsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index"   => :read_event_reports,
+          "show"    => :read_event_reports,
+          "resolve" => :resolve_event_reports
+        }.freeze
+
         # How many individual reports #show returns for one event. Past this
         # the list stops informing the decision and starts being a payload.
         DETAIL_LIMIT = 200

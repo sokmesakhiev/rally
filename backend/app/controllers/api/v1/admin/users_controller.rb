@@ -2,6 +2,17 @@ module Api
   module V1
     module Admin
       class UsersController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index"     => :read_users,
+          "suspend"   => :suspend_user,
+          "unsuspend" => :suspend_user,
+          "verify"    => :verify_user,
+          "unverify"  => :verify_user
+        }.freeze
+
         # GET /api/v1/admin/users
         # Supports ?q= (email or display name), ?status=suspended|active,
         # and pagination.

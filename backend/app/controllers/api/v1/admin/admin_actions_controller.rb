@@ -9,6 +9,13 @@ module Api
       # organizer removing their own participant, deleting their own event)
       # aren't logged here, matching today's log_admin_action surface.
       class AdminActionsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index" => :read_audit_log
+        }.freeze
+
         def index
           validate_params_with_schema(AdminActionIndexRequestSchema) do |validated_params|
             page     = validated_params[:page] || 1

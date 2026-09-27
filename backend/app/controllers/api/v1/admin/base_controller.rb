@@ -18,9 +18,23 @@ module Api
       # validate_params_with_schema, which only BaseController provides.
       class BaseController < Api::V1::BaseController
         before_action :authenticate_user!
-        before_action :require_admin!
+        before_action :authorize_staff_action!
 
         private
+
+        # Looks the capability up from the controller's own declaration.
+        #
+        # **`fetch`, so an action without a declared capability raises rather
+        # than inheriting whatever the last one had.** That is the whole
+        # safety property of D3, and it is not a new idea here —
+        # EventsController#authorize_creator! has worked this way since
+        # role-gating landed, precisely because the alternative failure is
+        # silent. spec/requests/admin_capability_coverage_spec.rb turns the
+        # raise into a suite failure rather than a 500 somebody meets in
+        # production.
+        def authorize_staff_action!
+          require_staff!(self.class::ACTION_CAPABILITIES.fetch(action_name))
+        end
 
         # Every state-changing admin action goes through here, so there's a
         # queryable audit trail of who did what — see AdminAction.log!, which

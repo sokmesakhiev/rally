@@ -263,7 +263,18 @@ class ApplicationController < ActionController::API
     end
   end
 
-  # For Api::V1::Admin controllers — see Api::V1::Admin::BaseController.
+  # **Superseded by StaffAuthorization#require_staff!, and no longer called.**
+  #
+  # Kept until Phase 3 retires `users.admin` alongside it (see
+  # docs/staff-roles-design.md), so that a client of this method somewhere
+  # unexpected keeps working rather than silently losing its gate. It still
+  # returns the right answer — `#admin?` reads `staff_role` since Phase 0 —
+  # but it is the *old* granularity: it asks "are you an admin", where the
+  # question is now "may you do this particular thing".
+  #
+  # Don't wire new controllers to it. `require_staff!(:some_capability)` is
+  # the gate, and Admin::BaseController applies it from each controller's
+  # ACTION_CAPABILITIES.
   def require_admin!
     # Checked *before* admin?, not after. Without this, impersonating an admin
     # would launder one staff member's actions through another's identity and
