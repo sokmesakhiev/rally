@@ -98,6 +98,7 @@ class User < ApplicationRecord
   validates :staff_role, inclusion: { in: STAFF_ROLES }, allow_nil: true
 
   before_validation { self.email = email.downcase.strip if email.present? }
+  before_save :reconcile_staff_role_and_admin_flag
   after_create :create_profile!
   after_create :generate_email_verification_token!
 
@@ -417,5 +418,35 @@ class User < ApplicationRecord
 
   def password_required?
     password_digest.nil? || password.present?
+  end
+
+  # Keeps `users.admin` and `users.staff_role` in step, in both directions,
+  # for as long as both exist (Phase 0 → 3 of docs/staff-roles-design.md).
+  #
+  # The direction that matters is `admin = true` → role, and it is not
+  # hypothetical. Admin is granted from a console with
+  # `user.update!(admin: true)` — the documented and only way it happens, since
+  # there is deliberately no endpoint for promotion (see
+  # Api::V1::Admin::BaseController). Without this callback, #admin? would read
+  # a `staff_role` that command never set, and the first person promoted after
+  # this deploy would be told they aren't an admin. That is precisely the
+  # lock-out D2 exists to prevent, and it would land on whoever was being
+  # onboarded rather than on whoever deployed.
+  #
+  # `staff_role` wins when both change in one save: it is the more expressive
+  # of the two, and the one Phase 2 onwards actually writes.
+  #
+  # Reads and writes `self[:admin]` rather than `admin` / `admin?`, because
+  # #admin? no longer reflects the column — going through the reader would
+  # make this quietly circular.
+  def reconcile_staff_role_and_admin_flag
+    if will_save_change_to_staff_role?
+      self[:admin] = (staff_role == ADMIN_ROLE)
+    elsif will_save_change_to_admin?
+      # Demotion clears the role outright. Stripping someone of `admin` is not
+      # demoting them to moderator — that would be a promotion for a support
+      # agent and a grant nobody asked for.
+      self.staff_role = self[:admin] ? ADMIN_ROLE : nil
+    end
   end
 end
