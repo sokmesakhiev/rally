@@ -36,8 +36,17 @@ module UserPayload
         verified: user.verified?,
         # Drives whether the frontend shows the admin nav link. Not a
         # security boundary — every admin endpoint checks server-side via
-        # require_admin! regardless of what the client believes.
+        # require_staff! regardless of what the client believes.
+        #
+        # Kept alongside `staff_role` rather than replaced by it: `admin` is
+        # what existing clients read, and a deployed frontend outlives a
+        # backend deploy. It retires with the column in Phase 3.
         admin: user.admin?,
+        # nil for everyone who isn't staff — which is almost everyone, and is
+        # why this is safe to send to every client. Lets the console decide
+        # which of its five tabs to render without a second round trip.
+        # Same caveat as `admin` above: an affordance, not a gate.
+        staff_role: user.staff_role,
         # Null means this account has never accepted the Terms of Service —
         # true for a brand-new Google sign-in (see
         # User.find_or_create_from_google!) since that flow never shows a

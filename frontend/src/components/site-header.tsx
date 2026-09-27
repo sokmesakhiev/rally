@@ -147,10 +147,11 @@ export function SiteHeader() {
                       <Wallet className="h-4 w-4" /> {t("header.paymentSettings")}
                     </Link>
                   </DropdownMenuItem>
-                  {/* Staff only. Hiding this is convenience, not security —
-                      every admin endpoint re-checks server-side and returns
-                      404 to non-admins. */}
-                  {user.admin && (
+                  {/* Any staff role, not just admin — a support agent needs
+                      the console too, they just see fewer tabs once inside.
+                      Hiding this is convenience, not security: every endpoint
+                      re-checks require_staff! and returns 404 otherwise. */}
+                  {(user.staff_role ?? user.admin) && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>

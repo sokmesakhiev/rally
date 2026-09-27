@@ -121,7 +121,7 @@ module Api
         # taking the free tier, re-publishing under a plan they already paid
         # for, or downgrading was never going to be charged anyway, and
         # recording those as waivers would bury the ones that matter.
-        waived = current_user.admin? && charge_amount.positive?
+        waived = staff_permits?(:waive_plan_payment) && charge_amount.positive?
         charge_amount = 0 if waived
 
         tran_id = "pln#{SecureRandom.alphanumeric(14)}"

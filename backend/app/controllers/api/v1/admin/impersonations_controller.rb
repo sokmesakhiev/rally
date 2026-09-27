@@ -15,6 +15,19 @@ module Api
       # with the admin's own credentials, which the frontend still holds — it
       # never overwrote them.
       class ImpersonationsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        # Opening and closing your own session is support's to do (D6);
+        # listing and revoking everyone else's is oversight of the feature
+        # itself, which is admin's.
+        ACTION_CAPABILITIES = {
+          "create"  => :impersonate,
+          "destroy" => :impersonate,
+          "index"   => :audit_impersonations,
+          "revoke"  => :audit_impersonations
+        }.freeze
+
         # POST /api/v1/admin/impersonations
         def create
           user = User.find(params[:user_id])

@@ -217,7 +217,7 @@ then does it execute.
 
 | Action | Why |
 |---|---|
-| Delete an event | Destroys an organizer's work and the registrations attached to it |
+| Delete an event | Destroys an organizer's work and the registrations attached to it. Note it already carries a `confirm=true` gate and refuses outright when any registration is paid — D9 adds a second *person*, not a second click |
 | Suspend an organization | Takes down every event it presents at once |
 | Refund ≥ `FOUR_EYES_REFUND_CENTS` | Money out, no recall |
 
@@ -267,9 +267,9 @@ which is the exact failure this document exists to prevent.
 
 | Phase | Ships | Behaviour change |
 |---|---|---|
-| **0** | `staff_role` column, backfill, `User#admin?` delegating to it | none |
-| **1** | `require_staff!` + capability matrix, `admin` role only | none — every existing admin keeps every power |
-| **2** | `support` and `moderator` roles, frontend tab gating | new roles become usable |
+| **0** ✅ | `staff_role` column, backfill, `User#admin?` delegating to it | none |
+| **1** ✅ | `require_staff!` + capability matrix, `admin` role only | none — every existing admin keeps every power |
+| **2** ✅ | `support` and `moderator` roles, frontend tab gating | new roles become usable |
 | **3** | D7 protected class, D8 audit role, drop `users.admin` | — |
 | **4** | D9 four-eyes: `StaffApproval`, the request/approve UI, the three gated actions | destruction and large refunds need a second signature |
 

@@ -34,7 +34,7 @@ module Api
             reason: refund_params[:reason]
           ).call
 
-          if current_user.admin? && !event_staff?(payment)
+          if staff_permits?(:issue_refund) && !event_staff?(payment)
             AdminAction.log!(admin: current_user, action: "issue_refund", target: payment)
           end
 
@@ -64,7 +64,12 @@ module Api
       # `return unless payment`.
       def find_authorized_payment
         payment = Payment.includes(registration: :event).find(params[:payment_id])
-        return payment if event_staff?(payment) || current_user.admin?
+        # `:issue_refund` is admin-only (D5) — money leaving the business is
+        # the narrowest grant in the matrix. Reading the capability rather
+        # than `current_user.admin?` is what lets that be widened later
+        # without hunting for this line, which sits outside the admin
+        # namespace and is therefore the one a refactor forgets.
+        return payment if event_staff?(payment) || staff_permits?(:issue_refund)
 
         render json: { error: "Forbidden" }, status: :forbidden
         nil
