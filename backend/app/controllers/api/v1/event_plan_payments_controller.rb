@@ -121,7 +121,18 @@ module Api
         # taking the free tier, re-publishing under a plan they already paid
         # for, or downgrading was never going to be charged anyway, and
         # recording those as waivers would bury the ones that matter.
+        # This capability is read as a *branch* rather than a gate — staff
+        # publishing an event is an ordinary publish that happens to skip the
+        # charge — so `require_staff!`'s four-eyes hook never sees it. Ask
+        # here instead, or the largest single money decision in the system
+        # would be the one action that slipped the net.
+        #
+        # Refusing rather than silently charging them: an admin who expected a
+        # waiver and got a $2,000 KHQR code instead would reasonably call that
+        # a bug.
         waived = staff_permits?(:waive_plan_payment) && charge_amount.positive?
+        return if waived && !require_second_signature!(:waive_plan_payment)
+
         charge_amount = 0 if waived
 
         tran_id = "pln#{SecureRandom.alphanumeric(14)}"
@@ -152,7 +163,7 @@ module Api
           # queryable afterwards, and a plan payment recorded at 0 is
           # otherwise indistinguishable from a genuine free-tier publish.
           if waived
-            AdminAction.log!(admin: current_user, action: "waive_event_plan_payment", target: event)
+            record_staff_action!("waive_event_plan_payment", event)
           end
 
           render json: { event: event_json(event.reload), plan_payment: plan_payment_json(plan_payment) }, status: :created

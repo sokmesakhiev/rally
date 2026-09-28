@@ -14,11 +14,13 @@ the work touches it. Use the trigger table below.
 ## Project overview
 
 "Rally" is an event registration platform (running/cycling/swimming/triathlon)
-with three parts:
+with five parts:
 
 - `backend/` — Rails 8.1 API-only app (Ruby 4.0.7, PostgreSQL, RSpec)
 - `frontend/` — TanStack Start (React 19, file-based routing, Vite, Tailwind v4, shadcn/ui)
 - `infrastructure/` — Terraform for AWS (ECS backend, S3+CloudFront frontend)
+- `docs/` - Documentation (Markdown files) describing the project and its architecture
+- `e2e/` - End-to-end tests (Playwright) for the frontend (runs against deployed environment)
 
 Backend and frontend deploy independently; CI (`.github/workflows/ci.yml`) only
 runs a subproject's jobs when files under it changed.

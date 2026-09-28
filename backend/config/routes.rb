@@ -301,6 +301,15 @@ Rails.application.routes.draw do
         get "reports", to: "reports#index"
 
         # Queryable audit trail — see AdminAction, BaseController#log_admin_action.
+        # Four-eyes request/approve queue (docs/staff-roles-design.md D9).
+        # No endpoint performs the approved action — the requester goes back
+        # to its normal route, where require_second_signature! finds the
+        # approval. One implementation of each gated action, not two.
+        get  "staff_approvals",             to: "staff_approvals#index"
+        post "staff_approvals",             to: "staff_approvals#create"
+        post "staff_approvals/:id/approve", to: "staff_approvals#approve"
+        post "staff_approvals/:id/reject",  to: "staff_approvals#reject"
+
         get "admin_actions", to: "admin_actions#index"
       end
     end

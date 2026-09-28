@@ -42,8 +42,12 @@ module Api
         # this and Api::V1::RefundsController#create (the one admin-reachable
         # action outside this namespace) both call. Deliberately logs actor
         # and target ids, not emails.
+        # Delegates to StaffAuthorization#record_staff_action!, which also
+        # spends the four-eyes approval when one authorised this request. Every
+        # gated action in this namespace already logs, so routing the consume
+        # through the same call means there is no second thing to remember.
         def log_admin_action(action, target)
-          AdminAction.log!(admin: current_user, action: action, target: target)
+          record_staff_action!(action, target)
         end
       end
     end

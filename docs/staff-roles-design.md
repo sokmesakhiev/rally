@@ -1,7 +1,8 @@
 # Rally staff roles — design
 
 **Status:** accepted · **Date:** 2026-09-27 · **Scope:** v1
-**Open questions answered 2026-09-27 — see §5.** Nothing built yet.
+**Phases 0–3a and Phase 4's backend are built.** Outstanding: the
+approval UI, and Phase 3b (`remove_column :users, :admin`, its own deploy).
 
 Rally has exactly one staff flag: `users.admin`, a boolean. Setting it so
 somebody can answer support chat also grants them the ability to suspend any
@@ -218,8 +219,16 @@ then does it execute.
 | Action | Why |
 |---|---|
 | Delete an event | Destroys an organizer's work and the registrations attached to it. Note it already carries a `confirm=true` gate and refuses outright when any registration is paid — D9 adds a second *person*, not a second click |
-| Suspend an organization | Takes down every event it presents at once |
+| Suspend an organization | Takes down every event it presents at once. **Unsuspending is not gated** — it has its own `unsuspend_organization` capability for that reason |
 | Refund ≥ `FOUR_EYES_REFUND_CENTS` | Money out, no recall |
+
+**Reversals are never gated**, and this cost a round of red tests to learn:
+`unsuspend` originally shared the `suspend_organization` capability, so
+restoring a wrongly-suspended organization inherited the second-signature
+requirement and every event it presents stayed down until a colleague was
+free. It has its own capability now — same audience, no signature. Any future
+capability covering both a destructive action and its undo needs splitting
+the same way.
 
 **Suspending an *event* is deliberately excluded**, and this is the part worth
 disagreeing with me about if you're going to. Suspension is the protective
@@ -272,7 +281,7 @@ which is the exact failure this document exists to prevent.
 | **2** ✅ | `support` and `moderator` roles, frontend tab gating | new roles become usable |
 | **3a** ✅ | D7 protected class, D8 audit role, code stops touching `users.admin`, CHECK constraint dropped | staff become unsuspendable and unimpersonatable; audit rows gain `actor_role` |
 | **3b** | `remove_column :users, :admin` — **its own deploy** | — |
-| **4** | D9 four-eyes: `StaffApproval`, the request/approve UI, the three gated actions | destruction and large refunds need a second signature |
+| **4** 🔶 | D9 four-eyes: `StaffApproval`, the four gated actions. **Backend only — the request/approve UI is outstanding** | destruction, plan waivers and refunds ≥ $100 need a second signature |
 
 ### Phase 3b: why the column drop is its own deploy
 
@@ -288,25 +297,66 @@ deploy and every user save on a not-yet-replaced task raises `UndefinedColumn`
 — sign-ups and sign-ins included.
 
 The order is therefore: **deploy 3a → confirm it is serving → commit and
-deploy 3b**, which is nothing but
+deploy 3b**.
+
+Generate it with `bin/rails generate migration` rather than hand-dating the
+file — Rails 8.1 refuses a future timestamp, and this repository has been
+bitten by that before.
 
 ```ruby
 class RemoveAdminFromUsers < ActiveRecord::Migration[8.1]
-  def change
-    remove_column :users, :admin, :boolean, default: false, null: false
+  # Not `change`. The inverse of this needs a backfill, and a backfill isn't
+  # expressible in a reversible block — see #down.
+  def up
+    remove_column :users, :admin
+  end
+
+  # **A rollback has to restore the data, not just the column.**
+  #
+  # `add_column ... default: false` brings back a column in which *every
+  # admin reads as false*. That is inert while 3a's code is running, since
+  # nothing reads the boolean — but the reason to keep a rollback path at all
+  # is to survive a bad deploy, and a rollback far enough to redeploy
+  # pre-3a code would leave that code asking `User.where(admin: true)` and
+  # finding nobody. Zero admins on the platform, no console access to fix it,
+  # and a rollback that reported success. That is the lock-out D2 exists to
+  # prevent, reappearing at the far end of the sequence.
+  #
+  # The index goes with it for the same reason: Postgres drops an index with
+  # its column, and `add_column` does not bring one back.
+  def down
+    add_column :users, :admin, :boolean, default: false, null: false
+    add_index :users, :admin, where: "admin = true", name: "index_users_on_admin"
+    execute("UPDATE users SET admin = true WHERE staff_role = 'admin'")
   end
 end
 ```
-
-The full column definition in `remove_column` is what makes it reversible; a
-bare `remove_column :users, :admin` rolls back into a column with the wrong
-type and no default.
 
 Nothing reads or writes the column after 3a, so between the two deploys it is
 inert — stale `false` values on new staff rows that no code consults. The one
 observable effect during 3a's own rollout is that a staff member created in
 that window is invisible to an old task's `User.where(admin: true)`, which
 affects the moderation notifier's recipient list for a couple of minutes.
+
+### 3b pre-flight
+
+Checked 2026-09-28, against the code as it stands after Phase 4:
+
+- **No reader or writer of the column remains** anywhere in `backend/app`,
+  `lib`, `db`, `spec`, `e2e` or `frontend`. The surviving mentions are
+  `#admin?` (which reads `staff_role`), the `admin:` key in the JSON payload
+  (unaffected), and comments.
+- **No other database object depends on it** except
+  `index_users_on_admin`, handled in `#down` above. The CHECK constraint was
+  already dropped by `20260926020000`.
+- **`require_admin!` keeps working** post-drop — it calls `#admin?`, not the
+  column. It is dead code either way and can be deleted whenever.
+
+The only remaining gate is not something the codebase can answer: **3a has to
+be deployed and serving.** Locally-migrated is not the same thing. If old
+tasks are still running the reconcile callback when the column disappears,
+every user save on them raises `UndefinedColumn` — sign-ups and sign-ins
+included.
 
 Phase 4 is last and separate on purpose. It is the only phase that adds a
 model, a queue and a second UI surface, and folding it into the role split

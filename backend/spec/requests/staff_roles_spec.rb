@@ -108,10 +108,13 @@ RSpec.describe "Staff roles", type: :request do
       get "/api/v1/admin/admin_actions", headers: auth_headers(admin), as: :json
       expect(response).to have_http_status(:ok)
 
-      # Deletion carries its own `confirm=true` gate on top of the capability
-      # — an existing one-person "are you sure", distinct from the second
-      # *person* D9 adds in Phase 4.
+      # Deletion carries *three* gates now, and they stack rather than
+      # replace: the capability, a `confirm=true` one-person "are you sure",
+      # and a second person's signature (D9). All three have to be satisfied
+      # for this to be a test of the capability rather than of whichever gate
+      # happens to fail first.
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
       delete "/api/v1/admin/events/#{event.id}",
              params: { confirm: true }, headers: auth_headers(admin), as: :json
       expect(response).to have_http_status(:ok)

@@ -663,9 +663,14 @@ RSpec.describe "Admin API", type: :request do
   end
 
   # ── DELETE /api/v1/admin/events/:id ──────────────────────────────────────────
+  # Deleting an event is four-eyes (docs/staff-roles-design.md D9), so each
+  # example grants an approval for its own event. The approval flow itself —
+  # self-approval, tampering, replay — is covered in staff_approvals_spec.rb;
+  # here it is setup, and the subject is still the delete endpoint.
   describe "DELETE /api/v1/admin/events/:id" do
     it "requires an explicit confirm flag" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}", headers: auth_headers(admin), as: :json
@@ -677,6 +682,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "soft-deletes the event when confirmed, rather than destroying the row" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}",
@@ -692,6 +698,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "records a queryable AdminAction for the deletion" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}",
@@ -710,6 +717,7 @@ RSpec.describe "Admin API", type: :request do
       # Hard-deleting an event with money attached would destroy the payment
       # records needed to actually issue refunds.
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
       create(:registration, event: event, payment_status: "paid")
 
       expect {
@@ -725,6 +733,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "allows deletion when registrations exist but none are paid" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
       create(:registration, event: event, payment_status: "unpaid")
 
       delete "/api/v1/admin/events/#{event.id}",

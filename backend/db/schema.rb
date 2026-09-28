@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -484,6 +484,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_020000) do
     t.index ["registration_id"], name: "index_results_on_registration_id", unique: true
   end
 
+  create_table "staff_approvals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "action", null: false
+    t.datetime "approved_at"
+    t.uuid "approver_id"
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.jsonb "payload", default: {}, null: false
+    t.string "payload_digest", null: false
+    t.text "reason", null: false
+    t.uuid "requester_id", null: false
+    t.string "status", default: "pending", null: false
+    t.uuid "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["approver_id"], name: "index_staff_approvals_on_approver_id"
+    t.index ["requester_id", "action", "status"], name: "index_staff_approvals_on_requester_id_and_action_and_status"
+    t.index ["requester_id"], name: "index_staff_approvals_on_requester_id"
+    t.index ["status", "created_at"], name: "index_staff_approvals_on_status_and_created_at"
+    t.index ["target_type", "target_id"], name: "index_staff_approvals_on_target"
+  end
+
   create_table "survey_questions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.jsonb "options", default: [], null: false
@@ -605,6 +627,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_020000) do
   add_foreign_key "registrations", "events"
   add_foreign_key "registrations", "users"
   add_foreign_key "results", "registrations"
+  add_foreign_key "staff_approvals", "users", column: "approver_id"
+  add_foreign_key "staff_approvals", "users", column: "requester_id"
   add_foreign_key "survey_questions", "surveys"
   add_foreign_key "surveys", "users", column: "creator_id"
   add_foreign_key "waitlist_entries", "events"

@@ -240,6 +240,11 @@ RSpec.describe "Event plan payments API", type: :request do
     # ── Rally staff publish without paying ────────────────────────────────
     # Only the charge is waived; every other rule about whether the event
     # fits the plan still applies.
+    # Waiving a plan payment is four-eyes (docs/staff-roles-design.md D9) — it
+    # is the largest single money decision in the system. Each example grants
+    # an approval pinned to *its own plan*, because the plan is part of the
+    # digest: an approval for a $100 Small does not authorise a $2,000 Extra
+    # Large. The free-tier example below needs none, since nothing is waived.
     context "when the organizer is Rally staff" do
       let(:staff) { create(:user, :admin) }
       let!(:event) { create(:event, :draft, creator: staff) }
@@ -247,6 +252,8 @@ RSpec.describe "Event plan payments API", type: :request do
       it "publishes a paid plan immediately, with no gateway call" do
         expect_any_instance_of(AbaPayway::Client).not_to receive(:generate_qr)
 
+        grant_staff_approval!(:waive_plan_payment, event, requester: staff,
+                              payload: { plan: "small" })
         post "/api/v1/events/#{event.id}/plan_payments",
              params: { plan: "small" },
              headers: auth_headers(staff),
@@ -257,6 +264,8 @@ RSpec.describe "Event plan payments API", type: :request do
       end
 
       it "applies the plan's capacity, same as a paid publish would" do
+        grant_staff_approval!(:waive_plan_payment, event, requester: staff,
+                              payload: { plan: "medium" })
         post "/api/v1/events/#{event.id}/plan_payments",
              params: { plan: "medium" },
              headers: auth_headers(staff),
@@ -267,6 +276,8 @@ RSpec.describe "Event plan payments API", type: :request do
       end
 
       it "records the plan payment as paid, at zero" do
+        grant_staff_approval!(:waive_plan_payment, event, requester: staff,
+                              payload: { plan: "large" })
         post "/api/v1/events/#{event.id}/plan_payments",
              params: { plan: "large" },
              headers: auth_headers(staff),
@@ -282,6 +293,8 @@ RSpec.describe "Event plan payments API", type: :request do
       # genuine free-tier publish, so the waiver is logged.
       it "records a queryable AdminAction for the waiver" do
         expect {
+          grant_staff_approval!(:waive_plan_payment, event, requester: staff,
+                                payload: { plan: "small" })
           post "/api/v1/events/#{event.id}/plan_payments",
                params: { plan: "small" },
                headers: auth_headers(staff),
@@ -311,6 +324,8 @@ RSpec.describe "Event plan payments API", type: :request do
         event.event_types.create!(name: "5K", capacity: 100, position: 0)
         event.event_types.create!(name: "10K", capacity: 150, position: 1)
 
+        grant_staff_approval!(:waive_plan_payment, event, requester: staff,
+                              payload: { plan: "small" })
         post "/api/v1/events/#{event.id}/plan_payments",
              params: { plan: "small" },
              headers: auth_headers(staff),

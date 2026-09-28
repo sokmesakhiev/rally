@@ -20,7 +20,7 @@ module Api
         ACTION_CAPABILITIES = {
           "index"     => :read_organizations,
           "suspend"   => :suspend_organization,
-          "unsuspend" => :suspend_organization,
+          "unsuspend" => :unsuspend_organization,
           "verify"    => :verify_organization,
           "unverify"  => :verify_organization
         }.freeze
