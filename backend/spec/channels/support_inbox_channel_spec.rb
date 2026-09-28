@@ -13,7 +13,7 @@ RSpec.describe SupportInboxChannel, type: :channel do
   end
 
   it "admits an admin" do
-    stub_connection current_user: create(:user, admin: true)
+    stub_connection current_user: create(:user, :admin)
 
     subscribe
 
@@ -21,10 +21,10 @@ RSpec.describe SupportInboxChannel, type: :channel do
     expect(subscription).to have_stream_from(described_class::STREAM)
   end
 
-  it "rejects a fresh subscription once the admin flag is revoked" do
-    admin = create(:user, admin: true)
+  it "rejects a fresh subscription once staff access is revoked" do
+    admin = create(:user, :admin)
     stub_connection current_user: admin
-    admin.update!(admin: false)
+    admin.update!(staff_role: nil)
 
     subscribe
 
@@ -38,7 +38,7 @@ RSpec.describe SupportInboxChannel, type: :channel do
   # actually closes that, so drive it directly: channel specs have no event
   # loop, so the timer never fires on its own.
   describe "the periodic access re-check" do
-    let(:admin) { create(:user, admin: true) }
+    let(:admin) { create(:user, :admin) }
 
     before do
       stub_connection current_user: admin
@@ -61,8 +61,8 @@ RSpec.describe SupportInboxChannel, type: :channel do
       expect(subscription).to have_stream_from(described_class::STREAM)
     end
 
-    it "stops an open subscription whose admin flag was revoked" do
-      admin.update!(admin: false)
+    it "stops an open subscription whose staff access was revoked" do
+      admin.update!(staff_role: nil)
 
       run_access_recheck
 

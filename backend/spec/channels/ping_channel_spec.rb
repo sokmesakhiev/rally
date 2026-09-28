@@ -11,7 +11,7 @@ RSpec.describe PingChannel, type: :channel do
   end
 
   let(:user) { create(:user) }
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
 
   # The important half. Channel actions bypass rack-attack entirely — the
   # socket is hijacked at connect — so an ungated #echo would be an
@@ -66,12 +66,12 @@ RSpec.describe PingChannel, type: :channel do
   # anyone subscribing while it's closed — a rejected subscription can't be
   # performed against at all — so the case needing its own test is the one
   # `subscribed` can't catch: a subscription that outlives its own permission.
-  it "stops echoing once the admin flag is revoked mid-subscription" do
+  it "stops echoing once staff access is revoked mid-subscription" do
     stub_connection current_user: admin
     subscribe
     expect(subscription).to be_confirmed
 
-    admin.update!(admin: false)
+    admin.update!(staff_role: nil)
 
     expect { perform :echo, "sent_at" => 1 }
       .not_to have_broadcasted_to("ping:#{admin.id}")

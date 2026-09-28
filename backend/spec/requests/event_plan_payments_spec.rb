@@ -241,7 +241,7 @@ RSpec.describe "Event plan payments API", type: :request do
     # Only the charge is waived; every other rule about whether the event
     # fits the plan still applies.
     context "when the organizer is Rally staff" do
-      let(:staff) { create(:user, admin: true) }
+      let(:staff) { create(:user, :admin) }
       let!(:event) { create(:event, :draft, creator: staff) }
 
       it "publishes a paid plan immediately, with no gateway call" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -538,7 +538,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_010000) do
     t.index ["staff_role"], name: "index_users_on_staff_role", where: "(staff_role IS NOT NULL)"
     t.index ["suspended_at"], name: "index_users_on_suspended_at", where: "(suspended_at IS NOT NULL)"
     t.index ["verified_at"], name: "index_users_on_verified_at", where: "(verified_at IS NOT NULL)"
-    t.check_constraint "admin = (NOT staff_role::text IS DISTINCT FROM 'admin'::text)", name: "users_admin_matches_staff_role"
   end
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

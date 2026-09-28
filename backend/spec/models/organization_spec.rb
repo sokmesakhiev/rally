@@ -464,7 +464,7 @@ RSpec.describe Organization, type: :model do
 
     it "round-trips through verify!/unverify!" do
       org = create(:organization)
-      admin = create(:user, admin: true)
+      admin = create(:user, :admin)
 
       org.verify!(by: admin)
       expect(org.verified?).to be(true)
@@ -477,7 +477,7 @@ RSpec.describe Organization, type: :model do
     # "who vouched for this organization" straight off the row.
     it "records which staff account granted it" do
       org = create(:organization)
-      admin = create(:user, admin: true)
+      admin = create(:user, :admin)
 
       org.verify!(by: admin)
 
@@ -486,7 +486,7 @@ RSpec.describe Organization, type: :model do
 
     it "clears who granted it on unverify" do
       org = create(:organization)
-      org.verify!(by: create(:user, admin: true))
+      org.verify!(by: create(:user, :admin))
 
       org.unverify!
 

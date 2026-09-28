@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe AdminAction, type: :model do
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:event) { create(:event) }
 
   describe "associations" do
@@ -15,8 +15,11 @@ RSpec.describe AdminAction, type: :model do
 
   describe ".log!" do
     it "creates a queryable row and logs a matching line" do
+      # `role=` joined the line in Phase 3 of docs/staff-roles-design.md — the
+      # log aggregator is where an out-of-hours "who did this, and were they
+      # meant to be able to?" gets answered, and the id alone doesn't say.
       expect(Rails.logger).to receive(:info).with(
-        "[admin] actor=#{admin.id} action=destroy_event target=Event##{event.id}"
+        "[admin] actor=#{admin.id} role=admin action=destroy_event target=Event##{event.id}"
       )
 
       action = AdminAction.log!(admin: admin, action: "destroy_event", target: event)
@@ -37,7 +40,7 @@ RSpec.describe AdminAction, type: :model do
     end
 
     it ".for_action filters by action, .for_admin filters by admin_id" do
-      other_admin = create(:user, admin: true)
+      other_admin = create(:user, :admin)
       unpublish = create(:admin_action, admin: admin, action: "unpublish_event", target: event)
       create(:admin_action, admin: other_admin, action: "destroy_event", target: event)
 

@@ -383,7 +383,7 @@ RSpec.describe User, type: :model do
       # conversation, are not theirs to take down — Message#sender_id is
       # ON DELETE SET NULL for exactly this.
       it "leaves other people's conversations alone" do
-        staff = create(:user, admin: true)
+        staff = create(:user, :admin)
         someone_else = create(:conversation)
         create(:message, :from_staff, conversation: someone_else, sender: staff)
 

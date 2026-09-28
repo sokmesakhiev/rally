@@ -9,7 +9,7 @@ FactoryBot.define do
     sender { conversation.user }
 
     trait :from_staff do
-      sender { create(:user, admin: true) }
+      sender { create(:user, :admin) }
     end
 
     trait :from_system do

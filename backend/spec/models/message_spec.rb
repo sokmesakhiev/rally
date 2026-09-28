@@ -40,8 +40,8 @@ RSpec.describe Message, type: :model do
     end
   end
 
-  # Derived from position in the thread, not from users.admin — an admin who
-  # opens their own support thread is the participant in it.
+  # Derived from position in the thread, not from the sender's staff role —
+  # an admin who opens their own support thread is the participant in it.
   describe "sender_role derivation" do
     it "marks the conversation's owner as the participant" do
       message = create(:message, conversation: conversation, sender: participant)
@@ -50,13 +50,13 @@ RSpec.describe Message, type: :model do
     end
 
     it "marks anyone else as staff" do
-      message = create(:message, conversation: conversation, sender: create(:user, admin: true))
+      message = create(:message, conversation: conversation, sender: create(:user, :admin))
 
       expect(message.sender_role).to eq(described_class::STAFF)
     end
 
     it "calls an admin the participant in their own thread" do
-      admin = create(:user, admin: true)
+      admin = create(:user, :admin)
       own_thread = create(:conversation, user: admin)
 
       message = create(:message, conversation: own_thread, sender: admin)
@@ -72,11 +72,11 @@ RSpec.describe Message, type: :model do
 
     # The snapshot's whole purpose: history must not be rewritten by a later
     # change to who is staff.
-    it "does not change when the sender loses their admin flag" do
-      admin = create(:user, admin: true)
+    it "does not change when the sender loses their staff access" do
+      admin = create(:user, :admin)
       message = create(:message, conversation: conversation, sender: admin)
 
-      admin.update!(admin: false)
+      admin.update!(staff_role: nil)
       message.update!(body: "edited")
 
       expect(message.reload.sender_role).to eq(described_class::STAFF)
@@ -87,7 +87,7 @@ RSpec.describe Message, type: :model do
     # A staff reply lives inside someone else's thread, so it has to outlive
     # the person who wrote it.
     it "keeps the message and nullifies the sender" do
-      admin = create(:user, admin: true)
+      admin = create(:user, :admin)
       message = create(:message, conversation: conversation, sender: admin)
 
       expect { admin.destroy }.not_to change(described_class, :count)
@@ -101,7 +101,7 @@ RSpec.describe Message, type: :model do
     # message could never be saved again — and the sender_present_unless_system
     # validation is scoped `on: :create` for the same reason.
     it "leaves the orphaned message saveable" do
-      admin = create(:user, admin: true)
+      admin = create(:user, :admin)
       message = create(:message, conversation: conversation, sender: admin)
       admin.destroy
 

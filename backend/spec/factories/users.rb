@@ -13,6 +13,21 @@ FactoryBot.define do
       end
     end
 
+    # Rally staff. `nil` (the default) is not staff at all.
+    # docs/staff-roles-design.md — the capability matrix lives in
+    # StaffAuthorization::CAPABILITIES.
+    trait :support do
+      staff_role { "support" }
+    end
+
+    trait :moderator do
+      staff_role { "moderator" }
+    end
+
+    trait :admin do
+      staff_role { "admin" }
+    end
+
     # Admin-granted organizer verification (User#verified?) — what unlocks
     # creating paid events. Unrelated to email verification.
     trait :verified do

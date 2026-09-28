@@ -91,7 +91,7 @@ class Message < ApplicationRecord
 
   private
 
-  # Derived from *position in the thread*, not from `users.admin`.
+  # Derived from *position in the thread*, not from the sender's staff role.
   #
   # An admin can perfectly well open their own support conversation, and in
   # that thread they are the participant. Keying off the admin flag would

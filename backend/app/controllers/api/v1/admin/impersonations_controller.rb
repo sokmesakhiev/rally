@@ -135,12 +135,18 @@ module Api
             # would write a notification to yourself and occupy your one live
             # slot. Refuse plainly.
             { error: "You can't impersonate yourself.", code: "impersonation_self" }
-          elsif user.admin?
-            # The privilege-escalation case. `require_admin!` already 404s under
-            # an impersonation token, so this is the second of two mechanisms,
-            # not the only one — but refusing here is what makes the *intent*
-            # visible, rather than leaving a staff member confused by a 404.
-            { error: "Admin accounts can't be impersonated.", code: "impersonation_admin_target" }
+          elsif user.staff?
+            # The privilege-escalation case, and it covers **any** staff role
+            # since D7 — a support agent impersonating a moderator would
+            # inherit the moderator's console, which is precisely the
+            # escalation the role split exists to prevent.
+            #
+            # `require_staff!` already 404s the whole console under an
+            # impersonation token, so this is the second of two mechanisms
+            # rather than the only one. Refusing here is what makes the
+            # *intent* land in the audit log instead of leaving a staff member
+            # puzzling over a 404.
+            { error: "Staff accounts can't be impersonated.", code: "impersonation_staff_target" }
           elsif user.suspended? || user.discarded?
             # authenticate_user! refuses both on every request, so a session
             # here would mint a token that 403s instantly and leave an audit row

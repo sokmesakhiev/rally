@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Conversations::Broadcast do
   let(:participant) { create(:user) }
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:conversation) { create(:conversation, user: participant) }
 
   def participant_stream = ChatChannel.stream_name_for(participant.id)

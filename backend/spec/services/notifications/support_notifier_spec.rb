@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Notifications::SupportNotifier do
   let(:participant) { create(:user) }
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:conversation) { create(:conversation, user: participant) }
 
   def staff_reply(body: "Looking into it now")

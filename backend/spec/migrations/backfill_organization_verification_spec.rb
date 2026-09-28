@@ -20,7 +20,7 @@ RSpec.describe BackfillOrganizationVerification do
   end
 
   it "verifies organizations owned by a verified organizer" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     organization = unverified_organization_for(organizer)
@@ -31,7 +31,7 @@ RSpec.describe BackfillOrganizationVerification do
   end
 
   it "carries across who verified them" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     organization = unverified_organization_for(organizer)
@@ -42,7 +42,7 @@ RSpec.describe BackfillOrganizationVerification do
   end
 
   it "verifies every organization a verified organizer owns" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     first = unverified_organization_for(organizer)
@@ -65,7 +65,7 @@ RSpec.describe BackfillOrganizationVerification do
   # Verification is about who receives the money — that's the owner's PayWay
   # account, so administering a club doesn't verify it.
   it "does not verify a club the verified user merely administers" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     club = unverified_organization_for(create(:user))
@@ -77,7 +77,7 @@ RSpec.describe BackfillOrganizationVerification do
   end
 
   it "does not overwrite an organization verified at a different time" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     organization = create(:organization, owner: organizer)
@@ -90,7 +90,7 @@ RSpec.describe BackfillOrganizationVerification do
   end
 
   it "is idempotent" do
-    admin = create(:user, admin: true)
+    admin = create(:user, :admin)
     organizer = create(:user)
     organizer.verify!(by: admin)
     organization = unverified_organization_for(organizer)

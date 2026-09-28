@@ -8,7 +8,8 @@ module Api
       # in ApplicationController; require_admin! renders 404 rather than 403 so
       # this surface doesn't advertise itself to non-admins.
       #
-      # Admin is granted from the console (`user.update!(admin: true)`) — there
+      # Staff access is granted from the console
+      # (`user.update!(staff_role: "support")`) — there
       # is deliberately no endpoint for promoting a user, so a compromised
       # admin session can't mint more admins.
       #

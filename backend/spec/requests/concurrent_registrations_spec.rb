@@ -2,7 +2,7 @@ require 'rails_helper'
 require 'concurrent'
 
 RSpec.describe "Concurrent Event Registration", type: :request do
-  let(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, admin: true)) }
+  let(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, :admin)) }
   let(:user) { create(:user) }
   let(:event) { create(:event, organization: organization, capacity: 10, price_cents: 0) }
 

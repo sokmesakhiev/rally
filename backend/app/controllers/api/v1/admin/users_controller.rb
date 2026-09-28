@@ -57,8 +57,15 @@ module Api
             return
           end
 
-          if user.admin?
-            render json: { error: "Admin accounts cannot be suspended.", code: "admin_target" },
+          # Any staff member, not just an admin — D7 of
+          # docs/staff-roles-design.md. While this read `admin?`, the role
+          # split would have handed a support agent the ability to suspend a
+          # moderator: a privilege escalation introduced by the very change
+          # meant to reduce privilege. Removing someone's staff access is a
+          # console operation, deliberately, for the same reason granting it
+          # is.
+          if user.staff?
+            render json: { error: "Staff accounts cannot be suspended.", code: "staff_target" },
                    status: :unprocessable_entity
             return
           end

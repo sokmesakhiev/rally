@@ -270,8 +270,43 @@ which is the exact failure this document exists to prevent.
 | **0** ✅ | `staff_role` column, backfill, `User#admin?` delegating to it | none |
 | **1** ✅ | `require_staff!` + capability matrix, `admin` role only | none — every existing admin keeps every power |
 | **2** ✅ | `support` and `moderator` roles, frontend tab gating | new roles become usable |
-| **3** | D7 protected class, D8 audit role, drop `users.admin` | — |
+| **3a** ✅ | D7 protected class, D8 audit role, code stops touching `users.admin`, CHECK constraint dropped | staff become unsuspendable and unimpersonatable; audit rows gain `actor_role` |
+| **3b** | `remove_column :users, :admin` — **its own deploy** | — |
 | **4** | D9 four-eyes: `StaffApproval`, the request/approve UI, the three gated actions | destruction and large refunds need a second signature |
+
+### Phase 3b: why the column drop is its own deploy
+
+**Do not commit the drop-column migration alongside Phase 3a.** `db:prepare`
+runs every pending migration in one go on container boot, so committing both
+collapses them into a single deploy and reintroduces exactly the failure this
+split avoids.
+
+A deploy rolls tasks: old code keeps serving for a minute or two after the
+migration lands. Until Phase 3a is *deployed*, old code still runs the
+reconcile callback, which assigns `self[:admin]`. Drop the column in the same
+deploy and every user save on a not-yet-replaced task raises `UndefinedColumn`
+— sign-ups and sign-ins included.
+
+The order is therefore: **deploy 3a → confirm it is serving → commit and
+deploy 3b**, which is nothing but
+
+```ruby
+class RemoveAdminFromUsers < ActiveRecord::Migration[8.1]
+  def change
+    remove_column :users, :admin, :boolean, default: false, null: false
+  end
+end
+```
+
+The full column definition in `remove_column` is what makes it reversible; a
+bare `remove_column :users, :admin` rolls back into a column with the wrong
+type and no default.
+
+Nothing reads or writes the column after 3a, so between the two deploys it is
+inert — stale `false` values on new staff rows that no code consults. The one
+observable effect during 3a's own rollout is that a staff member created in
+that window is invisible to an old task's `User.where(admin: true)`, which
+affects the moderation notifier's recipient list for a couple of minutes.
 
 Phase 4 is last and separate on purpose. It is the only phase that adds a
 model, a queue and a second UI surface, and folding it into the role split
