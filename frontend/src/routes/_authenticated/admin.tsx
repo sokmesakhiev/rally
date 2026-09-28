@@ -399,7 +399,12 @@ function UserStatusBadges({ user }: { user: ApiAdminUser }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-1.5">
-      {user.admin && <Badge>{t("admin.badgeAdmin")}</Badge>}
+      {/* Any staff role, not just admin. Before this a moderator looked
+          identical to an ordinary participant here, which made "who is
+          staff?" unanswerable without a production console — see D10. */}
+      {(user.staff_role ?? (user.admin ? "admin" : null)) && (
+        <Badge>{t(`admin.badgeRole.${user.staff_role ?? "admin"}`)}</Badge>
+      )}
       {user.suspended ? (
         <Badge variant="destructive" title={user.suspension_reason ?? undefined}>
           {t("admin.badgeSuspended")}

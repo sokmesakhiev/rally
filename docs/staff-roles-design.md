@@ -270,6 +270,89 @@ do. It reads as more secure and is less so — every control that makes routine
 work painful gets routed around, usually by giving everybody the top role,
 which is the exact failure this document exists to prevent.
 
+### D10 — Granting staff access: an endpoint for the lower two roles, console for admin
+
+Today the entire flow is one line in a production console:
+
+```
+aws ecs execute-command … --command "bin/rails console"
+User.find_by(email: "…").update!(staff_role: "moderator")
+```
+
+No endpoint, no UI, no rake task, no tooling. That was a reasonable shape for
+a single `admin` boolean granted twice a year. With three roles it has four
+problems, and the first two are the ones that matter:
+
+- **Role changes are the only staff action with no audit trail.** D8 stamps
+  `actor_role` onto every `AdminAction`, but the act of *changing* someone's
+  role writes nothing. The log can say a moderator suspended an event; it
+  cannot say who made them a moderator, when, or why. Granting privilege is
+  more security-relevant than exercising it, and it is the one thing not
+  recorded.
+- **Nobody can see who holds what.** `Admin::UsersController` serializes
+  `admin:` and not `staff_role`, so the console's user list badges admins and
+  shows nothing for support or moderator. An access review — "who is staff?"
+  — is impossible from inside the product.
+- Nobody is told they were granted or revoked, unlike impersonation.
+- Nothing stops self-promotion, or demoting the last admin and locking the
+  platform out in one command.
+
+**The decision: a `manage_staff_roles` capability that grants and revokes
+`support` and `moderator`, and cannot touch `admin`.**
+
+Admin stays console-only. The original reasoning — *no endpoint for promoting
+a user, so a compromised admin session can't mint more admins* — is still
+exactly right for `admin`, and it is the property worth protecting above all
+others: stealing one admin session must not yield unbounded, self-sustaining
+access. It does not follow for the lower two roles, which are granted often,
+carry less, and are currently invisible *because* of that rule. The blast
+radius of a stolen admin session becomes "can create moderators" — bounded,
+reversible, audited, and notified — rather than "can create admins".
+
+Six properties:
+
+- **`manage_staff_roles: %i[admin]`.** Only admins grant staff access.
+- **Four-eyes on granting, never on revoking.** Handing someone the console
+  deserves a second opinion. Taking it away must not wait for one — if an
+  account is compromised at 2am you strip it immediately. This is the same
+  rule that `unsuspend_organization` exists for, and it cost a round of red
+  tests to learn once already: the control belongs on the direction that adds
+  power, never on the recovery.
+- **Audited both ways**, as `grant_staff_role` / `revoke_staff_role`, with
+  the from-and-to roles in metadata. The gap this decision opens with is the
+  one it must close first.
+- **The person is told**, on grant and on revoke. Same reasoning as
+  `ImpersonationNotifier`: a change to what someone can do, that they were
+  never informed of, should not be a state the database can hold. Worth
+  naming the counter-argument — revocation notifies a malicious insider that
+  they have been spotted — but they discover it the moment the console 404s,
+  so the notification costs nothing and the silence would only mislead the
+  honest case.
+- **No self-service.** You cannot change your own role in either direction,
+  through the endpoint or otherwise.
+- **The last admin cannot be demoted.** As a *model* validation, not a
+  controller check, so the console is covered too — that path is precisely
+  where the mistake would be made. `update_column` remains the deliberate
+  override for a genuine recovery.
+
+Plus the cheap fix that stands on its own regardless of the rest: put
+`staff_role` in the admin user-list payload and badge it, so the question
+"who is staff?" has an answer in the product.
+
+*Rejected:* an endpoint that can grant `admin` too, four-eyes-gated. It reads
+as consistent and it isn't — four-eyes protects against one person acting
+alone, not against one *session* being stolen, and a stolen admin session
+plus a second stolen session is a scenario that ends with the attacker
+holding permanent access and the legitimate staff locked out. Console access
+needs separate credentials (IAM), leaves a separate trail (CloudTrail), and
+is the right second factor for the role that can do everything.
+
+*Rejected:* leaving all three console-only and simply adding the audit and
+the badge. Cheaper, and it would fix the two findings that matter. It also
+means every support hire needs someone with production IAM and an ECS exec
+session, which is a strange amount of privilege to need in order to give
+somebody the *least* privileged role in the system.
+
 ---
 
 ## 3. Rollout
@@ -282,6 +365,7 @@ which is the exact failure this document exists to prevent.
 | **3a** ✅ | D7 protected class, D8 audit role, code stops touching `users.admin`, CHECK constraint dropped | staff become unsuspendable and unimpersonatable; audit rows gain `actor_role` |
 | **3b** | `remove_column :users, :admin` — **its own deploy** | — |
 | **4** 🔶 | D9 four-eyes: `StaffApproval`, the four gated actions. **Backend only — the request/approve UI is outstanding** | destruction, plan waivers and refunds ≥ $100 need a second signature |
+| **5** 🔶 | D10: grant/revoke support and moderator, audited and notified; `staff_role` visible in the user list. **Backend + badge only — the grant/revoke UI controls are outstanding** | staff membership becomes reviewable in-product |
 
 ### Phase 3b: why the column drop is its own deploy
 
@@ -488,17 +572,12 @@ here because the fix belongs with whichever phase teaches surveys about
 organizations, and because "no caller hits this" is a reason to defer, not a
 reason to forget.
 
-### Still to settle before Phase 4
+### Still to settle
 
-- **`FOUR_EYES_REFUND_CENTS`.** D9 needs a number. It should be high enough
-  that ordinary "the participant couldn't run, give them their money back"
-  cases don't touch it, and low enough to catch anything worth a second
-  opinion. Somebody who has seen the refund distribution should pick it;
-  guessing here produces either theatre or a bottleneck.
-- **Is the list of three right?** Delete event, suspend organization, large
-  refund. Waiving a plan payment is the obvious fourth candidate — it is money
-  forgone rather than money out, which is why it isn't in the list, but that
-  is a judgement rather than a principle.
+- **Do small plan waivers need a signature?** Every waiver is gated today.
+  A Free or Small tier waiver going through the same ceremony as a $2,000
+  Extra Large may be friction with no payoff; `FOUR_EYES_WAIVER_CENTS` was
+  the alternative and remains unbuilt.
 - **Who staffs the second signature out of hours?** A control that can't be
   satisfied at 2am on a Sunday is a control that gets bypassed. This is an
   operational answer, not a code one, and it should exist before Phase 4

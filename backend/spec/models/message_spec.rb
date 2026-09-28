@@ -73,7 +73,11 @@ RSpec.describe Message, type: :model do
     # The snapshot's whole purpose: history must not be rewritten by a later
     # change to who is staff.
     it "does not change when the sender loses their staff access" do
-      admin = create(:user, :admin)
+      # A moderator rather than an admin, deliberately. `sender_role` is
+      # derived from position in the thread, so *which* staff role the sender
+      # held is beside the point — and using an admin would run into
+      # `last_admin_stays_admin` and turn this into a test of that instead.
+      admin = create(:user, :moderator)
       message = create(:message, conversation: conversation, sender: admin)
 
       admin.update!(staff_role: nil)

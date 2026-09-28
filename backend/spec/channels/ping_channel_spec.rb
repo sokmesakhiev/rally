@@ -11,6 +11,7 @@ RSpec.describe PingChannel, type: :channel do
   end
 
   let(:user) { create(:user) }
+  let!(:colleague) { create(:user, :admin) } # keeps last-admin out of these examples
   let(:admin) { create(:user, :admin) }
 
   # The important half. Channel actions bypass rack-attack entirely — the

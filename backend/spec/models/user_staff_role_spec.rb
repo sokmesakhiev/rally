@@ -69,7 +69,10 @@ RSpec.describe "User staff roles", type: :model do
     end
 
     it "revokes by clearing it" do
-      user = create(:user, :admin)
+      # Not an admin: demoting the last one is refused by design, and that
+      # rule has its own examples in staff_role_assignment_spec.rb. Here the
+      # subject is that clearing the column removes staff status at all.
+      user = create(:user, :moderator)
 
       user.update!(staff_role: nil)
 

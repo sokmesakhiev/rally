@@ -40,6 +40,8 @@ class Notification < ApplicationRecord
     waitlist_closed
     event_reported
     account_impersonated
+    staff_role_granted
+    staff_role_revoked
   ].freeze
 
   # How many the bell shows before giving up on precision. A badge reading

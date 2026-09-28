@@ -5,6 +5,10 @@ require "rails_helper"
 # that, if it silently stopped holding, would leave the bypass in place and the
 # protection gone — with nothing visibly broken to notice.
 RSpec.describe "Admin impersonation", type: :request do
+  # A second admin, so revoking `admin`'s role in the offboarding examples
+  # isn't refused by `last_admin_stays_admin` — which would turn those into
+  # tests of a guard they have no stake in.
+  let!(:colleague) { create(:user, :admin) }
   let(:admin) { create(:user, :admin) }
   let(:organizer) { create(:user) }
 

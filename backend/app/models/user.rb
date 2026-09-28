@@ -96,6 +96,20 @@ class User < ApplicationRecord
   ADMIN_ROLE = "admin"
 
   validates :staff_role, inclusion: { in: STAFF_ROLES }, allow_nil: true
+  # **A model validation, not a controller check** — D10.
+  #
+  # The endpoint can't demote an admin at all, so a controller guard would
+  # protect the path that doesn't need it and miss the one that does: a
+  # console, where somebody types `update!(staff_role: nil)` against the only
+  # remaining admin and locks the platform out of its own moderation surface
+  # with nobody able to undo it. That is the same lock-out D2 spent two
+  # deploys avoiding, still reachable in one command.
+  #
+  # `update_column` skips validations and remains the deliberate override for
+  # a genuine recovery — which is the right shape for a guard like this:
+  # loud by default, bypassable on purpose rather than by accident.
+  validate :last_admin_stays_admin
+
 
   before_validation { self.email = email.downcase.strip if email.present? }
   after_create :create_profile!
@@ -417,5 +431,37 @@ class User < ApplicationRecord
 
   def password_required?
     password_digest.nil? || password.present?
+  end
+
+  # Refuses the save that would leave the platform with no admin.
+  #
+  # Scoped to a **role change** only, which is narrower than it first wants to
+  # be. Suspending or soft-deleting the last admin leaves the same hole —
+  # `authenticate_user!` refuses both before any capability is consulted — and
+  # an earlier version of this caught those too. Two reasons it doesn't:
+  #
+  #   * It is unreviewed scope. D10 specifies "the last admin cannot be
+  #     demoted"; quietly redefining `suspend!` and `discard!` on the way past
+  #     is the sort of thing that should be argued for, not slipped in.
+  #   * It broke an unrelated spec — impersonation's "stops working when the
+  #     actor is suspended" — for a reason that example has no stake in. A
+  #     guard that trips tests it has nothing to do with is usually a guard in
+  #     the wrong place.
+  #
+  # The residual is narrow and self-recoverable: only a console can suspend or
+  # discard a staff account at all (`Admin::UsersController` refuses on
+  # `staff?`), and whoever has a console to cause it has one to undo it.
+  #
+  # Only fires on a record that *is* an admin and is moving off it, so it
+  # costs a COUNT on exactly the saves that could cause the problem and
+  # nothing on the rest. `update_column` skips validations and stays the
+  # deliberate override for a genuine recovery.
+  def last_admin_stays_admin
+    return unless will_save_change_to_staff_role?
+    return unless staff_role_was == ADMIN_ROLE && staff_role != ADMIN_ROLE
+    return if User.where(staff_role: ADMIN_ROLE, deleted_at: nil, suspended_at: nil)
+                  .where.not(id: id).exists?
+
+    errors.add(:staff_role, "cannot be removed from the last remaining admin")
   end
 end

@@ -254,6 +254,12 @@ Rails.application.routes.draw do
         post "users/:id/verify",    to: "users#verify"
         post "users/:id/unverify",  to: "users#unverify"
 
+        # Staff membership (D10). Granting is four-eyes; revoking deliberately
+        # is not — stripping access must never wait on a colleague. Neither can
+        # set or clear `admin`, which stays console-only.
+        post   "users/:id/staff_role", to: "users#grant_staff_role"
+        delete "users/:id/staff_role", to: "users#revoke_staff_role"
+
         # The moderation queue. Named event_reports, not reports — `reports`
         # in this namespace is already the analytics dashboard, below.
         # Grouped by event because a reviewer's unit of work is the event, not
