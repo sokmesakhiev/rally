@@ -372,25 +372,66 @@ deploy and every user save on a not-yet-replaced task raises `UndefinedColumn`
 — sign-ups and sign-ins included.
 
 The order is therefore: **deploy 3a → confirm it is serving → commit and
-deploy 3b**, which is nothing but
+deploy 3b**.
+
+Generate it with `bin/rails generate migration` rather than hand-dating the
+file — Rails 8.1 refuses a future timestamp, and this repository has been
+bitten by that before.
 
 ```ruby
 class RemoveAdminFromUsers < ActiveRecord::Migration[8.1]
-  def change
-    remove_column :users, :admin, :boolean, default: false, null: false
+  # Not `change`. The inverse of this needs a backfill, and a backfill isn't
+  # expressible in a reversible block — see #down.
+  def up
+    remove_column :users, :admin
+  end
+
+  # **A rollback has to restore the data, not just the column.**
+  #
+  # `add_column ... default: false` brings back a column in which *every
+  # admin reads as false*. That is inert while 3a's code is running, since
+  # nothing reads the boolean — but the reason to keep a rollback path at all
+  # is to survive a bad deploy, and a rollback far enough to redeploy
+  # pre-3a code would leave that code asking `User.where(admin: true)` and
+  # finding nobody. Zero admins on the platform, no console access to fix it,
+  # and a rollback that reported success. That is the lock-out D2 exists to
+  # prevent, reappearing at the far end of the sequence.
+  #
+  # The index goes with it for the same reason: Postgres drops an index with
+  # its column, and `add_column` does not bring one back.
+  def down
+    add_column :users, :admin, :boolean, default: false, null: false
+    add_index :users, :admin, where: "admin = true", name: "index_users_on_admin"
+    execute("UPDATE users SET admin = true WHERE staff_role = 'admin'")
   end
 end
 ```
-
-The full column definition in `remove_column` is what makes it reversible; a
-bare `remove_column :users, :admin` rolls back into a column with the wrong
-type and no default.
 
 Nothing reads or writes the column after 3a, so between the two deploys it is
 inert — stale `false` values on new staff rows that no code consults. The one
 observable effect during 3a's own rollout is that a staff member created in
 that window is invisible to an old task's `User.where(admin: true)`, which
 affects the moderation notifier's recipient list for a couple of minutes.
+
+### 3b pre-flight
+
+Checked 2026-09-28, against the code as it stands after Phase 4:
+
+- **No reader or writer of the column remains** anywhere in `backend/app`,
+  `lib`, `db`, `spec`, `e2e` or `frontend`. The surviving mentions are
+  `#admin?` (which reads `staff_role`), the `admin:` key in the JSON payload
+  (unaffected), and comments.
+- **No other database object depends on it** except
+  `index_users_on_admin`, handled in `#down` above. The CHECK constraint was
+  already dropped by `20260926020000`.
+- **`require_admin!` keeps working** post-drop — it calls `#admin?`, not the
+  column. It is dead code either way and can be deleted whenever.
+
+The only remaining gate is not something the codebase can answer: **3a has to
+be deployed and serving.** Locally-migrated is not the same thing. If old
+tasks are still running the reconcile callback when the column disappears,
+every user save on them raises `UndefinedColumn` — sign-ups and sign-ins
+included.
 
 Phase 4 is last and separate on purpose. It is the only phase that adds a
 model, a queue and a second UI surface, and folding it into the role split
