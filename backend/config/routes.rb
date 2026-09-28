@@ -1,6 +1,25 @@
 Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # The Playwright suite's database reset (docs/e2e-testing-design.md, D4).
+  #
+  # **Drawn inside an environment check on purpose.** This endpoint truncates
+  # every table in the database. Anywhere but `e2e` it is not merely
+  # forbidden, it is not routable — there is no controller to reach and no
+  # authorization decision that could be got wrong.
+  #
+  # Two more guards back this one up, because a single `if` is a thing a
+  # refactor can move: Api::E2e::BaseController re-asserts the environment on
+  # every request, and spec/requests/e2e_reset_absent_spec.rb fails the suite
+  # if this block ever stops being conditional.
+  if Rails.env.e2e?
+    namespace :api do
+      namespace :e2e do
+        post "reset", to: "reset#create"
+      end
+    end
+  end
+
   # Active Storage routes (for serving uploaded files)
   direct :rails_blob do |blob, options|
     route_for(:rails_service_blob, blob.signed_id, blob.filename, options)
@@ -282,6 +301,15 @@ Rails.application.routes.draw do
         get "reports", to: "reports#index"
 
         # Queryable audit trail — see AdminAction, BaseController#log_admin_action.
+        # Four-eyes request/approve queue (docs/staff-roles-design.md D9).
+        # No endpoint performs the approved action — the requester goes back
+        # to its normal route, where require_second_signature! finds the
+        # approval. One implementation of each gated action, not two.
+        get  "staff_approvals",             to: "staff_approvals#index"
+        post "staff_approvals",             to: "staff_approvals#create"
+        post "staff_approvals/:id/approve", to: "staff_approvals#approve"
+        post "staff_approvals/:id/reject",  to: "staff_approvals#reject"
+
         get "admin_actions", to: "admin_actions#index"
       end
     end

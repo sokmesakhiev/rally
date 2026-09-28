@@ -35,5 +35,24 @@ development:
 test:
   base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout-sandbox.payway.com.kh") %>
 
+# The Playwright suite (docs/e2e-testing-design.md, D2). Points at a local
+# stub — e2e/support/fake-payway — which answers generate-qr and
+# check-transaction and then fires Rally's own webhook back at it, so
+# EventPlanPayment#mark_paid! and the registration payment path run for real.
+#
+# **The default is localhost on purpose, and there is no sandbox fallback
+# here.** This file exists so an environment can't silently reach the wrong
+# gateway; an e2e run that quietly started talking to ABA's sandbox would be
+# slow, credential-dependent, and occasionally red for reasons nobody on this
+# side can fix. If the stub isn't running, the connection is refused and the
+# failure names the reason.
+#
+# merchant_id / api_key come from `shared:` above, as everywhere else. The
+# stub doesn't verify the HMAC — it has no reason to hold a real key — so any
+# non-blank values satisfy Client#ensure_configured!; playwright.config.ts
+# sets obvious placeholders.
+e2e:
+  base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "http://localhost:3002") %>
+
 production:
   base_url: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout.payway.com.kh") %>

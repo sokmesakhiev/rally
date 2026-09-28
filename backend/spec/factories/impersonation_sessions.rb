@@ -1,6 +1,6 @@
 FactoryBot.define do
   factory :impersonation_session do
-    association :admin, factory: :user, admin: true
+    association :admin, factory: :user, staff_role: "admin"
     association :user
     reason { "Checking the publish error reported in ticket 412" }
     expires_at { ImpersonationSession::DURATION.from_now }
@@ -11,7 +11,7 @@ FactoryBot.define do
 
     trait :revoked do
       revoked_at { 1.minute.ago }
-      association :revoked_by, factory: :user, admin: true
+      association :revoked_by, factory: :user, staff_role: "admin"
     end
 
     # Deliberately written past the validation — `expires_at` is set from

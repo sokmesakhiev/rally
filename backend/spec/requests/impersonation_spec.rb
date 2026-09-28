@@ -5,7 +5,7 @@ require "rails_helper"
 # that, if it silently stopped holding, would leave the bypass in place and the
 # protection gone — with nothing visibly broken to notice.
 RSpec.describe "Admin impersonation", type: :request do
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:organizer) { create(:user) }
 
   def impersonation_headers(session)
@@ -56,13 +56,17 @@ RSpec.describe "Admin impersonation", type: :request do
       expect(ImpersonationSession.count).to eq(0)
     end
 
-    # The privilege-escalation case: impersonating an admin would launder one
-    # staff member's actions through another's identity.
-    it "refuses an admin target" do
-      start_session(create(:user, admin: true))
+    # The privilege-escalation case: impersonating a staff member would
+    # launder one person's actions through another's identity — and since D7
+    # that covers every staff role, not just admin. A support agent
+    # impersonating a moderator would inherit the moderator's console.
+    it "refuses any staff target" do
+      %w[admin moderator support].each do |role|
+        start_session(create(:user, staff_role: role))
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(json["code"]).to eq("impersonation_admin_target")
+        expect(response).to have_http_status(:unprocessable_content), "#{role} was impersonatable"
+        expect(json["code"]).to eq("impersonation_staff_target")
+      end
     end
 
     it "refuses a suspended target" do
@@ -192,9 +196,9 @@ RSpec.describe "Admin impersonation", type: :request do
     # Read-only protects the user's data from staff; it does nothing about the
     # user's secrets, which are readable by definition.
     it "does not expose PayWay credentials, but does say whether they're set up" do
-      organization = create(:organization, owner: organizer,
-                                           payway_merchant_id: "merchant_123",
-                                           payway_api_key: "secret-key-value")
+      create(:organization, owner: organizer,
+                            payway_merchant_id: "merchant_123",
+                            payway_api_key: "secret-key-value")
 
       # The control. Without it, the nils below would pass just as happily
       # against an endpoint that never returned these keys at all — which is
@@ -222,8 +226,8 @@ RSpec.describe "Admin impersonation", type: :request do
     # the same shape. Without re-reading the actor, demoting or suspending a
     # staff account left their open session working right through an
     # offboarding.
-    it "stops working when the actor stops being an admin" do
-      admin.update!(admin: false)
+    it "stops working when the actor stops being staff" do
+      admin.update!(staff_role: nil)
 
       get "/api/v1/auth/me", headers: impersonation_headers(session)
 
@@ -305,7 +309,7 @@ RSpec.describe "Admin impersonation", type: :request do
     # laptop left open in a café, and a control only its own holder can pull is
     # not a control.
     it "can be revoked by a different admin" do
-      other = create(:user, admin: true)
+      other = create(:user, :admin)
 
       post "/api/v1/admin/impersonations/#{session.id}/revoke", headers: auth_headers(other)
 
@@ -372,7 +376,7 @@ RSpec.describe "Admin impersonation", type: :request do
     # let a support session perform a guest-checkout registration — read-only
     # failing open in exactly the place it matters most.
     it "still refuses a write from a *live* session on the same kind of endpoint" do
-      live = ImpersonationSession.start!(admin: create(:user, admin: true), user: create(:user),
+      live = ImpersonationSession.start!(admin: create(:user, :admin), user: create(:user),
                                          reason: "live session for the write check")
 
       post "/api/v1/events/#{event.id}/reports",
@@ -433,10 +437,10 @@ RSpec.describe "Admin impersonation", type: :request do
   describe "ImpersonationSession.live and #live? agree" do
     it "across ended, revoked, expired and open" do
       open_session = ImpersonationSession.start!(admin: admin, user: organizer, reason: "open session here")
-      ended = ImpersonationSession.start!(admin: create(:user, admin: true), user: create(:user), reason: "ended session here").tap(&:end!)
-      revoked = ImpersonationSession.start!(admin: create(:user, admin: true), user: create(:user), reason: "revoked session here")
+      ended = ImpersonationSession.start!(admin: create(:user, :admin), user: create(:user), reason: "ended session here").tap(&:end!)
+      revoked = ImpersonationSession.start!(admin: create(:user, :admin), user: create(:user), reason: "revoked session here")
                                     .tap { |s| s.revoke!(by: admin) }
-      expired = ImpersonationSession.start!(admin: create(:user, admin: true), user: create(:user), reason: "expired session here")
+      expired = ImpersonationSession.start!(admin: create(:user, :admin), user: create(:user), reason: "expired session here")
       expired.update_columns(expires_at: 1.minute.ago)
 
       in_sql = ImpersonationSession.live.pluck(:id)

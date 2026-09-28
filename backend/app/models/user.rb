@@ -82,11 +82,29 @@ class User < ApplicationRecord
   # DB has a matching unique index; this just gives a friendlier error.
   validates :google_uid, uniqueness: true, allow_nil: true
 
+  # ── Staff roles ─────────────────────────────────────────────────────────────
+  # docs/staff-roles-design.md. `nil` means "not staff"; the three values are
+  # ordered least- to most-privileged, and StaffAuthorization::CAPABILITIES is
+  # what reads them.
+  #
+  # **This is the only representation of staff status.** The `users.admin`
+  # boolean it replaced, the callback that kept the two in step, and the CHECK
+  # constraint that stopped them drifting are all gone as of Phase 3 —
+  # `#admin?` below is now an ordinary predicate rather than an override of a
+  # column reader.
+  STAFF_ROLES = %w[support moderator admin].freeze
+  ADMIN_ROLE = "admin"
+
+  validates :staff_role, inclusion: { in: STAFF_ROLES }, allow_nil: true
+
   before_validation { self.email = email.downcase.strip if email.present? }
   after_create :create_profile!
   after_create :generate_email_verification_token!
 
-  scope :admins, -> { where(admin: true) }
+  # Reads `staff_role`, not the boolean — the column goes in the migration
+  # that follows this deploy (docs/staff-roles-design.md, Phase 3).
+  scope :admins, -> { where(staff_role: ADMIN_ROLE) }
+  scope :staff, -> { where.not(staff_role: nil) }
   scope :suspended, -> { where.not(suspended_at: nil) }
   scope :active, -> { where(suspended_at: nil) }
   scope :verified, -> { where.not(verified_at: nil) }
@@ -102,6 +120,20 @@ class User < ApplicationRecord
   def email_verified?
     email_verified_at.present?
   end
+
+  # ── Staff predicates ────────────────────────────────────────────────────────
+
+  # Retained because plenty of code reasonably asks "is this person an admin"
+  # — it is just no longer the *only* question available, and no longer backed
+  # by a column. New authorization checks should ask
+  # `StaffAuthorization#staff_permits?(:some_capability)` instead: "may you do
+  # this particular thing" survives a fourth role being added, where "are you
+  # an admin" quietly stops being the right question.
+  def admin?
+    staff_role == ADMIN_ROLE
+  end
+
+  def staff? = staff_role.present?
 
   # ── Organizer verification ──────────────────────────────────────────────────
 

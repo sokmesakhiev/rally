@@ -5,6 +5,7 @@ module Api
         class BaseController < ApplicationController
             include ValidateParams
             include EventAuthorization
+            include StaffAuthorization
         end
     end
 end

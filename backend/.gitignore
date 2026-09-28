@@ -44,6 +44,9 @@
 # Ignore failure reports.
 /spec/examples.txt
 
+# Ignore coverage reports (written only when COVERAGE=1 — see spec/spec_helper.rb).
+/coverage
+
 # Ignore key files for decrypting credentials and more.
 /config/credentials/*.key
 

@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-gem "rails", "~> 8.1.3"
+gem "rails", "~> 8.1.4"
 gem "pg", "~> 1.1"
 gem "puma", ">= 5.0"
 gem "bootsnap", require: false
@@ -31,7 +31,7 @@ gem "aws-sdk-s3", require: false # Active Storage S3 backend in production
 # without needing LibreOffice just to read/write the template itself (only
 # the final ODT→PDF conversion shells out to `soffice`, in
 # Certificates::RenderPdf — see the Dockerfile for that runtime dependency).
-gem "rubyzip", "~> 3.6", require: "zip"
+gem "rubyzip", "~> 3.7", require: "zip"
 
 # CSV results import (Results::ImportCsv) — "csv" moved from a Ruby default
 # gem to a bundled gem as of Ruby 3.4, so under Bundler it needs an explicit
@@ -98,6 +98,11 @@ group :development, :test do
 end
 
 group :test do
+  # `require: false` is load-bearing: SimpleCov has to be required and started
+  # by hand at the top of spec/spec_helper.rb, before config/environment loads
+  # the app. Bundler requiring it for us would be too late to instrument
+  # anything. Opt in with COVERAGE=1; see the block in spec_helper.rb.
+  gem "simplecov", require: false
   gem "shoulda-matchers", "~> 8.0"
   gem "database_cleaner-active_record"
   gem "concurrent-ruby", "~> 1.2"

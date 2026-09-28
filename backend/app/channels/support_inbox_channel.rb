@@ -56,7 +56,7 @@ class SupportInboxChannel < ApplicationCable::Channel
   # deleted account can't be reloaded at all, which counts as "no longer
   # staff" rather than an error worth raising on a timer thread.
   def still_staff?
-    current_user.reload.admin?
+    StaffAuthorization.permits?(:read_support_chat, current_user.reload)
   rescue ActiveRecord::RecordNotFound
     false
   end
@@ -65,7 +65,7 @@ class SupportInboxChannel < ApplicationCable::Channel
   # `subscribed` is remotely callable, and repeated calls stack duplicate
   # `stream_from` handlers.
   def subscribed
-    return reject unless current_user.admin?
+    return reject unless StaffAuthorization.permits?(:read_support_chat, current_user)
 
     stream_from STREAM
   end

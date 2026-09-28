@@ -52,6 +52,12 @@ ECS_SERVICE=$(tf_output ecs_service_name)
 # exist yet, `terraform apply` first: it was added with the worker service.
 ECS_WORKER_SERVICE=$(tf_output ecs_worker_service_name)
 FRONTEND_BUCKET=$(tf_output frontend_bucket_name)
+# Same reasoning as API_URL below: read the scheme-carrying Terraform output
+# rather than hardcoding. `npm run build` runs scripts/build-sitemap.mjs, which
+# exits non-zero without an absolute VITE_BASE_URL — every <loc> in sitemap.xml
+# and the Sitemap: line in robots.txt have to be absolute, and the version this
+# replaced defaulted to "" and shipped relative ones that crawlers discard.
+FRONTEND_URL=$(tf_output frontend_url)
 CLOUDFRONT_ID=$(tf_output cloudfront_distribution_id)
 # Sourced from Terraform's own "api_url" output (which always includes the
 # scheme — "https://${var.api_domain}" or the plain ALB URL as a fallback)
@@ -204,9 +210,9 @@ if $DEPLOY_FRONTEND; then
   FRONTEND_DIR="$ROOT_DIR/frontend"
   [[ -d "$FRONTEND_DIR" ]] || die "frontend/ directory not found at $FRONTEND_DIR"
 
-  info "Building frontend (VITE_API_URL=$API_URL)..."
+  info "Building frontend (VITE_API_URL=$API_URL, VITE_BASE_URL=$FRONTEND_URL)..."
   cd "$FRONTEND_DIR"
-  VITE_API_URL="$API_URL" npm run build
+  VITE_API_URL="$API_URL" VITE_BASE_URL="$FRONTEND_URL" npm run build
 
   info "Syncing frontend assets to S3..."
   # Only dist/client/ is deployable (see vite.config.ts) — dist/server/ is

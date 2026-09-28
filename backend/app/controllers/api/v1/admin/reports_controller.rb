@@ -6,6 +6,13 @@ module Api
       # mutates state, so unlike UsersController/EventsController there's no
       # log_admin_action call.
       class ReportsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index" => :read_analytics
+        }.freeze
+
         # How many buckets to show per period — chosen so each chart shows a
         # reasonable trend window without the query scanning the entire
         # table history for a fine-grained bucket (12 weeks/months is ~a

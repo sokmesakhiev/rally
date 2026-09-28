@@ -2,6 +2,20 @@ module Api
   module V1
     module Admin
       class EventsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        # unpublish and destroy stay admin-only while suspend/unsuspend sit with
+        # moderator: suspension is reversible and is how something harmful comes
+        # down, the other two hide or destroy an organizer's paid work.
+        ACTION_CAPABILITIES = {
+          "index"     => :read_events,
+          "suspend"   => :suspend_event,
+          "unsuspend" => :suspend_event,
+          "unpublish" => :unpublish_event,
+          "destroy"   => :delete_event
+        }.freeze
+
         # GET /api/v1/admin/events
         # Unlike the public EventsController#index this is NOT scoped to
         # published/upcoming — moderation needs to see drafts and past events

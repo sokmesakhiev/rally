@@ -1,0 +1,23 @@
+{
+  "name": "rally-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end journeys for Rally. Its own package on purpose — Playwright must never enter frontend/'s dependency tree or its `npm ci`.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "//": "Playwright floor is 1.51 because playwright.config.ts names each webServer entry, which is what makes a startup failure say which of the three servers died. Node floor matches frontend/'s, so one toolchain runs both.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium",
+    "payway": "node support/fake-payway/server.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.10.0"
+  }
+}

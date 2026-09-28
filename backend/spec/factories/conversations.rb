@@ -14,7 +14,7 @@ FactoryBot.define do
     end
 
     trait :assigned do
-      assigned_admin { create(:user, admin: true) }
+      assigned_admin { create(:user, :admin) }
     end
 
     # A thread with one message from each side, staff replying last.

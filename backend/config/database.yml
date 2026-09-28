@@ -77,6 +77,27 @@ test:
   <<: *default
   database: backend_test
 
+# The Playwright end-to-end suite (docs/e2e-testing-design.md). A database of
+# its own, deliberately: the suite truncates every table between journeys, and
+# doing that to `backend_test` would break a developer running specs in
+# another terminal, while doing it to `backend_development` would destroy
+# their own data.
+#
+# Only `primary` is declared. The solid_queue / solid_cache / solid_cable gems
+# are in the `:production` bundle group, so in this environment there is
+# nothing to point a `queue`/`cache`/`cable` role at — config/environments/
+# e2e.rb uses the :async job adapter and a memory cache store instead.
+#
+# The pool is larger than the default 5 because ActiveJob's :async adapter
+# runs jobs on threads inside this same process, checking out connections
+# alongside Puma's request threads. Nothing here is sized for load; it is
+# sized so a journey can't fail with a checkout timeout, which is the least
+# informative way an e2e test can die.
+e2e:
+  <<: *default
+  database: rally_e2e
+  max_connections: <%= ENV.fetch("RAILS_DB_POOL") { 15 } %>
+
 # As with config/credentials.yml, you never want to store sensitive information,
 # like your database password, in your source code. If your source code is
 # ever seen by anyone, they now have access to your database.

@@ -10,6 +10,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+
+# Vitest coverage output. `npm run test:coverage` (what CI runs) writes an
+# lcov report here; nothing ignored it before, so a local run left a
+# committable directory of generated HTML behind.
+coverage
 .output
 .vinxi
 .tanstack/**

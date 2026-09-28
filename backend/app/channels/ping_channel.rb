@@ -46,7 +46,8 @@
 # has to live *in the channel*, not in rack-attack. See Ticket H.
 class PingChannel < ApplicationCable::Channel
   def self.enabled_for?(user)
-    user&.admin? || ENV["ENABLE_PING_CHANNEL"] == "true"
+    StaffAuthorization.permits?(:use_diagnostics, user) ||
+      ENV["ENABLE_PING_CHANNEL"] == "true"
   end
 
   # Round-trips through the pub/sub adapter rather than replying directly, so a

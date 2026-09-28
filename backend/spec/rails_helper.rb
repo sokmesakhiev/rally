@@ -22,6 +22,7 @@ RSpec.configure do |config|
 
   config.include FactoryBot::Syntax::Methods
   config.include RequestHelpers, type: :request
+  config.include StaffApprovalHelpers, type: :request
   # Lets request specs assert on ActionMailer::Base.deliveries by wrapping
   # `deliver_later` calls in `perform_enqueued_jobs { ... }`.
   config.include ActiveJob::TestHelper, type: :request

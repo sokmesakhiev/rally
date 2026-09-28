@@ -174,7 +174,7 @@ RSpec.describe Conversation, type: :model do
 
   describe "cleanup" do
     it "goes away with the participant, messages and all" do
-      conversation = create(:conversation, :with_exchange, user: user)
+      create(:conversation, :with_exchange, user: user)
 
       expect { user.destroy }
         .to change(described_class, :count).by(-1)

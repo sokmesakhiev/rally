@@ -181,6 +181,10 @@ async function downloadFile(path: string, fallbackFilename: string): Promise<voi
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Rally staff, least- to most-privileged. Mirrors `User::STAFF_ROLES`.
+ *  See docs/staff-roles-design.md for the capability matrix behind these. */
+export type StaffRole = "support" | "moderator" | "admin";
+
 export interface ApiUser {
   id: string;
   email: string;
@@ -198,8 +202,20 @@ export interface ApiUser {
    * this only drives UI affordances; EventsController re-checks server-side. */
   verified: boolean;
   /** Drives whether the admin nav link renders. NOT a security boundary —
-   * every admin endpoint re-checks server-side. */
+   * every admin endpoint re-checks server-side.
+   *
+   * Equivalent to `staff_role === "admin"`. Kept while both exist so a
+   * deployed frontend keeps working across a backend deploy; retires with the
+   * column in Phase 3 of docs/staff-roles-design.md. */
   admin?: boolean;
+  /** Which staff console tabs to render. `null`/absent for everyone who isn't
+   * staff, which is almost everybody.
+   *
+   * An affordance, not a gate: hiding a tab hides a button, and the endpoints
+   * behind it each re-check `require_staff!(capability)`. Keep it that way —
+   * a client-side permission model that drifts from the server's is worse
+   * than none, because it looks authoritative. */
+  staff_role?: StaffRole | null;
   /** Null means this account has never accepted the Terms of Service — true
    * for a brand-new Google sign-in (that flow never shows a checkbox, unlike
    * email/password signup). Drives the one-time acceptance interstitial in

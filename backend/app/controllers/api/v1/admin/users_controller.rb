@@ -2,6 +2,17 @@ module Api
   module V1
     module Admin
       class UsersController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index"     => :read_users,
+          "suspend"   => :suspend_user,
+          "unsuspend" => :suspend_user,
+          "verify"    => :verify_user,
+          "unverify"  => :verify_user
+        }.freeze
+
         # GET /api/v1/admin/users
         # Supports ?q= (email or display name), ?status=suspended|active,
         # and pagination.
@@ -46,8 +57,15 @@ module Api
             return
           end
 
-          if user.admin?
-            render json: { error: "Admin accounts cannot be suspended.", code: "admin_target" },
+          # Any staff member, not just an admin — D7 of
+          # docs/staff-roles-design.md. While this read `admin?`, the role
+          # split would have handed a support agent the ability to suspend a
+          # moderator: a privilege escalation introduced by the very change
+          # meant to reduce privilege. Removing someone's staff access is a
+          # console operation, deliberately, for the same reason granting it
+          # is.
+          if user.staff?
+            render json: { error: "Staff accounts cannot be suspended.", code: "staff_target" },
                    status: :unprocessable_entity
             return
           end

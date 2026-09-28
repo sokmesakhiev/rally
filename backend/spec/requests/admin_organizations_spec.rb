@@ -4,7 +4,7 @@ require "rails_helper"
 # organization moderation. Mirrors admin_spec.rb's event and user suspend
 # sections, since it's the same concept one level up.
 RSpec.describe "Admin organizations API", type: :request do
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:regular) { create(:user) }
   let(:organizer) { create(:user) }
   let!(:organization) { create(:organization, owner: organizer, name: "Phnom Penh Runners") }
@@ -92,6 +92,13 @@ RSpec.describe "Admin organizations API", type: :request do
   # ── Suspend ──────────────────────────────────────────────────────────────────
   describe "POST /api/v1/admin/organizations/:id/suspend" do
     let!(:event) { create(:event, :for_organization, presented_by: organization, creator: organizer) }
+
+    # Suspending an organization takes down every event it presents at once,
+    # so it needs a second signature (docs/staff-roles-design.md D9). Granted
+    # here as setup; the approval flow has its own spec. Note the *un*suspend
+    # block below deliberately has no equivalent — restoring service must not
+    # wait on a colleague.
+    before { grant_staff_approval!(:suspend_organization, organization, requester: admin) }
 
     it "suspends the organization and stores the reason" do
       post "/api/v1/admin/organizations/#{organization.id}/suspend",

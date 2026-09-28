@@ -16,7 +16,7 @@ the misleading one.
 
 | | |
 |---|---|
-| Ruby | `4.0.1` (see `.ruby-version`) |
+| Ruby | `4.0.7` (see `.ruby-version`) |
 | PostgreSQL | 15+ |
 | libvips | Active Storage's image processor. `brew install vips`, or `apt-get install libvips` |
 

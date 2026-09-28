@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "Admin API", type: :request do
-  let(:admin)   { create(:user, admin: true) }
+  let(:admin)   { create(:user, :admin) }
   let(:regular) { create(:user) }
 
   # ── Access control ───────────────────────────────────────────────────────────
@@ -256,13 +256,40 @@ RSpec.describe "Admin API", type: :request do
     end
 
     it "refuses to suspend another admin" do
-      other_admin = create(:user, admin: true)
+      other_admin = create(:user, :admin)
 
       post "/api/v1/admin/users/#{other_admin.id}/suspend", headers: auth_headers(admin), as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(json["code"]).to eq("admin_target")
+      expect(json["code"]).to eq("staff_target")
       expect(other_admin.reload).not_to be_suspended
+    end
+
+    # D7: the protected class is any staff role, not just admin. Without this
+    # the role split would have let a support agent suspend a moderator.
+    it "refuses to suspend a moderator or a support agent" do
+      %w[moderator support].each do |role|
+        colleague = create(:user, staff_role: role)
+
+        post "/api/v1/admin/users/#{colleague.id}/suspend",
+             params: { reason: "Testing the guard" }, headers: auth_headers(admin), as: :json
+
+        expect(response).to have_http_status(:unprocessable_content), "#{role} was suspendable"
+        expect(json["code"]).to eq("staff_target")
+        expect(colleague.reload).not_to be_suspended
+      end
+    end
+
+    # The control: an ordinary account is still suspendable, so the guard
+    # above isn't simply refusing everything.
+    it "still suspends an ordinary account" do
+      target = create(:user)
+
+      post "/api/v1/admin/users/#{target.id}/suspend",
+           params: { reason: "Spamming the report queue" }, headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(target.reload).to be_suspended
     end
 
     it "returns 404 for an unknown user" do
@@ -636,9 +663,14 @@ RSpec.describe "Admin API", type: :request do
   end
 
   # ── DELETE /api/v1/admin/events/:id ──────────────────────────────────────────
+  # Deleting an event is four-eyes (docs/staff-roles-design.md D9), so each
+  # example grants an approval for its own event. The approval flow itself —
+  # self-approval, tampering, replay — is covered in staff_approvals_spec.rb;
+  # here it is setup, and the subject is still the delete endpoint.
   describe "DELETE /api/v1/admin/events/:id" do
     it "requires an explicit confirm flag" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}", headers: auth_headers(admin), as: :json
@@ -650,6 +682,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "soft-deletes the event when confirmed, rather than destroying the row" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}",
@@ -665,6 +698,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "records a queryable AdminAction for the deletion" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
 
       expect {
         delete "/api/v1/admin/events/#{event.id}",
@@ -683,6 +717,7 @@ RSpec.describe "Admin API", type: :request do
       # Hard-deleting an event with money attached would destroy the payment
       # records needed to actually issue refunds.
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
       create(:registration, event: event, payment_status: "paid")
 
       expect {
@@ -698,6 +733,7 @@ RSpec.describe "Admin API", type: :request do
 
     it "allows deletion when registrations exist but none are paid" do
       event = create(:event)
+      grant_staff_approval!(:delete_event, event, requester: admin)
       create(:registration, event: event, payment_status: "unpaid")
 
       delete "/api/v1/admin/events/#{event.id}",

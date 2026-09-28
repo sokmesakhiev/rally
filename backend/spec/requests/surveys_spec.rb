@@ -81,6 +81,63 @@ RSpec.describe "Surveys API", type: :request do
     end
   end
 
+  # ── GET /api/v1/surveys/:id ───────────────────────────────────────────────────
+  #
+  # A survey is readable only by the organizer who created it.
+  #
+  # This section exists because its absence was the bug. `#show` shares
+  # `set_survey` with `#update`/`#destroy` — an unscoped
+  # `Survey.kept.find(params[:id])` — but was left off the `authorize_owner!`
+  # filter, so any authenticated account could read any survey it could name,
+  # questions and options included. Every other action on the controller had a
+  # spec; the unspecced one is where the missing `before_action` hid.
+  #
+  # The owner-reads and no-token examples flanking the refusal are positive
+  # controls, not padding. A lone "a stranger is refused" assertion passes just
+  # as happily when the endpoint is broken for everybody, and this codebase has
+  # been caught by that twice — once against a 502, once against a JSON key
+  # that didn't exist. Keep all three.
+  describe "GET /api/v1/surveys/:id" do
+    let!(:survey) { organizer.surveys.create!(title: "Internal draft") }
+
+    before do
+      survey.survey_questions.create!(
+        question_text: "Which corporate sponsor sent you?",
+        question_type: "text",
+        position: 0
+      )
+    end
+
+    # Positive control. If adding the guard breaks this, the fix was too broad.
+    it "lets the owner read their own survey, questions and all" do
+      get "/api/v1/surveys/#{survey.id}", headers: auth_headers(organizer), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(json["survey"]["title"]).to eq("Internal draft")
+      expect(json["survey"]["questions"].size).to eq(1)
+    end
+
+    # 403 rather than 404, matching `authorize_owner!` as the PATCH and DELETE
+    # sections below already use it. Consistency inside this controller beat
+    # the 404-for-strangers convention `EventAuthorization` uses; flip both
+    # together if you'd rather not confirm the id exists.
+    it "does not let a different signed-in user read it" do
+      get "/api/v1/surveys/#{survey.id}", headers: auth_headers(other), as: :json
+
+      expect(response).to have_http_status(:forbidden)
+      # The status is the convention; *this* is the security property, and it
+      # is what should still hold if someone later decides on 404 instead.
+      expect(response.body).not_to include("Which corporate sponsor sent you?")
+      expect(response.body).not_to include("Internal draft")
+    end
+
+    it "returns 401 without a token" do
+      get "/api/v1/surveys/#{survey.id}", as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
   # ── PATCH /api/v1/surveys/:id ─────────────────────────────────────────────────
   describe "PATCH /api/v1/surveys/:id" do
     let!(:survey) { create(:user).surveys.create!(title: "Old title") }

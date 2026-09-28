@@ -11,6 +11,19 @@ module Api
       # read *other people's* conversations, which is exactly why the admin gate
       # is the whole authorization story and why the state changes are audited.
       class ConversationsController < BaseController
+        # Capability per action — see StaffAuthorization::CAPABILITIES and
+        # docs/staff-roles-design.md D4. Admin::BaseController looks these up
+        # with `fetch`, so adding an action here is not optional.
+        ACTION_CAPABILITIES = {
+          "index"    => :read_support_chat,
+          "show"     => :read_support_chat,
+          "read"     => :read_support_chat,
+          "reply"    => :handle_support_chat,
+          "assign"   => :handle_support_chat,
+          "unassign" => :handle_support_chat,
+          "resolve"  => :handle_support_chat
+        }.freeze
+
         # Every action looks a conversation up by id, so a mistyped one should
         # read as "not found" rather than an unhandled 500.
         rescue_from ActiveRecord::RecordNotFound do
