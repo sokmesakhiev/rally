@@ -112,7 +112,7 @@ RSpec.describe "Reporting an event", type: :request do
   end
 
   describe "notifying staff" do
-    let!(:admin) { create(:user, admin: true) }
+    let!(:admin) { create(:user, :admin) }
 
     it "puts a row in every admin's bell" do
       expect { report(as: reporter) }.to change {
@@ -140,7 +140,7 @@ RSpec.describe "Reporting an event", type: :request do
     end
 
     it "skips suspended and deleted staff accounts" do
-      create(:user, admin: true, suspended_at: Time.current)
+      create(:user, :admin, suspended_at: Time.current)
 
       report(as: reporter)
 

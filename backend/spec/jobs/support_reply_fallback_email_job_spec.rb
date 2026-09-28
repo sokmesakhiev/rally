@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe SupportReplyFallbackEmailJob, type: :job do
   let(:participant) { create(:user) }
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:conversation) { create(:conversation, user: participant) }
   let(:reply) { create(:message, conversation: conversation, sender: admin, body: "Sorted for you") }
 

@@ -42,7 +42,11 @@ module Notifications
     # `kept` and not suspended: a discarded or suspended staff account
     # shouldn't collect a moderation queue it can't act on.
     def admins
-      User.where(admin: true, deleted_at: nil, suspended_at: nil)
+      # Moderators and admins — the roles that can actually work the report
+      # queue (StaffAuthorization's :read_event_reports). Support agents are
+      # deliberately excluded: a bell badge for a queue they can't open is
+      # noise, and noise is how people learn to ignore the bell.
+      User.where(staff_role: %w[moderator admin], deleted_at: nil, suspended_at: nil)
     end
 
     # Unread only. A report landing on an event an admin already dealt with

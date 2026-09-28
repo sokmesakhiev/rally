@@ -128,7 +128,7 @@ RSpec.describe "Refunds API", type: :request do
 
     context "as an admin who isn't the organizer" do
       it "is allowed" do
-        admin = create(:user, admin: true)
+        admin = create(:user, :admin)
         allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_return(gateway_success_response)
 
         post "/api/v1/payments/#{payment.id}/refunds", headers: auth_headers(admin), as: :json
@@ -162,7 +162,7 @@ RSpec.describe "Refunds API", type: :request do
       end
 
       it "is not logged as an AdminAction (it's their own event's team, not platform moderation)" do
-        manager = create(:user, admin: true)
+        manager = create(:user, :admin)
         create(:event_membership, event: event, user: manager, role: "manager")
         allow_any_instance_of(AbaPayway::Client).to receive(:refund).and_return(gateway_success_response)
 

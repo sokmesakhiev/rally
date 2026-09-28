@@ -4,7 +4,7 @@ require "rails_helper"
 # organization moderation. Mirrors admin_spec.rb's event and user suspend
 # sections, since it's the same concept one level up.
 RSpec.describe "Admin organizations API", type: :request do
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:regular) { create(:user) }
   let(:organizer) { create(:user) }
   let!(:organization) { create(:organization, owner: organizer, name: "Phnom Penh Runners") }

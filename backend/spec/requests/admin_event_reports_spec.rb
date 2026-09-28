@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "Admin event report queue", type: :request do
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:event) { create(:event, title: "Midnight Ride") }
 
   def add_reports(n, on: event, reason: "violence")

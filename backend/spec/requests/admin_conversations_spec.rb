@@ -1,8 +1,8 @@
 require "rails_helper"
 
 RSpec.describe "Admin support conversations", type: :request do
-  let(:admin) { create(:user, admin: true) }
-  let(:other_admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
+  let(:other_admin) { create(:user, :admin) }
   let(:participant) { create(:user) }
   let!(:conversation) { create(:conversation, user: participant) }
 

@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Conversations::PostMessage do
   let(:participant) { create(:user) }
-  let(:admin) { create(:user, admin: true) }
+  let(:admin) { create(:user, :admin) }
   let(:conversation) { create(:conversation, user: participant) }
 
   def post_from(sender, body: "hello")

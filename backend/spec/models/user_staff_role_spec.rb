@@ -1,153 +1,80 @@
 require "rails_helper"
 
-# Phase 0 of docs/staff-roles-design.md claims to change no behaviour. This
-# file is that claim, written down so it can fail.
+# `users.staff_role` is now the only representation of staff status.
 #
-# The valuable examples here are not the ones about the new column — they are
-# the equivalence ones. `users.admin` and `users.staff_role` both exist and
-# both must stay correct until Phase 3 retires the boolean, because thirteen
-# call sites read one or the other and they move across in different phases.
-# A divergence between the two is not a cosmetic bug: on one side it means a
-# staff member silently keeps powers they were stripped of, and on the other
-# it means an admin is locked out of the console.
-RSpec.describe "User staff roles (Phase 0)", type: :model do
+# This file used to carry a second set of examples proving the role and the
+# legacy `users.admin` boolean agreed — through the reconcile callback and a
+# CHECK constraint. Phase 3 removed both, so those examples went with them
+# rather than being left to describe machinery that no longer exists. The
+# history is in docs/staff-roles-design.md D2 if the cutover ever needs
+# repeating for another column.
+RSpec.describe "User staff roles", type: :model do
   describe "#admin?" do
     it "is true for a user whose role is admin" do
-      user = create(:user, staff_role: "admin")
+      user = create(:user, :admin)
 
       expect(user.admin?).to be(true)
       expect(user).to be_staff
     end
 
-    it "is false for every other role, and for nobody" do
-      expect(create(:user, staff_role: "support").admin?).to be(false)
-      expect(create(:user, staff_role: "moderator").admin?).to be(false)
-      expect(create(:user).admin?).to be(false)
+    it "is false for every other role" do
+      expect(create(:user, :support).admin?).to be(false)
+      expect(create(:user, :moderator).admin?).to be(false)
     end
 
-    it "is false for a user with no role at all" do
-      expect(create(:user)).not_to be_staff
-    end
-  end
-
-  # ── The equivalence that makes Phase 0 a no-op ────────────────────────────
-  #
-  # 25 spec files across this suite create an admin with
-  # `create(:user, admin: true)`. If the callback doesn't translate that into
-  # a role, #admin? returns false and every one of them fails — which would at
-  # least be loud. The quieter and worse version is the same thing happening
-  # in a console against production.
-  describe "granting admin the way it is actually granted" do
-    it "promotes via the boolean, as the console does" do
+    it "is false, and not staff at all, for an ordinary account" do
       user = create(:user)
 
-      user.update!(admin: true)
-
-      expect(user.staff_role).to eq("admin")
-      expect(user.admin?).to be(true)
-      # Re-read from the database: the callback has to have persisted this,
-      # not just set it on the in-memory object.
-      expect(user.reload.staff_role).to eq("admin")
-    end
-
-    it "keeps `create(:user, admin: true)` working, which 25 spec files rely on" do
-      user = create(:user, admin: true)
-
-      expect(user.admin?).to be(true)
-      expect(user.staff_role).to eq("admin")
-    end
-
-    it "revokes via the boolean, clearing the role entirely" do
-      user = create(:user, admin: true)
-
-      user.update!(admin: false)
-
-      expect(user.reload.staff_role).to be_nil
       expect(user.admin?).to be(false)
-      # Demotion is not a sideways move into a lesser staff role — that would
-      # be a grant nobody requested.
       expect(user).not_to be_staff
     end
   end
 
-  describe "the raw boolean, which four call sites still read directly" do
-    it "is set when the role is assigned" do
-      user = create(:user, staff_role: "admin")
-
-      expect(user.reload[:admin]).to be(true)
-      # The two scopes and ModerationNotifier's recipient query all go through
-      # `where(admin: true)`. They must still find this person.
-      expect(User.admins).to include(user)
-      expect(User.where(admin: true)).to include(user)
-    end
-
-    it "is cleared when the role moves to a non-admin one" do
-      user = create(:user, admin: true)
-
-      user.update!(staff_role: "moderator")
-
-      expect(user.reload[:admin]).to be(false)
-      expect(User.admins).not_to include(user)
-      # …but they are still staff, which is the whole point of the change.
-      expect(user).to be_staff
-      expect(User.staff).to include(user)
-    end
-
-    it "is never set for a non-admin staff role" do
-      expect(create(:user, staff_role: "support").reload[:admin]).to be(false)
+  describe "#staff?" do
+    it "is true for all three roles" do
+      User::STAFF_ROLES.each do |role|
+        expect(create(:user, staff_role: role)).to be_staff, "#{role} did not count as staff"
+      end
     end
   end
 
-  # ── The database-level guard ──────────────────────────────────────────────
-  #
-  # The reconcile callback is a `before_save`, so `update_column`,
-  # `update_all`, `insert_all`, `upsert_all` and raw SQL all route around it.
-  # `users_admin_matches_staff_role` is what catches those, and these examples
-  # are what prove the constraint is actually enforced rather than merely
-  # declared in a migration nobody ran.
-  #
-  # Each example ends on the raise deliberately: a constraint violation aborts
-  # the surrounding transaction, so any database work after it in the same
-  # example would fail with PG::InFailedSqlTransaction and obscure the result.
-  describe "the admin/staff_role consistency constraint" do
-    it "refuses a role cleared behind the model's back" do
-      user = create(:user, admin: true)
+  describe "scopes" do
+    it "finds admins by role" do
+      admin = create(:user, :admin)
+      create(:user, :moderator)
+      create(:user)
 
-      expect { user.update_column(:staff_role, nil) }
-        .to raise_error(ActiveRecord::StatementInvalid, /users_admin_matches_staff_role/)
+      expect(User.admins).to contain_exactly(admin)
     end
 
-    it "refuses a boolean raised behind the model's back" do
+    it "finds every staff member, whatever the role" do
+      staff = User::STAFF_ROLES.map { |role| create(:user, staff_role: role) }
+      create(:user)
+
+      expect(User.staff).to match_array(staff)
+    end
+  end
+
+  describe "granting and revoking from the console" do
+    # There is deliberately no endpoint for this — see
+    # Api::V1::Admin::BaseController. The console is the only way in, so the
+    # console's one-liner is worth an example.
+    it "promotes by setting the role" do
       user = create(:user)
 
-      expect { user.update_column(:admin, true) }
-        .to raise_error(ActiveRecord::StatementInvalid, /users_admin_matches_staff_role/)
+      user.update!(staff_role: "moderator")
+
+      expect(user.reload.staff_role).to eq("moderator")
+      expect(user).to be_staff
     end
 
-    # The case that decides the SQL spelling. `admin = (staff_role = 'admin')`
-    # evaluates to NULL here, and a CHECK that evaluates to NULL *passes* — so
-    # under the obvious spelling this desync would be allowed and the
-    # constraint would police admins only. `IS NOT DISTINCT FROM` is what
-    # makes it total.
-    it "refuses an admin boolean with no role at all" do
-      user = create(:user)
+    it "revokes by clearing it" do
+      user = create(:user, :admin)
 
-      expect { user.update_columns(admin: true, staff_role: nil) }
-        .to raise_error(ActiveRecord::StatementInvalid, /users_admin_matches_staff_role/)
-    end
+      user.update!(staff_role: nil)
 
-    # Positive controls: the constraint must permit every consistent pair, or
-    # it is just blocking raw writes rather than enforcing agreement.
-    it "permits a consistent admin pair written raw" do
-      user = create(:user)
-
-      expect { user.update_columns(admin: true, staff_role: "admin") }.not_to raise_error
-    end
-
-    it "permits non-admin staff, where the boolean is false" do
-      user = create(:user)
-
-      expect { user.update_columns(admin: false, staff_role: "moderator") }.not_to raise_error
+      expect(user.reload).not_to be_staff
+      expect(user.admin?).to be(false)
     end
   end
 
@@ -167,10 +94,9 @@ RSpec.describe "User staff roles (Phase 0)", type: :model do
     end
   end
 
-  # Ordered least- to most-privileged. Nothing reads the ordering in Phase 0 —
-  # the capability matrix lands in Phase 1 — but the constant is the thing
-  # that matrix will be written against, so pin it now rather than discovering
-  # later that someone alphabetised it.
+  # Ordered least- to most-privileged. StaffAuthorization::CAPABILITIES is
+  # written against these names, and spec/requests/admin_capability_coverage_spec.rb
+  # asserts the matrix uses no others.
   it "declares the roles in ascending order of privilege" do
     expect(User::STAFF_ROLES).to eq(%w[support moderator admin])
     expect(User::ADMIN_ROLE).to eq("admin")

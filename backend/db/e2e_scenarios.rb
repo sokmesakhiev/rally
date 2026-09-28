@@ -257,7 +257,7 @@ module E2eScenarios
   # A staff admin plus a published event to moderate, and a participant who
   # can try to register for it after it's taken down.
   def self.admin
-    staff = create_user!("admin@e2e.rally.test", display_name: "Sam Staff", admin: true)
+    staff = create_user!("admin@e2e.rally.test", display_name: "Sam Staff", staff_role: "admin")
     organizer = create_user!("organizer@e2e.rally.test", display_name: "Sokha Organizer", verified: true)
     org = create_organization!(organizer)
     participant = create_user!("participant@e2e.rally.test", display_name: "Dara Participant")
@@ -293,12 +293,12 @@ module E2eScenarios
   # exists so a future ToS bump can tell "agreed to an old version" from
   # "never agreed to anything" (see TermsOfService). Seeding the timestamp
   # alone would manufacture a state real signup can't produce.
-  def self.create_user!(email, display_name:, verified: false, admin: false)
+  def self.create_user!(email, display_name:, verified: false, staff_role: nil)
     user = User.create!(
       email: email,
       password: PASSWORD,
       password_confirmation: PASSWORD,
-      admin: admin,
+      staff_role: staff_role,
       email_verified_at: Time.current,
       terms_accepted_at: Time.current,
       terms_version: TermsOfService::CURRENT_VERSION,

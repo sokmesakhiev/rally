@@ -42,7 +42,7 @@ RSpec.describe "Events API", type: :request do
     end
 
     it "reports the organization's verified badge" do
-      published_upcoming.organization.verify!(by: create(:user, admin: true))
+      published_upcoming.organization.verify!(by: create(:user, :admin))
 
       get "/api/v1/events", as: :json
 
@@ -525,7 +525,7 @@ RSpec.describe "Events API", type: :request do
   describe "POST /api/v1/events" do
     # Every event is presented by an organization, and the caller always says
     # which — see organization-identity-tickets.md's Ticket C (#332).
-    let!(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, admin: true)) }
+    let!(:organization) { create(:organization, owner: user, verified_at: Time.current, verified_by: create(:user, :admin)) }
 
     let(:valid_params) do
       {
@@ -870,7 +870,7 @@ RSpec.describe "Events API", type: :request do
         it "allows a paid event under a verified organization" do
           organizer = create(:user)
           verified_org = create(:organization, owner: organizer)
-          verified_org.verify!(by: create(:user, admin: true))
+          verified_org.verify!(by: create(:user, :admin))
 
           post "/api/v1/events",
                params: valid_params.deep_merge(
