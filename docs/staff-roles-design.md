@@ -358,6 +358,40 @@ tasks are still running the reconcile callback when the column disappears,
 every user save on them raises `UndefinedColumn` — sign-ups and sign-ins
 included.
 
+### Phase 3b: why the column drop is its own deploy
+
+**Do not commit the drop-column migration alongside Phase 3a.** `db:prepare`
+runs every pending migration in one go on container boot, so committing both
+collapses them into a single deploy and reintroduces exactly the failure this
+split avoids.
+
+A deploy rolls tasks: old code keeps serving for a minute or two after the
+migration lands. Until Phase 3a is *deployed*, old code still runs the
+reconcile callback, which assigns `self[:admin]`. Drop the column in the same
+deploy and every user save on a not-yet-replaced task raises `UndefinedColumn`
+— sign-ups and sign-ins included.
+
+The order is therefore: **deploy 3a → confirm it is serving → commit and
+deploy 3b**, which is nothing but
+
+```ruby
+class RemoveAdminFromUsers < ActiveRecord::Migration[8.1]
+  def change
+    remove_column :users, :admin, :boolean, default: false, null: false
+  end
+end
+```
+
+The full column definition in `remove_column` is what makes it reversible; a
+bare `remove_column :users, :admin` rolls back into a column with the wrong
+type and no default.
+
+Nothing reads or writes the column after 3a, so between the two deploys it is
+inert — stale `false` values on new staff rows that no code consults. The one
+observable effect during 3a's own rollout is that a staff member created in
+that window is invisible to an old task's `User.where(admin: true)`, which
+affects the moderation notifier's recipient list for a couple of minutes.
+
 Phase 4 is last and separate on purpose. It is the only phase that adds a
 model, a queue and a second UI surface, and folding it into the role split
 would make Phase 1's "no behaviour change" claim false — which is the property
