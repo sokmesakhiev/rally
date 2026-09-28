@@ -903,7 +903,12 @@
     "impersonateReason": "Why do you need to look?",
     "impersonateReasonPlaceholder": "e.g. Checking the publish error they reported in ticket #412",
     "impersonateReasonNotice": "This is emailed to them word for word, along with the time you opened the session.",
-    "confirmImpersonate": "Start session"
+    "confirmImpersonate": "Start session",
+    "badgeRole": {
+      "support": "Support",
+      "moderator": "Moderator",
+      "admin": "Admin"
+    }
   },
   "legal": {
     "lastUpdated": "Draft dated {{date}}",

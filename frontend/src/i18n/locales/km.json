@@ -895,7 +895,12 @@
     "impersonateReason": "ហេតុអ្វីអ្នកត្រូវការមើល?",
     "impersonateReasonPlaceholder": "ឧ. ពិនិត្យបញ្ហាផ្សព្វផ្សាយដែលគេរាយការណ៍ក្នុងសំបុត្រ #412",
     "impersonateReasonNotice": "អត្ថបទនេះនឹងត្រូវផ្ញើទៅគេតាមអ៊ីមែលទាំងស្រុង ព្រមទាំងពេលវេលាដែលអ្នកចាប់ផ្ដើម។",
-    "confirmImpersonate": "ចាប់ផ្ដើមវគ្គ"
+    "confirmImpersonate": "ចាប់ផ្ដើមវគ្គ",
+    "badgeRole": {
+      "support": "ជំនួយ",
+      "moderator": "អ្នកសម្របសម្រួល",
+      "admin": "អ្នកគ្រប់គ្រង"
+    }
   },
   "legal": {
     "lastUpdated": "សេចក្តីព្រាងចុះថ្ងៃទី {{date}}",

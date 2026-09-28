@@ -85,6 +85,18 @@ module StaffAuthorization
     # given row depends on the capability *that row* asks for, which is
     # checked per-request in StaffApprovalsController#approvable!.
     read_staff_approvals:   %i[support moderator admin],
+    # ── Staff membership (D10). Two capabilities, not one, and the split is
+    # the same lesson `unsuspend_organization` taught: a capability covering
+    # both an action and its undo drags the four-eyes requirement onto the
+    # undo. Granting somebody the console deserves a second opinion; taking it
+    # away at 2am from a compromised account must not wait for one.
+    #
+    # Neither can touch `admin` — that stays console-only, so a stolen admin
+    # session cannot mint another admin. See D10 for why four-eyes is not a
+    # substitute for that: it defends against one *person* acting alone, not
+    # one *session* being stolen.
+    grant_staff_role:       %i[admin],
+    revoke_staff_role:      %i[admin],
     read_analytics:         %i[moderator admin],
     read_audit_log:         %i[admin],
     # PingChannel, the Ticket 0 diagnostic. Its `echo` action INSERTs into
@@ -219,12 +231,10 @@ module StaffAuthorization
   # `remaining_refundable_cents`, a re-waive re-publishes an already-published
   # event), which is what keeps the practical exposure small rather than
   # theoretical.
-  def record_staff_action!(action, target)
+  def record_staff_action!(action, target, **metadata)
     approval = @staff_approval
-    AdminAction.log!(
-      admin: current_user, action: action, target: target,
-      metadata: approval ? { staff_approval_id: approval.id } : {}
-    )
+    metadata = metadata.merge(staff_approval_id: approval.id) if approval
+    AdminAction.log!(admin: current_user, action: action, target: target, metadata: metadata)
     approval&.consume!
   end
 
@@ -238,6 +248,7 @@ module StaffAuthorization
   def four_eyes_payload(capability)
     case capability
     when :issue_refund        then { amount_cents: params[:amount_cents].to_i }
+    when :grant_staff_role    then { staff_role: params[:staff_role].to_s }
     when :waive_plan_payment  then { plan: params[:plan].to_s }
     else {}
     end
@@ -282,6 +293,7 @@ module StaffAuthorization
     when :suspend_organization then [ "Organization", params[:id] ]
     when :waive_plan_payment  then [ "Event", params[:event_id] ]
     when :issue_refund        then [ "Payment", params[:payment_id] ]
+    when :grant_staff_role    then [ "User", params[:id] ]
     end
   end
 end

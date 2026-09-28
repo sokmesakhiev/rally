@@ -37,7 +37,16 @@ class StaffApproval < ApplicationRecord
   # Capabilities that cannot be exercised on one person's say-so.
   #
   # `issue_refund` is conditional rather than listed here — see .required_for?.
-  ALWAYS_FOUR_EYES = %i[delete_event suspend_organization waive_plan_payment].freeze
+  # `grant_staff_role` is here and `revoke_staff_role` deliberately is not —
+  # the control belongs on the direction that adds power, never on the
+  # recovery. See D10, and `unsuspend_organization` for the same rule learned
+  # the expensive way.
+  ALWAYS_FOUR_EYES = %i[
+    delete_event
+    suspend_organization
+    waive_plan_payment
+    grant_staff_role
+  ].freeze
 
   validates :action, presence: true
   validates :reason, presence: true

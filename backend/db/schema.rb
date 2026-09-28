@@ -44,50 +44,50 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "admin_actions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "action", null: false
     t.uuid "admin_id", null: false
-    t.datetime "created_at", null: false
-    t.jsonb "metadata", default: {}, null: false
-    t.uuid "target_id", null: false
+    t.string "action", null: false
     t.string "target_type", null: false
+    t.uuid "target_id", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
     t.index ["action"], name: "index_admin_actions_on_action"
     t.index ["admin_id"], name: "index_admin_actions_on_admin_id"
     t.index ["target_type", "target_id"], name: "index_admin_actions_on_target_type_and_target_id"
   end
 
   create_table "certificate_previews", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "error_code"
+    t.uuid "user_id", null: false
     t.uuid "event_id", null: false
-    t.string "file_url"
     t.string "status", default: "pending", null: false
     t.bigint "template_blob_id", null: false
+    t.string "file_url"
+    t.string "error_code"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
     t.index ["updated_at"], name: "index_certificate_previews_on_updated_at"
     t.index ["user_id", "event_id"], name: "index_certificate_previews_one_per_user_per_event", unique: true
     t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'ready'::character varying, 'failed'::character varying]::text[])", name: "certificate_previews_status_check"
   end
 
   create_table "certificates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "file_url"
     t.uuid "registration_id", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "file_url"
     t.index ["registration_id"], name: "index_certificates_on_registration_id", unique: true
   end
 
   create_table "conversations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "assigned_admin_id"
-    t.datetime "created_at", null: false
-    t.datetime "last_message_at"
-    t.datetime "participant_last_read_at"
-    t.datetime "resolved_at"
-    t.datetime "staff_last_read_at"
+    t.uuid "user_id", null: false
     t.string "status", default: "open", null: false
     t.string "subject"
+    t.uuid "assigned_admin_id"
+    t.datetime "last_message_at"
+    t.datetime "participant_last_read_at"
+    t.datetime "staff_last_read_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
+    t.datetime "resolved_at"
     t.index ["assigned_admin_id"], name: "index_conversations_on_assigned_admin_id", where: "(assigned_admin_id IS NOT NULL)"
     t.index ["resolved_at"], name: "index_conversations_on_resolved_at", where: "(resolved_at IS NOT NULL)"
     t.index ["status", "last_message_at"], name: "index_conversations_on_status_and_last_message_at", order: { last_message_at: :desc }
@@ -97,26 +97,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "event_activities", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "action", null: false
-    t.uuid "actor_id", null: false
-    t.datetime "created_at", null: false
     t.uuid "event_id", null: false
+    t.uuid "actor_id", null: false
+    t.string "action", null: false
     t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
     t.index ["action"], name: "index_event_activities_on_action"
     t.index ["actor_id"], name: "index_event_activities_on_actor_id"
     t.index ["event_id"], name: "index_event_activities_on_event_id"
   end
 
   create_table "event_invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "accepted_at"
-    t.datetime "created_at", null: false
-    t.string "email", null: false
     t.uuid "event_id", null: false
-    t.datetime "expires_at", null: false
-    t.uuid "invited_by_id", null: false
-    t.datetime "revoked_at"
+    t.string "email", null: false
     t.string "role", null: false
+    t.uuid "invited_by_id", null: false
     t.string "token", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "accepted_at"
+    t.datetime "revoked_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_event_invitations_on_email"
     t.index ["event_id", "email"], name: "index_event_invitations_on_event_and_email_pending", unique: true, where: "((accepted_at IS NULL) AND (revoked_at IS NULL))"
@@ -125,49 +125,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "event_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "event_id", null: false
+    t.uuid "user_id", null: false
+    t.string "role", null: false
+    t.uuid "invited_by_id"
     t.datetime "accepted_at", null: false
     t.datetime "created_at", null: false
-    t.uuid "event_id", null: false
-    t.uuid "invited_by_id"
-    t.string "role", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
     t.index ["event_id", "user_id"], name: "index_event_memberships_on_event_id_and_user_id", unique: true
     t.index ["role"], name: "index_event_memberships_on_role"
     t.index ["user_id"], name: "index_event_memberships_on_user_id"
   end
 
   create_table "event_plan_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.text "abapay_deeplink"
-    t.integer "amount_cents", null: false
-    t.datetime "created_at", null: false
-    t.string "currency", default: "usd", null: false
     t.uuid "event_id", null: false
-    t.datetime "expires_at"
-    t.datetime "paid_at"
+    t.uuid "user_id", null: false
     t.string "plan", null: false
     t.string "provider", default: "aba_payway", null: false
-    t.text "qr_string"
-    t.jsonb "raw_response", default: {}, null: false
-    t.string "status", default: "pending", null: false
     t.string "tran_id", null: false
+    t.string "status", default: "pending", null: false
+    t.integer "amount_cents", null: false
+    t.string "currency", default: "usd", null: false
+    t.text "qr_string"
+    t.text "abapay_deeplink"
+    t.datetime "expires_at"
+    t.datetime "paid_at"
+    t.jsonb "raw_response", default: {}, null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
     t.index ["event_id", "status"], name: "index_event_plan_payments_on_event_id_and_status"
     t.index ["event_id"], name: "index_event_plan_payments_on_event_id"
     t.index ["tran_id"], name: "index_event_plan_payments_on_tran_id", unique: true
   end
 
   create_table "event_reports", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.text "details"
     t.uuid "event_id", null: false
-    t.string "reason", null: false
     t.uuid "reporter_id"
-    t.datetime "reviewed_at"
-    t.uuid "reviewed_by_id"
-    t.text "reviewer_note"
+    t.string "reason", null: false
+    t.text "details"
     t.string "status", default: "open", null: false
+    t.uuid "reviewed_by_id"
+    t.datetime "reviewed_at"
+    t.text "reviewer_note"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["event_id", "reporter_id"], name: "index_event_reports_one_open_per_reporter", unique: true, where: "((reporter_id IS NOT NULL) AND ((status)::text = ANY ((ARRAY['open'::character varying, 'reviewing'::character varying])::text[])))"
     t.index ["event_id"], name: "index_event_reports_on_event_id"
@@ -196,32 +196,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
     t.string "brand_color", default: "#6366f1", null: false
     t.integer "capacity"
     t.string "category", default: "other", null: false
-    t.string "certificate_template_url"
     t.datetime "created_at", null: false
     t.uuid "creator_id", null: false
     t.string "currency", default: "usd", null: false
-    t.datetime "deleted_at"
     t.text "description"
     t.datetime "end_at"
     t.boolean "is_published", default: false, null: false
-    t.decimal "latitude", precision: 10, scale: 6
     t.string "location"
     t.string "logo_url"
+    t.integer "price_cents", default: 0, null: false
+    t.datetime "start_at", null: false
+    t.uuid "survey_id"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "plan"
+    t.decimal "latitude", precision: 10, scale: 6
     t.decimal "longitude", precision: 10, scale: 6
+    t.string "route_map_url"
+    t.string "certificate_template_url"
+    t.datetime "deleted_at"
+    t.datetime "suspended_at"
+    t.string "suspension_reason"
     t.uuid "organization_id", null: false
     t.string "payment_model", default: "direct", null: false
-    t.string "plan"
-    t.integer "price_cents", default: 0, null: false
     t.jsonb "refund_policy_tiers"
     t.datetime "registration_closed_at"
     t.datetime "registration_closes_at"
-    t.string "route_map_url"
-    t.datetime "start_at", null: false
-    t.uuid "survey_id"
-    t.datetime "suspended_at"
-    t.string "suspension_reason"
-    t.string "title", null: false
-    t.datetime "updated_at", null: false
     t.string "visibility", default: "public", null: false
     t.index ["category"], name: "index_events_on_category"
     t.index ["creator_id"], name: "index_events_on_creator_id"
@@ -237,14 +237,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "host_ledger_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.integer "amount_cents", null: false
-    t.datetime "created_at", null: false
-    t.string "currency", default: "usd", null: false
-    t.text "description"
-    t.string "entry_type", null: false
     t.uuid "organization_id", null: false
-    t.uuid "source_id"
+    t.integer "amount_cents", null: false
+    t.string "currency", default: "usd", null: false
+    t.string "entry_type", null: false
     t.string "source_type"
+    t.uuid "source_id"
+    t.text "description"
+    t.datetime "created_at", null: false
     t.index ["organization_id", "created_at"], name: "index_host_ledger_entries_on_organization_id_and_created_at"
     t.index ["source_type", "source_id"], name: "index_host_ledger_entries_on_source_type_and_source_id"
     t.check_constraint "amount_cents <> 0", name: "host_ledger_entries_amount_non_zero"
@@ -252,16 +252,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
 
   create_table "impersonation_sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "admin_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "ended_at"
-    t.datetime "expires_at", null: false
-    t.string "ip"
+    t.uuid "user_id", null: false
     t.text "reason", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "ended_at"
     t.datetime "revoked_at"
     t.uuid "revoked_by_id"
-    t.datetime "updated_at", null: false
+    t.string "ip"
     t.string "user_agent"
-    t.uuid "user_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["admin_id"], name: "index_impersonation_sessions_on_admin_id"
     t.index ["admin_id"], name: "index_impersonation_sessions_one_live_per_admin", unique: true, where: "((ended_at IS NULL) AND (revoked_at IS NULL))"
     t.index ["revoked_by_id"], name: "index_impersonation_sessions_on_revoked_by_id"
@@ -270,11 +270,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "messages", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.text "body", null: false
     t.uuid "conversation_id", null: false
-    t.datetime "created_at", null: false
     t.uuid "sender_id"
     t.string "sender_role", null: false
+    t.text "body", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["conversation_id", "created_at"], name: "index_messages_on_conversation_id_and_created_at"
     t.check_constraint "btrim(body) <> ''::text", name: "messages_body_not_blank"
@@ -283,56 +283,56 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "notifications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "body"
-    t.datetime "created_at", null: false
-    t.uuid "event_id"
-    t.string "kind", null: false
-    t.datetime "read_at"
-    t.string "title", null: false
-    t.datetime "updated_at", null: false
-    t.string "url"
     t.uuid "user_id", null: false
+    t.string "kind", null: false
+    t.string "title", null: false
+    t.string "body"
+    t.string "url"
+    t.uuid "event_id"
+    t.datetime "read_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["event_id"], name: "index_notifications_on_event_id"
     t.index ["user_id", "created_at"], name: "index_notifications_on_user_id_and_created_at"
     t.index ["user_id", "created_at"], name: "index_notifications_unread_by_user", where: "(read_at IS NULL)"
   end
 
   create_table "organization_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.uuid "invited_by_id"
     t.uuid "organization_id", null: false
-    t.string "role", null: false
-    t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.string "role", null: false
+    t.uuid "invited_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["organization_id", "user_id"], name: "index_organization_memberships_on_organization_id_and_user_id", unique: true
     t.index ["role"], name: "index_organization_memberships_on_role"
     t.index ["user_id"], name: "index_organization_memberships_on_user_id"
   end
 
   create_table "organizations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "owner_id", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.string "logo_url"
     t.string "banner_url"
     t.string "brand_color"
+    t.string "website"
     t.string "contact_email"
     t.string "contact_phone"
-    t.datetime "created_at", null: false
-    t.datetime "deleted_at"
-    t.text "description"
     t.string "facebook_url"
     t.string "instagram_url"
-    t.string "logo_url"
-    t.string "name", null: false
-    t.uuid "owner_id", null: false
-    t.text "payway_api_key"
-    t.string "payway_merchant_id"
-    t.text "payway_rsa_public_key"
-    t.string "slug", null: false
+    t.string "telegram_url"
+    t.datetime "verified_at"
     t.datetime "suspended_at"
     t.string "suspension_reason"
-    t.string "telegram_url"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "verified_at"
+    t.string "payway_merchant_id"
+    t.text "payway_api_key"
+    t.text "payway_rsa_public_key"
     t.uuid "verified_by_id"
-    t.string "website"
     t.index ["deleted_at"], name: "index_organizations_on_deleted_at"
     t.index ["owner_id"], name: "index_organizations_on_owner_id"
     t.index ["slug"], name: "index_organizations_on_slug", unique: true
@@ -341,7 +341,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.text "abapay_deeplink"
     t.integer "amount_cents", null: false
     t.datetime "created_at", null: false
     t.string "currency", default: "usd", null: false
@@ -349,35 +348,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
     t.datetime "paid_at"
     t.string "provider", default: "aba_payway", null: false
     t.text "qr_string"
+    t.text "abapay_deeplink"
     t.jsonb "raw_response", default: {}, null: false
-    t.integer "refunded_amount_cents", default: 0, null: false
     t.uuid "registration_id", null: false
     t.string "status", default: "pending", null: false
     t.string "tran_id", null: false
     t.datetime "updated_at", null: false
+    t.integer "refunded_amount_cents", default: 0, null: false
     t.index ["registration_id", "status"], name: "index_payments_on_registration_id_and_status"
     t.index ["registration_id"], name: "index_payments_on_registration_id"
     t.index ["tran_id"], name: "index_payments_on_tran_id", unique: true
   end
 
   create_table "platform_payments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "authorized_at"
-    t.string "capture_reference"
-    t.datetime "captured_at"
-    t.datetime "created_at", null: false
-    t.string "currency", default: "usd", null: false
-    t.datetime "expires_at"
-    t.integer "gross_amount_cents", null: false
-    t.datetime "hold_expires_at"
-    t.integer "host_net_cents", null: false
-    t.string "payout_reference"
-    t.integer "platform_fee_cents", null: false
-    t.string "provider", default: "aba_payway", null: false
-    t.jsonb "raw_response", default: {}, null: false
-    t.integer "refunded_amount_cents", default: 0, null: false
     t.uuid "registration_id", null: false
+    t.string "provider", default: "aba_payway", null: false
+    t.string "currency", default: "usd", null: false
     t.string "status", default: "pending", null: false
+    t.integer "gross_amount_cents", null: false
+    t.integer "platform_fee_cents", null: false
+    t.integer "host_net_cents", null: false
+    t.integer "refunded_amount_cents", default: 0, null: false
     t.string "tran_id", null: false
+    t.string "capture_reference"
+    t.string "payout_reference"
+    t.datetime "expires_at"
+    t.datetime "hold_expires_at"
+    t.datetime "authorized_at"
+    t.datetime "captured_at"
+    t.jsonb "raw_response", default: {}, null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["registration_id", "status"], name: "index_platform_payments_on_registration_id_and_status"
     t.index ["tran_id"], name: "index_platform_payments_on_tran_id", unique: true
@@ -390,44 +390,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.string "display_name"
-    t.boolean "notify_event_details_changed", default: true, null: false
-    t.boolean "notify_payment_received", default: true, null: false
-    t.boolean "notify_promoted_from_waitlist", default: true, null: false
-    t.boolean "notify_refund_issued", default: true, null: false
-    t.text "payway_api_key"
-    t.string "payway_merchant_id"
-    t.text "payway_rsa_public_key"
-    t.string "phone"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.string "payway_merchant_id"
+    t.text "payway_api_key"
+    t.text "payway_rsa_public_key"
+    t.boolean "notify_payment_received", default: true, null: false
+    t.boolean "notify_refund_issued", default: true, null: false
+    t.boolean "notify_promoted_from_waitlist", default: true, null: false
+    t.string "phone"
+    t.boolean "notify_event_details_changed", default: true, null: false
     t.index ["phone"], name: "index_profiles_on_phone", unique: true, where: "(phone IS NOT NULL)"
     t.index ["user_id"], name: "index_profiles_on_user_id", unique: true
   end
 
   create_table "push_subscriptions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "auth_key", null: false
-    t.datetime "created_at", null: false
+    t.uuid "user_id", null: false
     t.text "endpoint", null: false
+    t.string "p256dh_key", null: false
+    t.string "auth_key", null: false
+    t.string "user_agent"
     t.datetime "expired_at"
     t.datetime "last_delivered_at"
-    t.string "p256dh_key", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "user_agent"
-    t.uuid "user_id", null: false
     t.index ["endpoint"], name: "index_push_subscriptions_on_endpoint", unique: true
     t.index ["user_id", "expired_at"], name: "index_push_subscriptions_on_user_id_and_expired_at"
   end
 
   create_table "refunds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.integer "amount_cents", null: false
-    t.datetime "created_at", null: false
-    t.uuid "initiated_by_id", null: false
     t.uuid "payment_id", null: false
-    t.jsonb "raw_response", default: {}, null: false
-    t.text "reason"
+    t.uuid "initiated_by_id", null: false
+    t.integer "amount_cents", null: false
     t.string "refund_method", default: "gateway", null: false
-    t.datetime "refunded_at"
     t.string "status", default: "pending", null: false
+    t.text "reason"
+    t.jsonb "raw_response", default: {}, null: false
+    t.datetime "refunded_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["initiated_by_id"], name: "index_refunds_on_initiated_by_id"
     t.index ["payment_id"], name: "index_refunds_on_payment_id"
@@ -456,18 +456,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "registrations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.integer "amount_owed_cents"
     t.integer "amount_paid_cents", default: 0, null: false
-    t.string "bib_number"
-    t.datetime "checked_in_at"
     t.datetime "created_at", null: false
-    t.datetime "deleted_at"
     t.uuid "event_id", null: false
     t.string "payment_status", default: "unpaid", null: false
-    t.jsonb "refund_policy_tiers"
     t.string "status", default: "confirmed", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.datetime "checked_in_at"
+    t.datetime "deleted_at"
+    t.integer "amount_owed_cents"
+    t.jsonb "refund_policy_tiers"
+    t.string "bib_number"
     t.index ["deleted_at"], name: "index_registrations_on_deleted_at"
     t.index ["event_id", "bib_number"], name: "index_registrations_on_event_id_and_bib_number", unique: true, where: "(bib_number IS NOT NULL)"
     t.index ["event_id", "user_id"], name: "index_registrations_on_event_id_and_user_id", unique: true, where: "(deleted_at IS NULL)"
@@ -476,28 +476,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "results", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
+    t.uuid "registration_id", null: false
     t.integer "finish_time_seconds"
     t.string "notes"
-    t.uuid "registration_id", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["registration_id"], name: "index_results_on_registration_id", unique: true
   end
 
   create_table "staff_approvals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "action", null: false
-    t.datetime "approved_at"
+    t.uuid "requester_id", null: false
     t.uuid "approver_id"
-    t.datetime "consumed_at"
-    t.datetime "created_at", null: false
-    t.datetime "expires_at", null: false
+    t.string "action", null: false
+    t.string "target_type", null: false
+    t.uuid "target_id", null: false
     t.jsonb "payload", default: {}, null: false
     t.string "payload_digest", null: false
     t.text "reason", null: false
-    t.uuid "requester_id", null: false
     t.string "status", default: "pending", null: false
-    t.uuid "target_id", null: false
-    t.string "target_type", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "approved_at"
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["approver_id"], name: "index_staff_approvals_on_approver_id"
     t.index ["requester_id", "action", "status"], name: "index_staff_approvals_on_requester_id_and_action_and_status"
@@ -522,35 +522,35 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   create_table "surveys", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "creator_id", null: false
-    t.datetime "deleted_at"
     t.string "title", default: "Registration Survey", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.index ["creator_id"], name: "index_surveys_on_creator_id"
     t.index ["deleted_at"], name: "index_surveys_on_deleted_at"
   end
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
-    t.datetime "deleted_at"
     t.string "email", null: false
-    t.boolean "email_auto_generated", default: false, null: false
     t.datetime "email_verification_sent_at"
     t.string "email_verification_token"
     t.datetime "email_verified_at"
-    t.string "google_uid"
     t.string "password_digest", null: false
     t.datetime "password_reset_sent_at"
     t.string "password_reset_token"
+    t.datetime "updated_at", null: false
     t.string "provider"
-    t.string "staff_role"
+    t.string "google_uid"
+    t.boolean "admin", default: false, null: false
     t.datetime "suspended_at"
     t.string "suspension_reason"
-    t.datetime "terms_accepted_at"
-    t.string "terms_version"
-    t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.boolean "email_auto_generated", default: false, null: false
     t.datetime "verified_at"
     t.uuid "verified_by_id"
+    t.datetime "terms_accepted_at"
+    t.string "terms_version"
+    t.string "staff_role"
     t.index ["admin"], name: "index_users_on_admin", where: "(admin = true)"
     t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NOT NULL)"
     t.index ["email"], name: "index_users_on_email", unique: true
@@ -563,13 +563,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_010000) do
   end
 
   create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "deleted_at"
     t.uuid "event_id", null: false
+    t.uuid "user_id", null: false
     t.jsonb "event_type_ids", default: [], null: false
     t.string "status", default: "waiting", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
+    t.datetime "deleted_at"
     t.index ["deleted_at"], name: "index_waitlist_entries_on_deleted_at"
     t.index ["event_id", "created_at"], name: "index_waitlist_entries_on_event_and_created_at"
     t.index ["event_id", "user_id"], name: "index_waitlist_entries_on_event_and_user_when_waiting", unique: true, where: "((status)::text = 'waiting'::text)"

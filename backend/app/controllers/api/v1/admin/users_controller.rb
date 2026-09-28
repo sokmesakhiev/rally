@@ -10,7 +10,9 @@ module Api
           "suspend"   => :suspend_user,
           "unsuspend" => :suspend_user,
           "verify"    => :verify_user,
-          "unverify"  => :verify_user
+          "unverify"  => :verify_user,
+          "grant_staff_role"  => :grant_staff_role,
+          "revoke_staff_role" => :revoke_staff_role
         }.freeze
 
         # GET /api/v1/admin/users
@@ -120,7 +122,105 @@ module Api
           render json: { error: "User not found" }, status: :not_found
         end
 
+        # POST /api/v1/admin/users/:id/staff_role — D10.
+        #
+        # Grants or changes a staff role. **Cannot set `admin`**: that stays
+        # console-only so a stolen admin session can't mint another admin, and
+        # four-eyes is not a substitute for it (it defends against one person
+        # acting alone, not one session being taken). Four-eyes applies here
+        # regardless — see StaffApproval::ALWAYS_FOUR_EYES.
+        def grant_staff_role
+          user = User.find(params[:id])
+          role = params[:staff_role].to_s
+          return unless assignable_role!(role)
+          return unless not_self!(user)
+          # An existing admin is outside this endpoint's remit in either
+          # direction: it can't create one and it can't demote one.
+          return unless not_an_admin!(user)
+
+          previous = user.staff_role
+          # One transaction, so "granted but never told" is not a state the
+          # database can hold — the same shape as ImpersonationNotifier, and
+          # for the same reason. StaffRoleNotifier deliberately doesn't
+          # swallow its failures, and that only means anything if a failure
+          # takes the role change with it.
+          #
+          # `AdminAction` metadata goes in at creation rather than being
+          # patched afterwards: that model is append-only by design.
+          ActiveRecord::Base.transaction do
+            user.update!(staff_role: role)
+            record_staff_action!("grant_staff_role", user, from_role: previous, to_role: role)
+            Notifications::StaffRoleNotifier.granted(user, role: role, by: current_user)
+          end
+
+          render json: { user: user_json(user.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "User not found" }, status: :not_found
+        rescue ActiveRecord::RecordInvalid => e
+          render json: { error: e.record.errors.full_messages.join(", ") },
+                 status: :unprocessable_entity
+        end
+
+        # DELETE /api/v1/admin/users/:id/staff_role
+        #
+        # **Deliberately not four-eyes.** Removing access is the recovery
+        # direction: if an account is compromised at 2am you strip it now, not
+        # when a colleague wakes up. Same rule as `unsuspend_organization`.
+        def revoke_staff_role
+          user = User.find(params[:id])
+          return unless not_self!(user)
+          return unless not_an_admin!(user)
+
+          previous = user.staff_role
+          if previous.nil?
+            # Idempotent rather than an error — revoking access from somebody
+            # who has none is the state you wanted either way, and an error
+            # here would make a panicked double-click look like a failure.
+            return render json: { user: user_json(user) }
+          end
+
+          ActiveRecord::Base.transaction do
+            user.update!(staff_role: nil)
+            record_staff_action!("revoke_staff_role", user, from_role: previous, to_role: nil)
+            Notifications::StaffRoleNotifier.revoked(user, previous_role: previous, by: current_user)
+          end
+
+          render json: { user: user_json(user.reload) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "User not found" }, status: :not_found
+        end
+
         private
+
+        # Only the two lower roles, and only ones User actually declares.
+        def assignable_role!(role)
+          return true if User::STAFF_ROLES.include?(role) && role != User::ADMIN_ROLE
+
+          render json: {
+            error: "Admin is granted from a console, not here. Assignable roles: " \
+                   "#{(User::STAFF_ROLES - [ User::ADMIN_ROLE ]).join(', ')}.",
+            code: "role_not_assignable"
+          }, status: :unprocessable_entity
+          false
+        end
+
+        def not_self!(user)
+          return true unless user.id == current_user.id
+
+          render json: { error: "You can't change your own staff role.", code: "self_role_change" },
+                 status: :forbidden
+          false
+        end
+
+        def not_an_admin!(user)
+          return true unless user.admin?
+
+          render json: {
+            error: "An admin's role is managed from a console.",
+            code: "admin_target"
+          }, status: :unprocessable_entity
+          false
+        end
 
         def apply_search(scope, term)
           query = term.to_s.strip
@@ -155,6 +255,10 @@ module Api
             verified: user.verified?,
             verified_at: user.verified_at,
             admin: user.admin?,
+            # Without this, a moderator is indistinguishable from an ordinary
+            # participant in the only screen that lists people, and "who is
+            # staff?" has no answer inside the product. See D10.
+            staff_role: user.staff_role,
             suspended: user.suspended?,
             suspended_at: user.suspended_at,
             suspension_reason: user.suspension_reason,

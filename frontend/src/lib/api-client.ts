@@ -1482,6 +1482,10 @@ export interface ApiAdminUser {
   verified: boolean;
   verified_at: string | null;
   admin: boolean;
+  /** Which staff role, if any. `null` for the overwhelming majority.
+   *  Equivalent to `admin` when it reads "admin"; both are here while the
+   *  column is retired (docs/staff-roles-design.md Phase 3b). */
+  staff_role: StaffRole | null;
   suspended: boolean;
   suspended_at: string | null;
   suspension_reason: string | null;

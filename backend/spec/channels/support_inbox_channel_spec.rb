@@ -22,6 +22,7 @@ RSpec.describe SupportInboxChannel, type: :channel do
   end
 
   it "rejects a fresh subscription once staff access is revoked" do
+    create(:user, :admin) # a colleague, so the last-admin guard isn't in play
     admin = create(:user, :admin)
     stub_connection current_user: admin
     admin.update!(staff_role: nil)
@@ -38,6 +39,7 @@ RSpec.describe SupportInboxChannel, type: :channel do
   # actually closes that, so drive it directly: channel specs have no event
   # loop, so the timer never fires on its own.
   describe "the periodic access re-check" do
+    let!(:colleague) { create(:user, :admin) } # keeps last-admin out of these examples
     let(:admin) { create(:user, :admin) }
 
     before do
