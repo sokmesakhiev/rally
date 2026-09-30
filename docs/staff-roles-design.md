@@ -355,6 +355,44 @@ somebody the *least* privileged role in the system.
 
 ---
 
+### D11 — Approving a role request *is* the assignment
+
+D10 gave granting its own endpoint. Building the UI showed that was wrong.
+
+Four-eyes means a grant can't succeed until somebody signs it, so an endpoint
+of its own produces a three-step dance across two sessions: propose, wait for
+a colleague, come back and press a second button. For the single most routine
+staff operation there is, that is the kind of friction people route around —
+and the way they route around it is by handing out `admin`, which is the
+outcome this whole document exists to prevent.
+
+So for `grant_staff_role` only, **approving applies the role**. Two steps, one
+each. `POST /admin/users/:id/staff_role` is gone; `Staff::AssignRole` is the
+one implementation and the approval flow is its only caller.
+
+This is an exception to D9's "no endpoint performs the approved action", and
+it is worth being precise about why it doesn't undermine it. That rule exists
+because the other gated actions have substantial logic in their own endpoints
+— deleting an event checks paid registrations, refunding talks to a gateway —
+so performing them from the approval flow would mean *two* implementations
+that drift. A role assignment is one `update!`, one audit row and one
+notification. Moving it wholesale into a service leaves one implementation,
+not two, so the reason for the rule doesn't apply.
+
+Two details that fall out of it:
+
+- **The checks run again at apply time.** Hours can pass between proposing
+  and signing, and the target can become an admin, or turn out to be the
+  approver, in between. An approval authorises a change to a state of the
+  world, and the world is allowed to move.
+- **The audit names both people.** The approver is the actor — they made it
+  happen — and `requested_by_id` records who asked. A two-person control
+  whose log names only one of them is not much of a control.
+
+Revoking is untouched: immediate, unapproved, its own endpoint.
+
+---
+
 ## 3. Rollout
 
 | Phase | Ships | Behaviour change |
@@ -364,8 +402,8 @@ somebody the *least* privileged role in the system.
 | **2** ✅ | `support` and `moderator` roles, frontend tab gating | new roles become usable |
 | **3a** ✅ | D7 protected class, D8 audit role, code stops touching `users.admin`, CHECK constraint dropped | staff become unsuspendable and unimpersonatable; audit rows gain `actor_role` |
 | **3b** | `remove_column :users, :admin` — **its own deploy** | — |
-| **4** 🔶 | D9 four-eyes: `StaffApproval`, the four gated actions. **Backend only — the request/approve UI is outstanding** | destruction, plan waivers and refunds ≥ $100 need a second signature |
-| **5** 🔶 | D10: grant/revoke support and moderator, audited and notified; `staff_role` visible in the user list. **Backend + badge only — the grant/revoke UI controls are outstanding** | staff membership becomes reviewable in-product |
+| **4** ✅ | D9 four-eyes: `StaffApproval`, the four gated actions, and the Approvals queue in the console | destruction, plan waivers and refunds ≥ $100 need a second signature |
+| **5** ✅ | D10/D11: propose a role from the user row, a second admin approves and that applies it; revoke immediately; roles badged in the list | staff membership becomes reviewable *and* assignable in-product |
 
 ### Phase 3b: why the column drop is its own deploy
 

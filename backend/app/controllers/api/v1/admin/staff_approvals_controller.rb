@@ -11,6 +11,16 @@ module Api
       # here would mean a second implementation of four irreversible actions,
       # and the two would drift.
       class StaffApprovalsController < BaseController
+        # Which of Staff::CreateStaffApproval's refusals are *authorization*
+        # failures rather than validation ones. Both are refusals, but 403 and
+        # 422 say different things to a client: "you may not" versus "that
+        # request doesn't make sense". Anything not listed is the latter.
+        #
+        # A lookup rather than a ternary on one code: the ternary silently
+        # demoted `self_role_change` to 422 when that code was added, which is
+        # the failure mode a table makes visible.
+        CREATE_FORBIDDEN_CODES = %w[capability_not_held self_role_change].freeze
+
         ACTION_CAPABILITIES = {
           "index"   => :read_staff_approvals,
           "create"  => :read_staff_approvals,
@@ -39,53 +49,22 @@ module Api
         # asking to exercise — an approval is a second opinion on an action
         # you could otherwise take, not a way to borrow a power you don't have.
         def create
-          capability = params[:action_name].to_s.to_sym
+          validate_params_with_schema(AdminStaffApprovalCreateRequestSchema) do |validated_params|
+            result = Staff::CreateStaffApproval.call(
+              requester: current_user,
+              action_name: validated_params[:action_name],
+              target_type: validated_params[:target_type],
+              target_id: validated_params[:target_id],
+              payload: validated_params[:payload] || {},
+              reason: validated_params[:reason]
+            )
 
-          unless StaffAuthorization::CAPABILITIES.key?(capability)
-            return render json: { error: "Unknown capability.", code: "unknown_capability" },
-                          status: :unprocessable_entity
-          end
-
-          unless staff_permits?(capability)
-            return render json: {
-              error: "You can't request approval for something you couldn't do yourself.",
-              code: "capability_not_held"
-            }, status: :forbidden
-          end
-
-          payload = (params[:payload] || {}).to_unsafe_h.transform_keys(&:to_s)
-
-          unless StaffApproval.required_for?(capability, payload.symbolize_keys)
-            # Refusing rather than creating a no-op approval: a queue full of
-            # signatures nothing will ever consume trains reviewers to approve
-            # without reading.
-            return render json: {
-              error: "This action doesn't need a second signature.",
-              code: "approval_not_required"
-            }, status: :unprocessable_entity
-          end
-
-          approval = StaffApproval.new(
-            requester: current_user,
-            action: capability,
-            target_type: params[:target_type],
-            target_id: params[:target_id],
-            payload: payload,
-            payload_digest: StaffApproval.digest_for(
-              action: capability,
-              target_type: params[:target_type],
-              target_id: params[:target_id],
-              payload: payload
-            ),
-            reason: params[:reason].to_s,
-            expires_at: StaffApproval::LIFETIME.from_now
-          )
-
-          if approval.save
-            render json: { staff_approval: approval_json(approval) }, status: :created
-          else
-            render json: { error: approval.errors.full_messages.join(", ") },
-                   status: :unprocessable_entity
+            if result.ok?
+              render json: { staff_approval: approval_json(result.approval) }, status: :created
+            else
+              status = CREATE_FORBIDDEN_CODES.include?(result.code) ? :forbidden : :unprocessable_entity
+              render json: { error: result.error, code: result.code }, status: status
+            end
           end
         end
 
@@ -96,6 +75,18 @@ module Api
 
           approval.approve!(current_user)
           log_admin_action("approve_staff_action", approval)
+
+          # For a role grant, approving *is* the assignment (D11) — two steps,
+          # one each, rather than sending the requester back to finish it.
+          # The other gated actions still follow D9: approval only unlocks
+          # them, and the requester performs them at their own endpoint.
+          if approval.action == "grant_staff_role"
+            result = apply_role_grant(approval)
+            unless result.ok?
+              return render json: { error: result.error, code: result.code },
+                            status: :unprocessable_entity
+            end
+          end
 
           render json: { staff_approval: approval_json(approval.reload) }
         rescue ActiveRecord::RecordNotFound
@@ -119,6 +110,18 @@ module Api
         end
 
         private
+
+        # Hours can pass between request and approval, so Staff::AssignRole
+        # re-checks its own preconditions rather than trusting the ones that
+        # held when the request was raised.
+        def apply_role_grant(approval)
+          Staff::AssignRole.call(
+            user: approval.target,
+            role: approval.payload["staff_role"],
+            actor: current_user,
+            approval: approval
+          )
+        end
 
         # The three things that make a second signature mean anything.
         def approvable!(approval)

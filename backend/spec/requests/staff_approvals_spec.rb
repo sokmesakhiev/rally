@@ -220,6 +220,97 @@ RSpec.describe "Staff approvals", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(json["code"]).to eq("approval_not_required")
     end
+
+    it "validates required parameters with schema" do
+      post "/api/v1/admin/staff_approvals",
+           params: { target_type: event.class.name, target_id: event.id },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("action_name")
+    end
+
+    it "validates reason length with schema" do
+      post "/api/v1/admin/staff_approvals",
+           params: {
+             action_name: "delete_event",
+             target_type: event.class.name,
+             target_id: event.id,
+             reason: "a" * 501
+           },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("reason")
+    end
+
+    it "requires a reason rather than accepting a blank one" do
+      # StaffApproval validates presence, so an absent reason was refused
+      # either way — but as a generic "validation_failed" from the save rather
+      # than a named field. An approver with nothing to read is being asked to
+      # rubber-stamp, which makes this the field the schema most needs to own.
+      post "/api/v1/admin/staff_approvals",
+           params: {
+             action_name: "delete_event",
+             target_type: event.class.name,
+             target_id: event.id
+           },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("reason")
+    end
+
+    # The three below are all 500s without the schema, not 422s — each value
+    # reaches something that raises rather than merely rejects.
+    it "refuses a target_type that isn't a model this queue can point at" do
+      # StaffApproval#target constantizes target_type. "Kernel" resolves, so
+      # this isn't only about typos: an unconstrained string lets a caller
+      # choose which constant gets loaded and then handed to a `belongs_to`.
+      post "/api/v1/admin/staff_approvals",
+           params: {
+             action_name: "delete_event",
+             target_type: "Kernel",
+             target_id: event.id,
+             reason: "Duplicate listing"
+           },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("target_type")
+    end
+
+    it "refuses a target_id that isn't a UUID" do
+      # Every id here addresses a `uuid` column, and Postgres raises
+      # "invalid input syntax" on a malformed one rather than simply not
+      # matching — the same latent 500 the admin show/destroy routes still
+      # have, closed here at the edge.
+      post "/api/v1/admin/staff_approvals",
+           params: {
+             action_name: "delete_event",
+             target_type: "Event",
+             target_id: "not-a-uuid",
+             reason: "Duplicate listing"
+           },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("target_id")
+    end
+
+    it "refuses an action_name that isn't a real capability" do
+      post "/api/v1/admin/staff_approvals",
+           params: {
+             action_name: "delete_everything",
+             target_type: "Event",
+             target_id: event.id,
+             reason: "Duplicate listing"
+           },
+           headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to include("action_name")
+    end
   end
 
   describe "the audit trail" do

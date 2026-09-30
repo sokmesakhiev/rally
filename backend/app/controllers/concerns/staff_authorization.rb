@@ -248,7 +248,6 @@ module StaffAuthorization
   def four_eyes_payload(capability)
     case capability
     when :issue_refund        then { amount_cents: params[:amount_cents].to_i }
-    when :grant_staff_role    then { staff_role: params[:staff_role].to_s }
     when :waive_plan_payment  then { plan: params[:plan].to_s }
     else {}
     end
@@ -293,7 +292,6 @@ module StaffAuthorization
     when :suspend_organization then [ "Organization", params[:id] ]
     when :waive_plan_payment  then [ "Event", params[:event_id] ]
     when :issue_refund        then [ "Payment", params[:payment_id] ]
-    when :grant_staff_role    then [ "User", params[:id] ]
     end
   end
 end
