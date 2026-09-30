@@ -1363,6 +1363,57 @@ export const surveysApi = {
   },
 };
 
+// ─── Staff approvals (four-eyes) ──────────────────────────────────────────────
+
+/** A pending or decided second-signature request. Approving one that carries
+ *  `grant_staff_role` applies the role there and then; the other gated
+ *  actions are merely unlocked, and the requester performs them at their own
+ *  endpoint. See docs/staff-roles-design.md D9 and D11. */
+export interface ApiStaffApproval {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "consumed";
+  /** Evaluated server-side rather than stored, so a row that timed out an
+   *  hour ago never renders as still actionable. */
+  expired: boolean;
+  expires_at: string;
+  approved_at: string | null;
+  consumed_at: string | null;
+  requester: { id: string; email: string };
+  approver: { id: string; email: string } | null;
+  created_at: string;
+}
+
+export const staffApprovalsApi = {
+  list() {
+    return api.get<{ staff_approvals: ApiStaffApproval[] }>("/admin/staff_approvals");
+  },
+
+  /** Raises a request. The proposer cannot sign their own — the server
+   *  refuses with `self_approval`. */
+  request(params: {
+    action_name: string;
+    target_type: string;
+    target_id: string;
+    payload?: Record<string, unknown>;
+    reason: string;
+  }) {
+    return api.post<{ staff_approval: ApiStaffApproval }>("/admin/staff_approvals", params);
+  },
+
+  approve(id: string) {
+    return api.post<{ staff_approval: ApiStaffApproval }>(`/admin/staff_approvals/${id}/approve`);
+  },
+
+  reject(id: string) {
+    return api.post<{ staff_approval: ApiStaffApproval }>(`/admin/staff_approvals/${id}/reject`);
+  },
+};
+
 // ─── Survey Responses ─────────────────────────────────────────────────────────
 
 export interface ApiSurveyResponse {
@@ -1599,6 +1650,14 @@ export const adminApi = {
   /** Forward-looking only — the organizer's existing paid events stay live. */
   unverifyUser(id: string) {
     return api.post<{ user: ApiAdminUser }>(`/admin/users/${id}/unverify`);
+  },
+
+  /** Immediate, and deliberately so — stripping access must never wait on a
+   *  colleague. There is no matching grant method: granting a role happens by
+   *  approving a request (see staffApprovalsApi), so that the assignment has
+   *  exactly one implementation server-side. */
+  revokeStaffRole(id: string) {
+    return api.delete<{ user: ApiAdminUser }>(`/admin/users/${id}/staff_role`);
   },
 
   events(opts?: {

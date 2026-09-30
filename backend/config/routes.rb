@@ -257,7 +257,9 @@ Rails.application.routes.draw do
         # Staff membership (D10). Granting is four-eyes; revoking deliberately
         # is not — stripping access must never wait on a colleague. Neither can
         # set or clear `admin`, which stays console-only.
-        post   "users/:id/staff_role", to: "users#grant_staff_role"
+        # Revoke only. Granting a role is not an endpoint — it happens when a
+        # second admin approves a `grant_staff_role` request (D11), so that
+        # the assignment has exactly one implementation.
         delete "users/:id/staff_role", to: "users#revoke_staff_role"
 
         # The moderation queue. Named event_reports, not reports — `reports`

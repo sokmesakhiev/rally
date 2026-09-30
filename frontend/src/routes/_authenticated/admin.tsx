@@ -32,18 +32,32 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { adminApi, type ApiAdminUser, type ApiAdminEvent, type StaffRole } from "@/lib/api-client";
+import {
+  adminApi,
+  staffApprovalsApi,
+  type ApiAdminUser,
+  type ApiAdminEvent,
+  type StaffRole,
+} from "@/lib/api-client";
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { AdminOverview } from "@/components/admin-overview";
 import { AdminSupport } from "@/components/admin-support";
 import { AdminEventReports } from "@/components/admin-event-reports";
+import { AdminApprovals } from "@/components/admin-approvals";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,7 +73,7 @@ import { formatDate, formatPrice, categoryLabel } from "@/lib/event-utils";
 
 const PER_PAGE = 25;
 
-const ADMIN_TABS = ["overview", "users", "events", "reports", "support"] as const;
+const ADMIN_TABS = ["overview", "users", "events", "reports", "support", "approvals"] as const;
 type AdminTab = (typeof ADMIN_TABS)[number];
 
 /**
@@ -78,8 +92,8 @@ type AdminTab = (typeof ADMIN_TABS)[number];
  * analytics on Overview. Admin sees everything.
  */
 const TABS_BY_ROLE: Record<StaffRole, readonly AdminTab[]> = {
-  support: ["support", "users"],
-  moderator: ["overview", "users", "events", "reports", "support"],
+  support: ["support", "users", "approvals"],
+  moderator: ["overview", "users", "events", "reports", "support", "approvals"],
   admin: ADMIN_TABS,
 };
 
@@ -169,6 +183,9 @@ function AdminConsole() {
             {visibleTabs.includes("support") && (
               <TabsTrigger value="support">{t("admin.tabSupport")}</TabsTrigger>
             )}
+            {visibleTabs.includes("approvals") && (
+              <TabsTrigger value="approvals">{t("admin.tabApprovals")}</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
@@ -185,6 +202,10 @@ function AdminConsole() {
           <TabsContent value="reports" className="mt-6">
             <AdminEventReports />
           </TabsContent>
+          <TabsContent value="approvals" className="mt-6">
+            <AdminApprovals />
+          </TabsContent>
+
           <TabsContent value="support" className="mt-6">
             <AdminSupport />
           </TabsContent>
@@ -234,6 +255,15 @@ function UsersPanel() {
     onSuccess: () => {
       invalidate();
       toast.success(t("admin.toastVerified"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const revokeRole = useMutation({
+    mutationFn: (id: string) => adminApi.revokeStaffRole(id),
+    onSuccess: () => {
+      toast.success(t("admin.toastRoleRevoked"));
+      invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -365,6 +395,27 @@ function UsersPanel() {
                             <SuspendUserDialog user={u} onDone={invalidate} />
                           )}
 
+                          {/* Staff membership. Revoking is immediate;
+                              granting raises a request for a second admin to
+                              sign, which is what applies it (D11). Admins are
+                              excluded in both directions — their role is
+                              managed from a console — but the outer branch
+                              already hides all of this for them. */}
+                          {u.staff_role ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              disabled={revokeRole.isPending}
+                              onClick={() => revokeRole.mutate(u.id)}
+                            >
+                              <ShieldOff className="h-3.5 w-3.5" />
+                              {t("admin.revokeRole")}
+                            </Button>
+                          ) : (
+                            <ProposeRoleDialog user={u} onDone={invalidate} />
+                          )}
+
                           {/* Not offered for admins or suspended accounts —
                               the server refuses both (see
                               Admin::ImpersonationsController#refusal_for), so
@@ -422,6 +473,102 @@ function UserStatusBadges({ user }: { user: ApiAdminUser }) {
       )}
       {!user.email_verified && <Badge variant="outline">{t("admin.badgeUnverified")}</Badge>}
     </div>
+  );
+}
+
+/**
+ * Proposes a staff role. **This does not grant it** — D11: the request goes
+ * to the approvals queue and a *different* admin approving it is what applies
+ * the role. The copy says so plainly, because a button that looks like it
+ * assigned someone a role and didn't is worse than no button.
+ *
+ * `admin` is absent from the picker on purpose and the server refuses it
+ * anyway: that role is granted from a console, so a stolen admin session
+ * can't mint another admin.
+ */
+function ProposeRoleDialog({ user, onDone }: { user: ApiAdminUser; onDone: () => void }) {
+  const { t } = useTranslation();
+  const [role, setRole] = useState<StaffRole>("support");
+  const [reason, setReason] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const propose = useMutation({
+    mutationFn: () =>
+      staffApprovalsApi.request({
+        action_name: "grant_staff_role",
+        target_type: "User",
+        target_id: user.id,
+        payload: { staff_role: role },
+        reason: reason.trim(),
+      }),
+    onSuccess: () => {
+      setReason("");
+      setOpen(false);
+      onDone();
+      toast.success(t("admin.toastRoleProposed"));
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1">
+          <ShieldAlert className="h-3.5 w-3.5" />
+          {t("admin.proposeRole")}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("admin.proposeRoleTitle", { email: user.email })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("admin.proposeRoleDesc")}</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor={`role-${user.id}`}>{t("admin.proposeRoleLabel")}</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as StaffRole)}>
+              <SelectTrigger id={`role-${user.id}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="support">{t("admin.badgeRole.support")}</SelectItem>
+                <SelectItem value="moderator">{t("admin.badgeRole.moderator")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`role-reason-${user.id}`}>{t("admin.proposeRoleReason")}</Label>
+            <Textarea
+              id={`role-reason-${user.id}`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              maxLength={500}
+              placeholder={t("admin.proposeRoleReasonPlaceholder")}
+            />
+          </div>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              // The dialog closes on its own onSuccess; let the mutation
+              // decide, so a server refusal keeps the form and its reason.
+              e.preventDefault();
+              propose.mutate();
+            }}
+            disabled={propose.isPending || reason.trim().length === 0}
+            className="gap-2"
+          >
+            {propose.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t("admin.confirmProposeRole")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

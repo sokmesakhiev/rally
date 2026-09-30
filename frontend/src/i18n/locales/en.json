@@ -908,7 +908,18 @@
       "support": "Support",
       "moderator": "Moderator",
       "admin": "Admin"
-    }
+    },
+    "proposeRole": "Propose role",
+    "proposeRoleTitle": "Propose a staff role for {{email}}",
+    "proposeRoleDesc": "This does not grant the role. It raises a request for another admin to approve — and approving it is what applies the role. Admin access is granted from a console, not here.",
+    "proposeRoleLabel": "Role",
+    "proposeRoleReason": "Why (shown to whoever approves)",
+    "proposeRoleReasonPlaceholder": "Joining the support rota from Monday",
+    "confirmProposeRole": "Send for approval",
+    "toastRoleProposed": "Sent for approval — another admin needs to sign it off",
+    "revokeRole": "Revoke role",
+    "toastRoleRevoked": "Staff access removed",
+    "tabApprovals": "Approvals"
   },
   "legal": {
     "lastUpdated": "Draft dated {{date}}",
@@ -1158,5 +1169,32 @@
     "timeLeft": "{{time}} left",
     "expired": "Session expired",
     "exit": "Exit"
+  },
+  "approvals": {
+    "title": "Awaiting a second signature",
+    "subtitle": "Actions that one person shouldn't take alone. Approving a role request applies it immediately; everything else is unlocked for whoever raised it.",
+    "pendingCount_one": "{{count}} request waiting",
+    "pendingCount_other": "{{count}} requests waiting",
+    "empty": "Nothing is waiting on a second signature.",
+    "requestedBy": "Raised by {{email}} · {{at}}",
+    "yourOwnRequest": "You raised this — somebody else has to sign it",
+    "approve": "Approve",
+    "reject": "Reject",
+    "toastApproved": "Approved",
+    "toastRejected": "Rejected",
+    "action": {
+      "grant_staff_role": "Grant a staff role",
+      "delete_event": "Delete an event",
+      "suspend_organization": "Suspend an organization",
+      "waive_plan_payment": "Waive a plan payment",
+      "issue_refund": "Issue a refund"
+    },
+    "status": {
+      "pending": "Waiting",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "consumed": "Done",
+      "expired": "Expired"
+    }
   }
 }
