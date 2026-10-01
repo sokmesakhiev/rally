@@ -43,6 +43,7 @@ class ApplicationController < ActionController::API
       @current_user = user
       set_sentry_user
       adopt_impersonation!(payload)
+      record_activity!
     rescue JWT::DecodeError, ActiveRecord::RecordNotFound
       render json: { error: "Unauthorized" }, status: :unauthorized
     end
@@ -83,6 +84,7 @@ class ApplicationController < ActionController::API
       # impersonation session must leave the caller anonymous rather than 401.
       # A *live* session on a write is still refused; see #adopt_impersonation!.
       adopt_impersonation!(payload, strict: false)
+      record_activity!
     rescue JWT::DecodeError, ActiveRecord::RecordNotFound
       nil # garbage/stale token on an endpoint that doesn't require one — proceed anonymously
     end
@@ -116,8 +118,29 @@ class ApplicationController < ActionController::API
     # strict: false, same as authenticate_user_optional! — this one's whole
     # contract is that current_user simply stays nil in every failure case.
     adopt_impersonation!(payload, strict: false)
+    record_activity!
   rescue JWT::DecodeError, ActiveRecord::RecordNotFound
     nil # garbage/stale/expired token on a page that was never gated on auth
+  end
+
+  # Stamps `users.last_seen_at`, throttled in the model. Called from all three
+  # token readers above, which are the only places in the app that decode a
+  # JWT — the same property that makes `adopt_impersonation!`'s coverage
+  # complete.
+  #
+  # Two guards, and the first is the one that matters:
+  #
+  #   * **Never during impersonation.** The requests are staff's; attributing
+  #     them to the account would make "last seen" report on Rally's own
+  #     support team. Worse, an admin checking whether an account is dormant
+  #     would mark it active by looking — the measurement destroying the thing
+  #     measured. `ImpersonationSession` is the record of that activity.
+  #   * `performed?` — a reader that has already rendered (a dead
+  #     impersonation session's 401, say) is not a request this person made.
+  def record_activity!
+    return if impersonating? || performed?
+
+    @current_user&.touch_last_seen!
   end
 
   # ── Impersonation ───────────────────────────────────────────────────────────

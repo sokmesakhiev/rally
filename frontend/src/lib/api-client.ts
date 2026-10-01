@@ -1544,6 +1544,29 @@ export interface ApiAdminUser {
   /** Only populated by the index endpoint, which selects it. */
   events_count: number | null;
   created_at: string;
+  /** Last authenticated request, not last sign-in — JWTs last 30 days, so a
+   *  sign-in stamp would report a daily user as a month dormant. Written at
+   *  most hourly per account, and never by an impersonated request. `null`
+   *  means nothing since the column shipped, which for an older account is
+   *  not the same as "never used". */
+  last_seen_at: string | null;
+}
+
+/** What `GET /admin/users/:id` adds to the row: aggregates over the same
+ *  person's records, which the 25-row table has no space for. */
+export interface ApiAdminUserActivity {
+  /** Kept only — the list column `events_count` counts discarded events too.
+   *  Different questions, so the UI labels them differently. */
+  events_count: number;
+  registrations_count: number;
+  /** One entry per currency, never summed across them: payments carry their
+   *  own `currency`, and adding KHR to USD produces a number that is wrong
+   *  while still looking like money. Empty when they have never paid. */
+  paid: { currency: string; gross_cents: number; refunded_cents: number }[];
+}
+
+export interface ApiAdminUserDetail extends ApiAdminUser {
+  activity: ApiAdminUserActivity;
 }
 
 export interface ApiAdminEvent {
@@ -1630,6 +1653,11 @@ export const adminApi = {
     return api.get<{ users: ApiAdminUser[]; meta: ApiPageMeta }>(
       `/admin/users${qs ? `?${qs}` : ""}`,
     );
+  },
+
+  /** One user with their activity totals, for the detail sheet. */
+  user(id: string) {
+    return api.get<{ user: ApiAdminUserDetail }>(`/admin/users/${id}`);
   },
 
   /** Also unpublishes every event the user created — see User#suspend!. */
