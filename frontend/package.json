@@ -53,7 +53,7 @@
     "@sentry/react": "^11.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.0",
-    "@tanstack/react-router": "^1.170.38",
+    "@tanstack/react-router": "^1.170.40",
     "@tanstack/react-start": "^1.168.58",
     "@tanstack/router-plugin": "^1.168.40",
     "@types/qrcode": "^1.5.6",
