@@ -11,7 +11,7 @@
  * sees the error state — the `user.admin` check below only decides whether to
  * bother rendering the UI, it is not the thing keeping anyone out.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
@@ -28,6 +28,7 @@ import {
   BadgeCheck,
   ShieldOff,
   Eye,
+  MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -69,7 +70,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { formatDate, formatPrice, categoryLabel } from "@/lib/event-utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatDate, formatDateTime, formatPrice, categoryLabel } from "@/lib/event-utils";
 
 const PER_PAGE = 25;
 
@@ -224,6 +239,10 @@ function UsersPanel() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "suspended">("all");
   const [page, setPage] = useState(1);
+  // The row the detail sheet is open for. An id rather than the row object, so
+  // the sheet re-reads from the server rather than rendering a snapshot that a
+  // suspension or role change taken from inside it would leave stale.
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ["admin-users", q, status, page],
@@ -335,7 +354,24 @@ function UsersPanel() {
               </thead>
               <tbody>
                 {query.data.users.map((u) => (
-                  <tr key={u.id} className="border-t border-border">
+                  // The whole row opens the detail sheet. `<tr>` can't be a
+                  // button, so this is the keyboard affordance instead — a
+                  // focusable row with Enter/Space, rather than a "View"
+                  // link in a sixth column that would be the only way in.
+                  <tr
+                    key={u.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={t("admin.viewUser", { email: u.email })}
+                    className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                    onClick={() => setDetailId(u.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDetailId(u.id);
+                      }
+                    }}
+                  >
                     <td className="p-3">
                       <p className="font-medium">{u.display_name ?? "—"}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>
@@ -345,83 +381,32 @@ function UsersPanel() {
                     <td className="p-3">
                       <UserStatusBadges user={u} />
                     </td>
-                    <td className="p-3 text-right">
+                    {/* Stops a click on the menu, or Enter on one of its
+                        items, from also opening the detail sheet behind it. */}
+                    <td
+                      className="p-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       {u.admin ? (
                         <span className="text-xs text-muted-foreground">
                           {t("admin.noActionsForAdmin")}
                         </span>
                       ) : (
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {/* Verification is orthogonal to suspension, so it
-                              stays available either way — vetting an
-                              organizer and letting them sign in are separate
-                              decisions. */}
-                          {u.verified ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1"
-                              disabled={unverify.isPending}
-                              onClick={() => unverify.mutate(u.id)}
-                            >
-                              <ShieldOff className="h-3.5 w-3.5" />
-                              {t("admin.unverify")}
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1"
-                              disabled={verify.isPending}
-                              onClick={() => verify.mutate(u.id)}
-                            >
-                              <BadgeCheck className="h-3.5 w-3.5" />
-                              {t("admin.verify")}
-                            </Button>
-                          )}
-
-                          {u.suspended ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1"
-                              disabled={unsuspend.isPending}
-                              onClick={() => unsuspend.mutate(u.id)}
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                              {t("admin.unsuspend")}
-                            </Button>
-                          ) : (
-                            <SuspendUserDialog user={u} onDone={invalidate} />
-                          )}
-
-                          {/* Staff membership. Revoking is immediate;
-                              granting raises a request for a second admin to
-                              sign, which is what applies it (D11). Admins are
-                              excluded in both directions — their role is
-                              managed from a console — but the outer branch
-                              already hides all of this for them. */}
-                          {u.staff_role ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1"
-                              disabled={revokeRole.isPending}
-                              onClick={() => revokeRole.mutate(u.id)}
-                            >
-                              <ShieldOff className="h-3.5 w-3.5" />
-                              {t("admin.revokeRole")}
-                            </Button>
-                          ) : (
-                            <ProposeRoleDialog user={u} onDone={invalidate} />
-                          )}
-
-                          {/* Not offered for admins or suspended accounts —
-                              the server refuses both (see
-                              Admin::ImpersonationsController#refusal_for), so
-                              hiding the button just spares a pointless 422. */}
-                          {!u.admin && !u.suspended && <ImpersonateUserDialog user={u} />}
-                        </div>
+                        <UserActionsMenu
+                          user={u}
+                          busy={
+                            verify.isPending ||
+                            unverify.isPending ||
+                            unsuspend.isPending ||
+                            revokeRole.isPending
+                          }
+                          onVerify={() => verify.mutate(u.id)}
+                          onUnverify={() => unverify.mutate(u.id)}
+                          onUnsuspend={() => unsuspend.mutate(u.id)}
+                          onRevokeRole={() => revokeRole.mutate(u.id)}
+                          onDone={invalidate}
+                        />
                       )}
                     </td>
                   </tr>
@@ -442,7 +427,300 @@ function UsersPanel() {
           />
         </>
       )}
+
+      {/* Outside the table, mounted once rather than per row — twenty-five
+          sheets that are all closed still cost twenty-five subscriptions. */}
+      <UserDetailSheet userId={detailId} onOpenChange={(open) => !open && setDetailId(null)} />
     </div>
+  );
+}
+
+/**
+ * The detail sheet, opened by clicking a row.
+ *
+ * Read-only on purpose. Everything that *changes* an account lives in the row's
+ * Actions menu, and duplicating those controls here would mean two places to
+ * keep in step with the server's rules about who may do what to whom — the
+ * failure the capability matrix exists to avoid. This answers "who is this
+ * account", which the twenty-five-row table has no width for.
+ */
+function UserDetailSheet({
+  userId,
+  onOpenChange,
+}: {
+  userId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+
+  const query = useQuery({
+    queryKey: ["admin-user", userId],
+    queryFn: () => adminApi.user(userId as string),
+    // No request until a row is actually clicked. Without this the sheet would
+    // fetch `/admin/users/null` on every render of the panel.
+    enabled: Boolean(userId),
+  });
+
+  const user = query.data?.user;
+
+  return (
+    <Sheet open={Boolean(userId)} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{user?.display_name ?? user?.email ?? t("admin.userDetails")}</SheetTitle>
+          <SheetDescription>{user?.email ?? t("common.loading")}</SheetDescription>
+        </SheetHeader>
+
+        {query.isLoading && (
+          <p className="py-10 text-center text-muted-foreground">{t("common.loading")}</p>
+        )}
+        {query.isError && (
+          <p className="py-10 text-center text-destructive">{(query.error as Error).message}</p>
+        )}
+
+        {user && (
+          <div className="mt-6 space-y-6">
+            <div className="flex flex-wrap gap-1.5">
+              <UserStatusBadges user={user} />
+            </div>
+
+            <DetailSection title={t("admin.detailAccount")}>
+              <DetailRow label={t("admin.detailJoined")} value={formatDate(user.created_at)} />
+              <DetailRow
+                label={t("admin.detailLastSeen")}
+                value={
+                  user.last_seen_at ? formatDateTime(user.last_seen_at) : t("admin.detailNeverSeen")
+                }
+                // The caveat belongs next to the number, not in a doc nobody
+                // opens: this is the last authenticated request, recorded at
+                // most hourly, and it is blank for anyone who hasn't been back
+                // since the column shipped.
+                hint={t("admin.detailLastSeenHint")}
+              />
+              <DetailRow
+                label={t("admin.detailSignIn")}
+                value={
+                  user.provider === "google" ? t("admin.detailGoogle") : t("admin.detailEmail")
+                }
+              />
+              <DetailRow
+                label={t("admin.detailEmailVerified")}
+                value={user.email_verified ? t("common.yes") : t("common.no")}
+              />
+            </DetailSection>
+
+            {user.suspended && (
+              <DetailSection title={t("admin.detailSuspension")}>
+                <DetailRow
+                  label={t("admin.detailSuspendedAt")}
+                  value={user.suspended_at ? formatDateTime(user.suspended_at) : "—"}
+                />
+                <DetailRow
+                  label={t("admin.detailSuspensionReason")}
+                  value={user.suspension_reason || "—"}
+                />
+              </DetailSection>
+            )}
+
+            <DetailSection title={t("admin.detailActivity")}>
+              <DetailRow
+                label={t("admin.detailEventsCreated")}
+                value={String(user.activity.events_count)}
+              />
+              <DetailRow
+                label={t("admin.detailRegistrations")}
+                value={String(user.activity.registrations_count)}
+              />
+              {/* One line per currency. Summing across them would be wrong in
+                  a way that still looks like money — see the endpoint. */}
+              {user.activity.paid.length === 0 ? (
+                <DetailRow label={t("admin.detailPaid")} value={t("admin.detailNothingPaid")} />
+              ) : (
+                user.activity.paid.map((row) => (
+                  <DetailRow
+                    key={row.currency}
+                    label={t("admin.detailPaid")}
+                    value={formatPrice(row.gross_cents, row.currency)}
+                    hint={
+                      row.refunded_cents > 0
+                        ? t("admin.detailRefunded", {
+                            amount: formatPrice(row.refunded_cents, row.currency),
+                          })
+                        : undefined
+                    }
+                  />
+                ))
+              )}
+            </DetailSection>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-1">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <dl className="divide-y divide-border rounded-lg border border-border">{children}</dl>
+    </section>
+  );
+}
+
+function DetailRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 p-3">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-right text-sm">
+        <span className="font-medium">{value}</span>
+        {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * The per-user actions, behind one "More" button.
+ *
+ * They were four side-by-side buttons in a `flex-wrap`, which at this table's
+ * width wrapped onto a second and sometimes third line and made every row a
+ * different height. A menu is also the safer shape: Suspend used to sit
+ * immediately beside Verify, two clicks apart in a row of look-alike outline
+ * buttons, and it is the one action here with a visible consequence for the
+ * person on the other end. It now sits last, after a separator, styled as
+ * destructive.
+ *
+ * **The dialogs are rendered outside the menu, not inside a
+ * `DropdownMenuItem`.** A dropdown unmounts its content when it closes, so a
+ * dialog trigger nested in an item takes the dialog down with it the instant
+ * it is selected — the dialog flashes and disappears. Selecting an item here
+ * therefore only sets `dialog`, and the three `AlertDialog`s below are
+ * siblings of the menu, controlled by that state.
+ *
+ * `onCloseAutoFocus` is prevented for the same class of reason: Radix returns
+ * focus to the trigger as the menu closes, which lands in the middle of the
+ * dialog taking its own focus trap, and the two fight over it.
+ */
+function UserActionsMenu({
+  user,
+  busy,
+  onVerify,
+  onUnverify,
+  onUnsuspend,
+  onRevokeRole,
+  onDone,
+}: {
+  user: ApiAdminUser;
+  busy: boolean;
+  onVerify: () => void;
+  onUnverify: () => void;
+  onUnsuspend: () => void;
+  onRevokeRole: () => void;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const [dialog, setDialog] = useState<"suspend" | "role" | "impersonate" | null>(null);
+
+  // Not offered for admins or suspended accounts — the server refuses both
+  // (see Admin::ImpersonationsController#refusal_for), so hiding it spares a
+  // pointless 422. `user.admin` is already false here (the caller's branch),
+  // but the condition stays whole rather than relying on that from a distance.
+  const canImpersonate = !user.admin && !user.suspended;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="outline" className="gap-1" disabled={busy}>
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            )}
+            {t("admin.actions")}
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+          {/* Verification is orthogonal to suspension, so it stays available
+              either way — vetting an organizer and letting them sign in are
+              separate decisions. */}
+          {user.verified ? (
+            <DropdownMenuItem onSelect={onUnverify}>
+              <ShieldOff className="mr-2 h-4 w-4" />
+              {t("admin.unverify")}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onSelect={onVerify}>
+              <BadgeCheck className="mr-2 h-4 w-4" />
+              {t("admin.verify")}
+            </DropdownMenuItem>
+          )}
+
+          {/* Staff membership. Revoking is immediate; granting raises a
+              request for a second admin to sign, which is what applies it
+              (D11). Admins are excluded in both directions — their role is
+              managed from a console — but the caller already hides all of
+              this for them. */}
+          {user.staff_role ? (
+            <DropdownMenuItem onSelect={onRevokeRole}>
+              <ShieldOff className="mr-2 h-4 w-4" />
+              {t("admin.revokeRole")}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onSelect={() => setDialog("role")}>
+              <ShieldAlert className="mr-2 h-4 w-4" />
+              {t("admin.proposeRole")}
+            </DropdownMenuItem>
+          )}
+
+          {canImpersonate && (
+            <DropdownMenuItem onSelect={() => setDialog("impersonate")}>
+              <Eye className="mr-2 h-4 w-4" />
+              {t("admin.impersonate")}
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuSeparator />
+
+          {user.suspended ? (
+            <DropdownMenuItem onSelect={onUnsuspend}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              {t("admin.unsuspend")}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onSelect={() => setDialog("suspend")}
+              className="text-destructive focus:text-destructive"
+            >
+              <Ban className="mr-2 h-4 w-4" />
+              {t("admin.suspend")}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <SuspendUserDialog
+        user={user}
+        open={dialog === "suspend"}
+        onOpenChange={(next) => setDialog(next ? "suspend" : null)}
+        onDone={onDone}
+      />
+      <ProposeRoleDialog
+        user={user}
+        open={dialog === "role"}
+        onOpenChange={(next) => setDialog(next ? "role" : null)}
+        onDone={onDone}
+      />
+      {canImpersonate && (
+        <ImpersonateUserDialog
+          user={user}
+          open={dialog === "impersonate"}
+          onOpenChange={(next) => setDialog(next ? "impersonate" : null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -486,11 +764,20 @@ function UserStatusBadges({ user }: { user: ApiAdminUser }) {
  * anyway: that role is granted from a console, so a stolen admin session
  * can't mint another admin.
  */
-function ProposeRoleDialog({ user, onDone }: { user: ApiAdminUser; onDone: () => void }) {
+function ProposeRoleDialog({
+  user,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  user: ApiAdminUser;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const [role, setRole] = useState<StaffRole>("support");
   const [reason, setReason] = useState("");
-  const [open, setOpen] = useState(false);
 
   const propose = useMutation({
     mutationFn: () =>
@@ -503,7 +790,7 @@ function ProposeRoleDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
       }),
     onSuccess: () => {
       setReason("");
-      setOpen(false);
+      onOpenChange(false);
       onDone();
       toast.success(t("admin.toastRoleProposed"));
     },
@@ -511,13 +798,7 @@ function ProposeRoleDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
   });
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1">
-          <ShieldAlert className="h-3.5 w-3.5" />
-          {t("admin.proposeRole")}
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("admin.proposeRoleTitle", { email: user.email })}</AlertDialogTitle>
@@ -572,7 +853,17 @@ function ProposeRoleDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
   );
 }
 
-function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () => void }) {
+function SuspendUserDialog({
+  user,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  user: ApiAdminUser;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const [reason, setReason] = useState("");
 
@@ -580,6 +871,7 @@ function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
     mutationFn: () => adminApi.suspendUser(user.id, reason.trim() || undefined),
     onSuccess: () => {
       setReason("");
+      onOpenChange(false);
       onDone();
       toast.success(t("admin.toastSuspended"));
     },
@@ -587,13 +879,7 @@ function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
   });
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button size="sm" variant="destructive" className="gap-1">
-          <Ban className="h-3.5 w-3.5" />
-          {t("admin.suspend")}
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("admin.suspendTitle", { email: user.email })}</AlertDialogTitle>
@@ -615,7 +901,13 @@ function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => suspend.mutate()}
+            onClick={(e) => {
+              // Radix closes on action by default, which under a controlled
+              // `open` would discard a typed reason the moment the server
+              // refused. The mutation owns closing, as in the other two.
+              e.preventDefault();
+              suspend.mutate();
+            }}
             disabled={suspend.isPending}
             className="gap-2"
           >
@@ -639,17 +931,24 @@ function SuspendUserDialog({ user, onDone }: { user: ApiAdminUser; onDone: () =>
  * what it is. Free text rather than a dropdown — a dropdown is a list of
  * excuses to click through.
  */
-function ImpersonateUserDialog({ user }: { user: ApiAdminUser }) {
+function ImpersonateUserDialog({
+  user,
+  open,
+  onOpenChange,
+}: {
+  user: ApiAdminUser;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { startImpersonation } = useAuth();
-  const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
 
   const start = useMutation({
     mutationFn: () => startImpersonation(user.id, reason.trim()),
     onSuccess: () => {
-      setOpen(false);
+      onOpenChange(false);
       setReason("");
       // Leave the admin console immediately. Staying would show a 404 shell —
       // require_admin! refuses an impersonation token — which reads as a
@@ -662,13 +961,7 @@ function ImpersonateUserDialog({ user }: { user: ApiAdminUser }) {
   const tooShort = reason.trim().length < 10;
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1">
-          <Eye className="h-3.5 w-3.5" />
-          {t("admin.impersonate")}
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("admin.impersonateTitle", { email: user.email })}</AlertDialogTitle>

@@ -5,8 +5,17 @@ module Api
         # Capability per action — see StaffAuthorization::CAPABILITIES and
         # docs/staff-roles-design.md D4. Admin::BaseController looks these up
         # with `fetch`, so adding an action here is not optional.
+        # Payment states that represent money that actually arrived. `pending`
+        # is a KHQR code nobody scanned; `declined`/`cancelled`/`expired` never
+        # settled. A refunded payment stays in the list because it *did*
+        # arrive — the refund is subtracted rather than the row ignored, so
+        # "paid 240,000, refunded 240,000" reads differently from "never paid",
+        # which is exactly the distinction support is asked about.
+        COUNTED_PAYMENT_STATUSES = %w[approved partially_refunded refunded].freeze
+
         ACTION_CAPABILITIES = {
           "index"     => :read_users,
+          "show"      => :read_users,
           "suspend"   => :suspend_user,
           "unsuspend" => :suspend_user,
           "verify"    => :verify_user,
@@ -43,6 +52,22 @@ module Api
               meta: pagination_meta(page, per_page, total)
             }
           end
+        end
+
+        # GET /api/v1/admin/users/:id
+        #
+        # Everything the row shows, plus what the row has no space for: the
+        # account's activity. This exists because the answer to most support
+        # questions is a shape rather than a field — somebody who registered
+        # once two years ago and somebody running events every week are
+        # different problems, and the list of twenty-five rows cannot say
+        # which is which.
+        def show
+          user = User.find(params[:id])
+
+          render json: { user: user_json(user).merge(activity: activity_for(user)) }
+        rescue ActiveRecord::RecordNotFound
+          render json: { error: "User not found" }, status: :not_found
         end
 
         # POST /api/v1/admin/users/:id/suspend
@@ -196,6 +221,40 @@ module Api
           }
         end
 
+        # Four aggregates, three queries, none of which loads a row it then
+        # counts in Ruby. A prolific organizer is precisely the account most
+        # likely to be opened here, so this must not scale with how much they
+        # have done — the same rule the event report queue follows.
+        def activity_for(user)
+          # **Grouped by currency, never summed across it.** `payments.currency`
+          # is a real column with more than one value in play, and adding
+          # 40,000 KHR to 10 USD produces a number that is wrong in a way
+          # nobody catches, because it still looks like money. Same failure the
+          # manage dashboard's revenue card had when it summed one page.
+          totals = Payment
+            .joins(:registration)
+            .where(registrations: { user_id: user.id }, status: COUNTED_PAYMENT_STATUSES)
+            .group(:currency)
+            .pluck(
+              :currency,
+              Arel.sql("SUM(payments.amount_cents)"),
+              Arel.sql("SUM(payments.refunded_amount_cents)")
+            )
+
+          {
+            paid: totals.map do |currency, gross, refunded|
+              { currency: currency, gross_cents: gross.to_i, refunded_cents: refunded.to_i }
+            end,
+            # `.kept` on both, unlike the index's `events_count`, which counts
+            # every row including discarded ones. They are answering different
+            # questions: the list column is "how much has this account put on
+            # the platform", this is "what is live now". Labelled distinctly in
+            # the UI so the two numbers disagreeing doesn't read as a bug.
+            events_count: user.events.kept.count,
+            registrations_count: user.registrations.kept.count
+          }
+        end
+
         def user_json(user)
           {
             id: user.id,
@@ -218,7 +277,13 @@ module Api
             # Only present on the index query, which selects it — nil elsewhere
             # rather than triggering a per-user COUNT.
             events_count: user.attributes["events_count"],
-            created_at: user.created_at
+            created_at: user.created_at,
+            # Last *seen*, not last signed in — tokens live 30 days, so a sign-in
+            # timestamp would report a daily user as a month dormant. Written at
+            # most hourly per account; see User::LAST_SEEN_THROTTLE. nil means
+            # no authenticated request since the column shipped, which is not
+            # the same as "never used" for an account older than that.
+            last_seen_at: user.last_seen_at
           }
         end
       end

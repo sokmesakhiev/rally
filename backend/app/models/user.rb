@@ -169,6 +169,42 @@ class User < ApplicationRecord
     verified_at.present?
   end
 
+  # ── Activity ────────────────────────────────────────────────────────────────
+
+  # How stale `last_seen_at` is allowed to get before a request rewrites it.
+  #
+  # This is a precision-for-writes trade, made deliberately. Stamping on every
+  # authenticated request would put an UPDATE in front of every read the API
+  # serves, on a web task with three Puma threads — the same budget that ruled
+  # out long-polling for the notification badge. An hour is far finer than any
+  # question the console asks of this column ("today?", "this month?", "not
+  # since March?") and reduces the write to at most 24 per active user per day.
+  LAST_SEEN_THROTTLE = 1.hour
+
+  # **`update_column`, deliberately.** Three things it skips, each of which
+  # would be a bug here:
+  #
+  #   * `updated_at`. If activity moved it, the column would mean "last seen"
+  #     on every row in the table and nothing would record when the account
+  #     itself last changed. That is a column other code reasons about.
+  #   * Validations. `last_admin_stays_admin` and the rest have no stake in a
+  #     timestamp, and a user who somehow holds an invalid row must still be
+  #     able to make requests — otherwise a data problem becomes an outage for
+  #     that person, surfacing as a 500 on every endpoint at once.
+  #   * Callbacks. Nothing should hang off "this person made a request".
+  #
+  # Failure is swallowed: an activity stamp is telemetry for a support screen,
+  # and it must never be the reason a request 500s. Logged rather than silent,
+  # because a column that has quietly stopped being written looks identical to
+  # a platform where nobody signs in.
+  def touch_last_seen!
+    return if last_seen_at.present? && last_seen_at > LAST_SEEN_THROTTLE.ago
+
+    update_column(:last_seen_at, Time.current)
+  rescue ActiveRecord::ActiveRecordError => e
+    Rails.logger.warn("[last_seen] failed for user=#{id}: #{e.class}: #{e.message}")
+  end
+
   def verify!(by:)
     update!(verified_at: Time.current, verified_by_id: by&.id)
   end

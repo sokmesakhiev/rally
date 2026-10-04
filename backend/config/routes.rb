@@ -247,6 +247,10 @@ Rails.application.routes.draw do
         post "conversations/:id/read",     to: "conversations#read"
 
         get  "users",              to: "users#index"
+        # The detail sheet. Same capability as the list — it shows what the
+        # list already shows plus aggregates over the same person's records,
+        # so there is nothing here a reader of the index couldn't assemble.
+        get  "users/:id",           to: "users#show"
         post "users/:id/suspend",   to: "users#suspend"
         post "users/:id/unsuspend", to: "users#unsuspend"
         # Organizer verification — gates creating paid events. Distinct from
