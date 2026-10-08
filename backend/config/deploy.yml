@@ -1,122 +1,75 @@
-# Name of your application. Used to uniquely configure containers.
-service: backend
-
-# Name of the container image (use your-user/app-name on external registries).
-image: backend
-
-# Deploy to these servers.
-servers:
-  web:
-    - 192.168.0.1
-  job:
-    hosts:
-      - 192.168.0.1
-    cmd: bin/jobs
-    env:
-      clear:
-        JOB_CONCURRENCY: 2
-
-# Enable SSL auto certification via Let's Encrypt and allow for multiple apps on a single web server.
-# If used with Cloudflare, set encryption mode in SSL/TLS setting to "Full" to enable CF-to-app encryption.
+# Kamal base configuration — **staging only**.
 #
-# Using an SSL proxy like this requires turning on config.assume_ssl and config.force_ssl in production.rb!
+# Production does not deploy with Kamal. It runs on ECS Fargate, rolled by
+# .github/workflows/deploy.yml and scripts/deploy.sh, with task definitions
+# owned by Terraform in infrastructure/. See .claude/rules/infrastructure.md.
+# This file used to be unconfigured `rails new` scaffolding pointing at
+# 192.168.0.1; it is now real, but only for the staging box.
 #
-# Don't use this when deploying to multiple web servers (then you have to terminate SSL at your load balancer).
+# There are deliberately **no `servers:` here**, so a bare `kamal deploy` with
+# no destination fails rather than guessing. Every invocation names one:
 #
-# proxy:
-#   ssl: true
-#   host: app.example.com
+#   bin/kamal setup    -d staging    # first time only
+#   bin/kamal deploy   -d staging
+#   bin/kamal rollback -d staging
+#   bin/kamal app logs -d staging -f
+#
+# Everything environment-specific lives in deploy.staging.yml, which Kamal
+# merges over this file.
 
-# Where you keep your container images.
+service: rally
+
+# Overridden per destination with the full ECR repository URL. Kamal uses this
+# for the local build tag too, so it has to be set somewhere in the base.
+image: rally-api
+
 registry:
-  # Alternatives: hub.docker.com / registry.digitalocean.com / ghcr.io / ...
-  server: localhost:5555
+  # ECR, logged into by the workflow before `kamal deploy`. The staging
+  # repository is NOT production's — Kamal pushes a `latest` tag and
+  # production's ECS task definitions pull `:latest`, so one shared repository
+  # would mean merging to `staging` re-points production at a staging image.
+  # infrastructure/staging/storage.tf has the full reasoning.
+  server: <%= ENV["KAMAL_REGISTRY_SERVER"] %>
+  username: AWS
+  password:
+    - KAMAL_REGISTRY_PASSWORD
 
-  # Needed for authenticated registries.
-  # username: your-user
+builder:
+  # linux/amd64 — the staging instance is x86_64 (see
+  # infrastructure/staging/main.tf, which pins an amd64 AMI for this reason).
+  # An arm64 image on a t3 box fails at container start, not at build.
+  arch: amd64
 
-  # Always use an access token rather than real password when possible.
-  # password:
-  #   - KAMAL_REGISTRY_PASSWORD
+  # No build cache configured, deliberately. `cache: { type: gha }` is the
+  # obvious win — the Dockerfile compiles native gems and a cold build takes
+  # minutes — but it needs buildx's GitHub cache backend, which means a
+  # container builder plus ACTIONS_RUNTIME_TOKEN/ACTIONS_CACHE_URL exported
+  # into the step. That is three more things that can fail on a path nobody
+  # watches. Worth adding once staging deploys are boring; not worth it as
+  # part of standing them up.
 
-# Inject ENV variables into containers (secrets come from .kamal/secrets).
-env:
-  secret:
-    - RAILS_MASTER_KEY
-  clear:
-    # SolidQueue runs as a separate process for independent scaling.
-    # Set SOLID_QUEUE_IN_PUMA=true to run inside Puma for single-server dev deployments.
-    # SOLID_QUEUE_IN_PUMA: false
+# Active Storage attachments go to S3 via the instance profile, exactly as
+# production uses the ECS task role — so there is no uploads volume here.
+# This volume is Rails' own `storage/` directory, which Active Storage's Disk
+# service would use if the service were ever misconfigured; keeping it means
+# that misconfiguration loses nothing on a redeploy.
+volumes:
+  - "rally_storage:/rails/storage"
 
-    # Set number of processes dedicated to Solid Queue (default: 1)
-    # JOB_CONCURRENCY: 3
+# This is an API-only app with no asset pipeline output to bridge, so the
+# scaffolding's asset_path is deliberately absent — pointing it at a directory
+# that doesn't exist makes Kamal warn on every deploy.
 
-    # Set number of cores available to the application on each server (default: 1).
-    # WEB_CONCURRENCY: 2
+ssh:
+  user: ubuntu
 
-    # Match this to any external database server to configure Active Record correctly
-    # Use backend-db for a db accessory server on same machine via local kamal docker network.
-    # DB_HOST: 192.168.0.2
-
-    # Log everything from Rails
-    # RAILS_LOG_LEVEL: debug
-
-# Aliases are triggered with "bin/kamal <alias>". You can overwrite arguments on invocation:
-# "bin/kamal logs -r job" will tail logs from the first server in the job section.
 aliases:
   console: app exec --interactive --reuse "bin/rails console"
   shell: app exec --interactive --reuse "bash"
   logs: app logs -f
   dbc: app exec --interactive --reuse "bin/rails dbconsole --include-password"
-
-# Use a persistent storage volume for sqlite database files and local Active Storage files.
-# Recommended to change this to a mounted volume path that is backed up off server.
-volumes:
-  - "backend_storage:/rails/storage"
-
-# Bridge fingerprinted assets, like JS and CSS, between versions to avoid
-# hitting 404 on in-flight requests. Combines all files from new and old
-# version inside the asset_path.
-asset_path: /rails/public/assets
-
-# Configure the image builder.
-builder:
-  arch: amd64
-
-  # # Build image via remote server (useful for faster amd64 builds on arm64 computers)
-  # remote: ssh://docker@docker-builder-server
-  #
-  # # Pass arguments and secrets to the Docker build process
-  # args:
-  #   RUBY_VERSION: 4.0.1
-  # secrets:
-  #   - GITHUB_TOKEN
-  #   - RAILS_MASTER_KEY
-
-# Use a different ssh user than root
-# ssh:
-#   user: app
-
-# Use accessory services (secrets come from .kamal/secrets).
-# accessories:
-#   db:
-#     image: mysql:8.0
-#     host: 192.168.0.2
-#     # Change to 3306 to expose port to the world instead of just local network.
-#     port: "127.0.0.1:3306:3306"
-#     env:
-#       clear:
-#         MYSQL_ROOT_HOST: '%'
-#       secret:
-#         - MYSQL_ROOT_PASSWORD
-#     files:
-#       - config/mysql/production.cnf:/etc/mysql/my.cnf
-#       - db/production.sql:/docker-entrypoint-initdb.d/setup.sql
-#     directories:
-#       - data:/var/lib/mysql
-#   redis:
-#     image: valkey/valkey:8
-#     host: 192.168.0.2
-#     port: 6379
-#     directories:
-#       - data:/data
+  # Staging is disposable by design. This is the "give me a clean slate"
+  # button, and it is why the e2e reset endpoint's `if Rails.env.e2e?` guard
+  # matters — staging runs as RAILS_ENV=production, so that endpoint does not
+  # exist here and this is the only way.
+  reset-db: app exec "bin/rails db:drop db:prepare db:seed"

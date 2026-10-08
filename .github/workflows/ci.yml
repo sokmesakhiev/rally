@@ -5,9 +5,19 @@ permissions:
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, staging ]
+  # `staging` is here because a push to it now deploys
+  # (.github/workflows/deploy-staging.yml). Without this, the branch whose
+  # whole purpose is to catch problems before production would be the one
+  # branch that deploys without the suite ever having run.
+  #
+  # Note these are separate workflows, not gated on each other: CI and the
+  # staging deploy start together, so a red suite does not stop the deploy.
+  # That is the right trade for staging — you want the broken build *on* the
+  # box to look at — but it does mean "staging is green" is a claim about the
+  # CI run, not about the deploy.
   push:
-    branches: [ main ]
+    branches: [ main, staging ]
 
 jobs:
   detect-changes:

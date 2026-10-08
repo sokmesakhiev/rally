@@ -1,0 +1,11 @@
+# Partial backend config for `terraform init -backend-config=backend.hcl`.
+#
+# Same state bucket as production, different key — the separation that matters
+# is the state *object*, since that is what scopes a plan. Copy to backend.hcl
+# (gitignored by ../.gitignore, which applies here too) and fill in the bucket.
+#
+#   cp backend.hcl.example backend.hcl
+#   terraform init -backend-config=backend.hcl
+
+bucket = "YOUR_STATE_BUCKET_NAME"
+key    = "event-management/staging/terraform.tfstate"

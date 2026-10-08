@@ -1,0 +1,154 @@
+# Staging: one EC2 box, Kamal, `RAILS_ENV=production`.
+#
+# **Staging runs as RAILS_ENV=production on purpose**, which looks wrong and
+# isn't. Three things in this app are wired to that value rather than to "is
+# this the live site":
+#
+#   * `solid_queue`, `solid_cache` and `solid_cable` are in Gemfile's
+#     `:production` group, so any other RAILS_ENV boots with no queue, no
+#     cache backend and no ActionCable pub/sub.
+#   * config/database.yml has only a `production:` block, and its cache/queue/
+#     cable roles build their URLs by substituting `backend_production_*` into
+#     DATABASE_URL.
+#   * config/storage.yml's S3 service is named `amazon` and selected by
+#     production.rb.
+#
+# A fourth environment would mean keeping all of that in step, which is a new
+# way for staging and production to diverge — and staging's whole job is to not
+# diverge. The visible cost: the auxiliary databases on this box are called
+# `backend_production_cache`, `_queue` and `_cable`. Harmless, and documented
+# here so nobody "fixes" it.
+#
+# Deploy: `bin/kamal deploy -d staging`. First time: `bin/kamal setup -d staging`.
+
+# The repository *name* only, e.g. `rally-staging-api`. Kamal joins this to
+# `registry.server` itself; passing the full repository URL here produces
+# `<registry>/<registry>/rally-staging-api` and fails at push with an
+# authentication error rather than anything that names the real problem.
+#   terraform -chdir=infrastructure/staging output -raw ecr_repository_name
+image: <%= ENV.fetch("KAMAL_IMAGE") %>
+
+servers:
+  web:
+    - <%= ENV.fetch("KAMAL_HOST") %>
+
+  # The Solid Queue worker, mirroring production's separate ECS service — and
+  # for the same reason: `Certificates::RenderPdf` shells out to LibreOffice,
+  # which must not run inside the process serving requests. On one box it is
+  # the same hardware either way, but the failure modes stay separated and the
+  # topology matches what production exercises.
+  #
+  # `SOLID_QUEUE_IN_PUMA` is deliberately absent. Setting it would put a second
+  # supervisor inside the web container alongside this one; claims are uniquely
+  # indexed so nothing would break, but every job would be dispatched twice
+  # over at double the cost. Same rule as infrastructure/ecs.tf.
+  job:
+    hosts:
+      - <%= ENV.fetch("KAMAL_HOST") %>
+    cmd: bin/jobs
+    env:
+      clear:
+        # Solid Queue's supervisor forks, and pools are per *process*. Matches
+        # the production worker task.
+        RAILS_DB_POOL: 6
+        JOB_CONCURRENCY: 2
+
+# ── TLS ────────────────────────────────────────────────────────────────────
+#
+# Let's Encrypt via kamal-proxy. **The A record for this host must already
+# resolve to the box before the first deploy** — validation is HTTP-01, so the
+# certificate authority has to reach this machine by name. A first deploy
+# against DNS that hasn't propagated fails at certificate issuance, after the
+# image has been pushed and the container started.
+#
+# `app_port` is not the default 80. backend/Dockerfile bakes `HTTP_PORT=3001`,
+# so Thruster listens on 3001 inside the container; leaving this out presents
+# as the proxy never finding a healthy container while the app logs look fine.
+proxy:
+  ssl: true
+  host: <%= ENV.fetch("KAMAL_PROXY_HOST") %>
+  app_port: 3001
+  healthcheck:
+    path: /up
+    # `db:prepare` runs on boot in the web container (see bin/docker-entrypoint),
+    # and on a 2 GiB box a cold start with migrations is not quick. Production's
+    # ECS health check gets a startPeriod for the same reason.
+    timeout: 60
+
+env:
+  clear:
+    RAILS_ENV: production
+    RAILS_LOG_TO_STDOUT: "true"
+    # No static files are served by Rails — the SPA is on CloudFront, same as
+    # production.
+    RAILS_SERVE_STATIC_FILES: "false"
+
+    # The same three-thread budget as production, so a concurrency problem
+    # shows up here rather than only in production. Raising it would make
+    # staging a worse test, not a better box.
+    RAILS_MAX_THREADS: 3
+    ACTION_CABLE_WORKER_POOL_SIZE: 4
+
+    # Kamal resolves accessory hostnames on its own Docker network, so the
+    # database is reachable as `rally-db` from both containers without
+    # publishing a port.
+    AWS_REGION: <%= ENV.fetch("AWS_REGION", "ap-southeast-1") %>
+    AWS_BUCKET: <%= ENV.fetch("AWS_BUCKET") %>
+
+    BACKEND_URL: <%= ENV.fetch("BACKEND_URL") %>
+    FRONTEND_URL: <%= ENV.fetch("FRONTEND_URL") %>
+
+    # ActionCable's forgery protection rejects every connection when this is
+    # unset, with nothing but "Request origin not allowed" in the log. The SPA
+    # is served from CloudFront, a different origin to the API, so this is not
+    # optional — it is the single most likely thing to be wrong on a new
+    # environment. See .claude/rules/realtime.md.
+    ACTION_CABLE_ALLOWED_ORIGINS: <%= ENV.fetch("FRONTEND_URL") %>
+
+    GOOGLE_CLIENT_ID: <%= ENV.fetch("GOOGLE_CLIENT_ID", "") %>
+    MAILER_FROM_EMAIL: <%= ENV.fetch("MAILER_FROM_EMAIL", "") %>
+
+    # So a staging exception is never mistaken for a customer's.
+    SENTRY_ENVIRONMENT: staging
+
+    # ABA's sandbox, never the live gateway. A staging deploy that charged a
+    # real card would be the most expensive possible configuration mistake, so
+    # this is set explicitly rather than left to a default.
+    ABA_PAYWAY_BASE_URL: <%= ENV.fetch("ABA_PAYWAY_BASE_URL", "https://checkout-sandbox.payway.com.kh") %>
+
+  secret:
+    - RAILS_MASTER_KEY
+    - DATABASE_URL
+    - JWT_SECRET
+    - ABA_PAYWAY_MERCHANT_ID
+    - ABA_PAYWAY_API_KEY
+    - RECAPTCHA_SECRET_KEY
+    - SENTRY_DSN
+
+# ── Postgres, as an accessory on the same box ─────────────────────────────
+#
+# Not RDS. Staging data is disposable, there is nothing to NAT to, and this
+# costs nothing. The divergence from production's managed instance is real and
+# accepted: no automated backups, no failover, and a `docker volume rm` away
+# from gone. `bin/kamal reset-db -d staging` is the supported way to start over.
+#
+# `port` binds to 127.0.0.1, so the database is reachable from the app
+# containers over Kamal's network and over an SSH session, and from nowhere on
+# the internet — the security group opens 22, 80 and 443 only.
+#
+# The image is pinned to the major version production's RDS instance runs.
+# "Staging found no problem" is worth much less when the two speak different
+# Postgres.
+accessories:
+  db:
+    image: postgres:17
+    host: <%= ENV.fetch("KAMAL_HOST") %>
+    port: "127.0.0.1:5432:5432"
+    env:
+      clear:
+        POSTGRES_USER: rally
+        POSTGRES_DB: rally_staging
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      - data:/var/lib/postgresql/data

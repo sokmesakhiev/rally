@@ -1,0 +1,299 @@
+name: Deploy to staging
+
+on:
+  push:
+    branches: ["staging"]
+  # Staging is the environment you want to be able to re-push without an empty
+  # commit — a failed deploy, a changed secret, a box that was rebuilt.
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: "Deploy both subprojects regardless of what changed"
+        type: boolean
+        default: false
+
+# One staging deploy at a time. Unlike production (where the approval gate
+# serialises things in practice), merges to staging land in bursts — and two
+# concurrent `kamal deploy` runs against one box race over the same containers
+# and the same `db:prepare`. `cancel-in-progress: false` because cancelling a
+# deploy mid-roll leaves the box in a state nobody chose; queueing is slower
+# and always lands somewhere defined.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Every repo variable and secret below is named STAGING_*, and that is a safety
+# property rather than a naming convention.
+#
+# GitHub Environments inherit repo-level secrets for any name the environment
+# doesn't define. So if this workflow read `secrets.S3_BUCKET` and the staging
+# environment hadn't set it, it would silently resolve to **production's**
+# bucket — and the frontend job runs `aws s3 sync --delete`. Distinct names
+# fail with an empty value instead, which is a broken deploy rather than a
+# deleted production site.
+#
+# See docs/staging-deployment.md for the full list and which Terraform output
+# each one comes from.
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.decide.outputs.backend }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          # `github.event.before` is null on workflow_dispatch, which makes the
+          # filter compare against nothing. The fallback keeps the manual run
+          # working; `force_all` is the escape hatch when the filter's answer
+          # is wrong (a changed secret, a rebuilt box — neither is a file).
+          base: ${{ github.event.before || github.ref }}
+          ref: ${{ github.sha }}
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+      - name: Decide what to deploy
+        id: decide
+        env:
+          FORCE: ${{ inputs.force_all }}
+          BACKEND: ${{ steps.filter.outputs.backend }}
+          FRONTEND: ${{ steps.filter.outputs.frontend }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            echo "backend=true"  >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=$BACKEND"   >> "$GITHUB_OUTPUT"
+            echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Backend: Kamal to the EC2 box ─────────────────────────────────────────
+  deploy-backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+
+    # No required reviewers here, unlike production. The point of staging is
+    # that merging to the branch is the approval. Declaring the environment is
+    # still worth it: it scopes the STAGING_* secrets and gives the run a URL.
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_API_URL }}
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # `gem install kamal` rather than `bundle install`. Bundling the app's
+      # Gemfile would compile pg and nokogiri on the runner for a job that only
+      # needs the deploy tool — the application's own gems are built inside the
+      # Docker image. **Pinned to the version in backend/Gemfile.lock** so a
+      # Kamal release can't change deploy behaviour without a commit.
+      - name: Install Kamal
+        run: gem install kamal -v 2.12.0 --no-document
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.STAGING_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.STAGING_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.STAGING_AWS_REGION }}
+
+      # Kamal wants a registry password, and ECR's is a 12-hour token rather
+      # than a stored credential — so it is minted per run instead of being a
+      # repo secret. Masked, because it is written into the step's env and
+      # Kamal echoes its registry login.
+      - name: Get an ECR token for Kamal
+        id: ecr
+        run: |
+          TOKEN=$(aws ecr get-login-password --region "${{ vars.STAGING_AWS_REGION }}")
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Set up SSH for Kamal
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          HOST: ${{ vars.STAGING_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pin the host key rather than disabling the check. The box has a
+          # stable Elastic IP, so this is a real protection and not theatre;
+          # if it ever fails after a deliberate rebuild, the fix is to accept
+          # the new key here, not to turn verification off.
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Builds the image, pushes it to the **staging** ECR repository, boots
+      # the new web and job containers, and reloads kamal-proxy onto them.
+      #
+      # Migrations: bin/docker-entrypoint runs `db:prepare` in the web
+      # container only (it sniffs for `./bin/rails server`), so the job
+      # container never migrates — the same ownership split as production's two
+      # ECS services. Kamal rolls roles in the order they are declared, web
+      # first, so the schema is current before new job code runs.
+      - name: Deploy with Kamal
+        env:
+          # Topology, from `terraform -chdir=infrastructure/staging output`
+          KAMAL_HOST: ${{ vars.STAGING_HOST }}
+          KAMAL_IMAGE: ${{ vars.STAGING_ECR_IMAGE }}
+          KAMAL_REGISTRY_SERVER: ${{ vars.STAGING_ECR_REGISTRY }}
+          KAMAL_PROXY_HOST: ${{ vars.STAGING_API_HOST }}
+          KAMAL_REGISTRY_PASSWORD: ${{ steps.ecr.outputs.token }}
+
+          # App configuration
+          AWS_REGION: ${{ vars.STAGING_AWS_REGION }}
+          AWS_BUCKET: ${{ vars.STAGING_UPLOADS_BUCKET }}
+          BACKEND_URL: ${{ vars.STAGING_API_URL }}
+          FRONTEND_URL: ${{ vars.STAGING_FRONTEND_URL }}
+          GOOGLE_CLIENT_ID: ${{ vars.STAGING_GOOGLE_CLIENT_ID }}
+          MAILER_FROM_EMAIL: ${{ vars.STAGING_MAILER_FROM_EMAIL }}
+          ABA_PAYWAY_BASE_URL: ${{ vars.STAGING_ABA_PAYWAY_BASE_URL }}
+
+          # Secrets, read by .kamal/secrets
+          RAILS_MASTER_KEY: ${{ secrets.STAGING_RAILS_MASTER_KEY }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+          ABA_PAYWAY_MERCHANT_ID: ${{ secrets.STAGING_ABA_PAYWAY_MERCHANT_ID }}
+          ABA_PAYWAY_API_KEY: ${{ secrets.STAGING_ABA_PAYWAY_API_KEY }}
+          RECAPTCHA_SECRET_KEY: ${{ secrets.STAGING_RECAPTCHA_SECRET_KEY }}
+          SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
+        run: kamal deploy -d staging
+
+      # Kamal's own output is long and the interesting part is at the end.
+      # `if: failure()` only — a successful deploy has nothing to read.
+      - name: Container logs on failure
+        if: failure()
+        continue-on-error: true
+        env:
+          KAMAL_HOST: ${{ vars.STAGING_HOST }}
+          KAMAL_IMAGE: ${{ vars.STAGING_ECR_IMAGE }}
+          KAMAL_REGISTRY_SERVER: ${{ vars.STAGING_ECR_REGISTRY }}
+          KAMAL_PROXY_HOST: ${{ vars.STAGING_API_HOST }}
+          KAMAL_REGISTRY_PASSWORD: ${{ steps.ecr.outputs.token }}
+          AWS_BUCKET: ${{ vars.STAGING_UPLOADS_BUCKET }}
+          BACKEND_URL: ${{ vars.STAGING_API_URL }}
+          FRONTEND_URL: ${{ vars.STAGING_FRONTEND_URL }}
+          RAILS_MASTER_KEY: ${{ secrets.STAGING_RAILS_MASTER_KEY }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+          ABA_PAYWAY_MERCHANT_ID: ${{ secrets.STAGING_ABA_PAYWAY_MERCHANT_ID }}
+          ABA_PAYWAY_API_KEY: ${{ secrets.STAGING_ABA_PAYWAY_API_KEY }}
+          RECAPTCHA_SECRET_KEY: ${{ secrets.STAGING_RECAPTCHA_SECRET_KEY }}
+          SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
+        run: kamal app logs -d staging --lines 200 || true
+
+      - name: Verify the API is actually serving
+        env:
+          API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          # Kamal only promotes a container its proxy considers healthy, so
+          # this is belt and braces — but it checks the path a browser takes
+          # (DNS, TLS, proxy, Rails) rather than the one the proxy checks
+          # (localhost, plain HTTP). The two have come apart before: see the
+          # sitemap route that returned a 200 of the wrong thing.
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 10 "$API_URL/up" > /dev/null; then
+              echo "staging API is up"
+              exit 0
+            fi
+            echo "attempt $attempt failed, retrying…"
+            sleep 6
+          done
+          echo "staging API did not respond at $API_URL/up"
+          exit 1
+
+  # ── Frontend: S3 + CloudFront, mirroring production ───────────────────────
+  deploy-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_FRONTEND_URL }}
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # npm, not bun — bun.lock predates both vitest and i18next.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React app
+        run: npm run build
+        env:
+          # VITE_* values are inlined at build time, so the API this bundle
+          # talks to is fixed here. A staging bundle built with production's
+          # VITE_API_URL would look fine and quietly exercise production.
+          VITE_API_URL: ${{ vars.STAGING_API_URL }}
+          # NOT optional: `npm run build` runs scripts/build-sitemap.mjs, which
+          # exits non-zero without it, and the script fetches VITE_API_URL to
+          # enumerate events — so a staging build also smoke-tests that the
+          # staging API's /events endpoint answers.
+          VITE_BASE_URL: ${{ vars.STAGING_FRONTEND_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.STAGING_VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.STAGING_VITE_GOOGLE_CLIENT_ID }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.STAGING_VITE_RECAPTCHA_SITE_KEY }}
+          VITE_SENTRY_DSN: ${{ vars.STAGING_VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: staging
+          VITE_GIT_SHA: ${{ github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.STAGING_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.STAGING_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.STAGING_AWS_REGION }}
+
+      # Byte-for-byte the same cache headers as production, including sw.js
+      # never being cached — a service worker with an immutable cache is
+      # permanently unreplaceable on someone's device, and staging is where you
+      # would want to discover that.
+      - name: Deploy to S3
+        env:
+          BUCKET: ${{ vars.STAGING_FRONTEND_BUCKET }}
+        run: |
+          aws s3 sync dist/client/ "s3://$BUCKET" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html" \
+            --exclude "sw.js"
+
+          aws s3 cp dist/client/index.html "s3://$BUCKET/index.html" \
+            --cache-control "no-cache,no-store,must-revalidate" \
+            --content-type "text/html"
+
+          aws s3 cp dist/client/sw.js "s3://$BUCKET/sw.js" \
+            --cache-control "no-cache,no-store,must-revalidate" \
+            --content-type "application/javascript"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.STAGING_CLOUDFRONT_DIST_ID }}" \
+            --paths "/*"

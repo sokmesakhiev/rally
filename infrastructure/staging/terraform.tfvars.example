@@ -1,0 +1,36 @@
+# Copy to terraform.tfvars (gitignored by ../.gitignore) and fill in.
+#
+# Note how little is here compared with ../terraform.tfvars.example: the app's
+# own secrets (rails_master_key, JWT, ABA PayWay, reCAPTCHA) do **not** live in
+# Terraform for staging. Production injects them through Secrets Manager into
+# an ECS task definition, which is why Terraform has to know them. Kamal reads
+# them from `.kamal/secrets` at deploy time instead, so staging's secrets live
+# in GitHub Actions secrets and never enter Terraform state.
+
+aws_region = "ap-southeast-1"
+
+# The box. t3.small is the floor — see variables.tf for the arithmetic.
+instance_type = "t3.small"
+
+# The public half of the key pair CI deploys with. Generate a dedicated one:
+#   ssh-keygen -t ed25519 -C "rally-staging-deploy" -f ~/.ssh/rally_staging
+# then put the PRIVATE half in the SSH_PRIVATE_KEY repo secret.
+ssh_public_key = "ssh-ed25519 AAAA... rally-staging-deploy"
+
+# Narrow this if you move to a self-hosted runner. GitHub-hosted runners have
+# no stable egress range, so 0.0.0.0/0 is the default and the honest cost of
+# deploying over SSH from GitHub.
+ssh_allowed_cidrs = ["0.0.0.0/0"]
+
+# **Required.** production.rb hardcodes force_ssl, and staging runs as
+# RAILS_ENV=production, so there has to be a real hostname with a certificate.
+# The A record must resolve to the Elastic IP before the first deploy —
+# Kamal's proxy validates over HTTP-01.
+api_domain = "api.staging.example.com"
+
+# Optional. Empty uses the CloudFront domain, which is fine for staging.
+frontend_domain = "staging.example.com"
+
+# Empty means Terraform creates no DNS records; the `dns_records_to_create`
+# and `frontend_cert_validation_records` outputs print what to add by hand.
+route53_zone_id = ""
