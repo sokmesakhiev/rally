@@ -354,7 +354,24 @@ function UsersPanel() {
               </thead>
               <tbody>
                 {query.data.users.map((u) => (
-                  <tr key={u.id} className="border-t border-border hover:bg-muted/40">
+                  // The whole row opens the detail sheet. `<tr>` can't be a
+                  // button, so this is the keyboard affordance instead — a
+                  // focusable row with Enter/Space, rather than a "View"
+                  // link in a sixth column that would be the only way in.
+                  <tr
+                    key={u.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={t("admin.viewUser", { email: u.email })}
+                    className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                    onClick={() => setDetailId(u.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDetailId(u.id);
+                      }
+                    }}
+                  >
                     <td className="p-3">
                       {/* A real `<button>` on the name, not a clickable `<tr>`.
                           The row version put an interactive element (the
@@ -378,7 +395,13 @@ function UsersPanel() {
                     <td className="p-3">
                       <UserStatusBadges user={u} />
                     </td>
-                    <td className="p-3 text-right">
+                    {/* Stops a click on the menu, or Enter on one of its
+                        items, from also opening the detail sheet behind it. */}
+                    <td
+                      className="p-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       {u.admin ? (
                         <span className="text-xs text-muted-foreground">
                           {t("admin.noActionsForAdmin")}
