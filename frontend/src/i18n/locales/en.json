@@ -1219,5 +1219,21 @@
       "consumed": "Done",
       "expired": "Expired"
     }
+  },
+  "bibAssignment": {
+    "assign": "Assign bibs",
+    "title": "Assign bib numbers",
+    "description": "Numbers are given to everyone who doesn't have one yet, oldest registration first. Existing numbers are never changed — including those of withdrawn entries, whose results and certificates still reference them.",
+    "range_other": "{{count}} entries · {{first}} → {{last}}",
+    "nothingToDo": "Everyone has a number",
+    "notConfigured_other": "{{count}} waiting · no start number set",
+    "nobodyWaiting": "Every registration already has a bib number.",
+    "unconfiguredHint": "Set a start number on each distance under Setup → Registration to include it. There is no default on purpose — a guessed range would be printed on real bibs.",
+    "confirm_one": "Assign 1 number",
+    "confirm_other": "Assign {{count}} numbers",
+    "toastAssigned_one": "1 bib number assigned",
+    "toastAssigned_other": "{{count}} bib numbers assigned",
+    "range_one": "{{count}} entry · {{first}} → {{last}}",
+    "notConfigured_one": "{{count}} waiting · no start number set"
   }
 }

@@ -52,6 +52,7 @@ import {
 import { useAuth } from "@/lib/use-auth";
 import { SiteHeader } from "@/components/site-header";
 import { EventQRCode } from "@/components/event-qr-code";
+import { BibAssignmentDialog } from "@/components/bib-assignment-dialog";
 import { EventDetailsEditor } from "@/components/event-details-editor";
 import { ImageUpload } from "@/components/image-upload";
 import { CertificateTemplateUpload } from "@/components/certificate-template-upload";
@@ -1221,7 +1222,23 @@ function ManageEvent() {
               {/* ── Participants ── */}
               <TabsContent value="participants" className="mt-6">
                 {can.exportParticipants && (
-                  <div className="mb-3 flex justify-end">
+                  <div className="mb-3 flex flex-wrap justify-end gap-2">
+                    {/* Same capability as editing a single bib by hand
+                        (update_registration), because that is exactly what
+                        this is — the organizer doing it for everyone at once. */}
+                    {can.updateRegistration && (
+                      <BibAssignmentDialog
+                        eventId={eventId}
+                        disabled={totalParticipants === 0}
+                        // The list only — a bib changes no figure on the
+                        // summary cards, same as the single-bib edit above.
+                        onAssigned={() =>
+                          queryClient.invalidateQueries({
+                            queryKey: ["event-participants", eventId],
+                          })
+                        }
+                      />
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
