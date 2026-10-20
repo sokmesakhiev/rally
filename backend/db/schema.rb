@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_29_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_19_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -187,6 +187,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_29_010000) do
     t.integer "position", default: 0, null: false
     t.integer "price_cents"
     t.datetime "updated_at", null: false
+    t.string "bib_prefix"
+    t.integer "bib_start"
+    t.integer "bib_padding"
     t.index ["event_id", "position"], name: "index_event_types_on_event_id_and_position"
     t.index ["event_id"], name: "index_event_types_on_event_id"
   end
@@ -223,6 +226,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_29_010000) do
     t.datetime "registration_closed_at"
     t.datetime "registration_closes_at"
     t.string "visibility", default: "public", null: false
+    t.string "bib_prefix"
+    t.integer "bib_start"
+    t.integer "bib_padding"
     t.index ["category"], name: "index_events_on_category"
     t.index ["creator_id"], name: "index_events_on_creator_id"
     t.index ["deleted_at"], name: "index_events_on_deleted_at"

@@ -242,6 +242,54 @@ module Api
         render json: { error: "Registration not found" }, status: :not_found
       end
 
+      # GET /api/v1/events/:event_id/bib_assignment
+      #
+      # The dry run. Returns exactly what a POST would do — per group, how many
+      # numbers would be issued and the first and last of them — without
+      # issuing any. Bibs get printed; being able to see "10K: 1000 → 1142"
+      # before committing is the difference between a mistake and a reprint.
+      def bib_assignment_preview
+        event = Event.kept.find(params[:event_id])
+        return unless authorize_event!(event, :update_registration)
+
+        result = Registrations::AssignBibNumbers.call(event: event, dry_run: true)
+        render json: bib_assignment_json(result)
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
+      # POST /api/v1/events/:event_id/bib_assignment
+      #
+      # Assigns a number to every live registration that doesn't have one.
+      # Idempotent by construction — an existing bib is never touched — so an
+      # organizer can run it when entries close and again after the late
+      # additions, which is what actually happens.
+      def assign_bib_numbers
+        event = Event.kept.find(params[:event_id])
+        return unless authorize_event!(event, :update_registration)
+
+        result = Registrations::AssignBibNumbers.call(event: event)
+
+        # Logged even when it assigned nothing. "Somebody pressed this and the
+        # field didn't change" is exactly the entry you want when an organizer
+        # reports that assignment isn't working — the answer is usually a
+        # group with no start number set.
+        EventActivity.log!(
+          event: event, actor: current_user, action: "assign_bib_numbers",
+          metadata: {
+            assigned: result.assigned_count,
+            groups: result.groups.map { |g|
+              { label: g.label, configured: g.configured, assigned: g.configured ? g.pending_count : 0,
+                first_number: g.first_number, last_number: g.last_number }
+            }
+          },
+        )
+
+        render json: bib_assignment_json(result)
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Event not found" }, status: :not_found
+      end
+
       # DELETE /api/v1/registrations/:id — organizer removes participant.
       # Soft-delete (see Registration#discard!) — the Payment/Refund history
       # (if any) stays intact rather than being wiped out.
@@ -310,6 +358,31 @@ module Api
       end
 
       private
+
+      # The preview and the result share one shape on purpose: the dialog
+      # renders the same component before and after, so an organizer sees
+      # the numbers they were promised rather than a differently-worded
+      # summary they have to re-read.
+      def bib_assignment_json(result)
+        {
+          assigned_count: result.assigned_count,
+          groups: result.groups.map do |group|
+            {
+              key: group.key,
+              label: group.label,
+              # false means "this group has no start number", which is the
+              # one reason assignment legitimately does nothing. The client
+              # says so rather than reporting success over an empty result.
+              configured: group.configured,
+              pending_count: group.pending_count,
+              skipped_count: group.skipped_count,
+              first_number: group.first_number,
+              last_number: group.last_number,
+              warning: group.warning
+            }
+          end
+        }
+      end
 
       def set_event
         @event = Event.kept.includes(:event_types).find(params[:event_id])
