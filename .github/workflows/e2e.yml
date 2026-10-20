@@ -92,8 +92,23 @@ jobs:
       # config.load_defaults 8.1, and ruby-vips is bindings only — the native
       # library comes from apt, same as the Rspec job and the production
       # image.
+      #
+      # **`apt-get update` first, and it is not optional.** The runner image
+      # ships a package index captured when the image was built, while the
+      # Azure mirror it points at keeps moving: once a package is superseded
+      # upstream, the exact .deb filename the stale index asks for is deleted
+      # from the pool and the fetch 404s. libvips pulls in poppler, which
+      # turns over often, so this surfaced here first — as
+      # "Failed to fetch .../libpoppler134_24.02.0-1ubuntu9.9_amd64.deb 404",
+      # which reads like a broken mirror rather than a stale index.
+      #
+      # Nothing about the step changed for this to start failing, which is why
+      # it is worth a comment: it was always going to fail on whichever day
+      # poppler moved.
       - name: Install native dependencies
-        run: sudo apt-get install -y libpq-dev libvips
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev libvips
 
       # The frontend is served by Vite in this suite, so its own dependencies
       # are needed too. npm ci in both places — never npm install — so CI

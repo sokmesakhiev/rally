@@ -74,6 +74,14 @@ Rails.application.routes.draw do
       # literal segments rather than an :id that "summary" could match.
       get    "events/:event_id/registrations/summary", to: "registrations#summary"
       get    "events/:event_id/registrations/export", to: "registrations#export"
+
+      # Automatic bib assignment. GET is the dry run and POST performs it —
+      # two verbs rather than a `dry_run` flag, so the preview is a read by
+      # the only definition the app enforces (impersonation's read-only rule
+      # is the HTTP verb), and a support session can look without a chance of
+      # numbering somebody's race.
+      get    "events/:event_id/bib_assignment", to: "registrations#bib_assignment_preview"
+      post   "events/:event_id/bib_assignment", to: "registrations#assign_bib_numbers"
       patch  "registrations/:id",              to: "registrations#update"
       delete "registrations/:id",              to: "registrations#destroy"
 

@@ -69,6 +69,11 @@ class EventRequestSchema < ApplicationRequestSchema
         optional(:description).maybe(:string)
         optional(:capacity).maybe(:integer)
         optional(:price_cents).maybe(:integer)
+        # Bib range for this distance. `maybe` throughout: clearing a
+        # range is a real edit, and the form posts null for blanks.
+        optional(:bib_prefix).maybe(:string, max_size?: 16)
+        optional(:bib_start).maybe(:integer, gteq?: 0)
+        optional(:bib_padding).maybe(:integer, gteq?: 0, lteq?: 12)
         optional(:position).filled(:integer)
       end
     end

@@ -373,8 +373,22 @@ function UsersPanel() {
                     }}
                   >
                     <td className="p-3">
-                      <p className="font-medium">{u.display_name ?? "—"}</p>
-                      <p className="text-xs text-muted-foreground">{u.email}</p>
+                      {/* A real `<button>` on the name, not a clickable `<tr>`.
+                          The row version put an interactive element (the
+                          Actions menu) inside another interactive element,
+                          which needed a `stopPropagation` wrapper to keep the
+                          two apart and left a row announcing itself as a
+                          button to a screen reader while containing one. This
+                          gets keyboard and focus behaviour for free. */}
+                      <button
+                        type="button"
+                        onClick={() => setDetailId(u.id)}
+                        className="rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={t("admin.viewUser", { email: u.email })}
+                      >
+                        <span className="block font-medium">{u.display_name ?? "—"}</span>
+                        <span className="block text-xs text-muted-foreground">{u.email}</span>
+                      </button>
                     </td>
                     <td className="p-3">{u.events_count ?? 0}</td>
                     <td className="p-3 text-muted-foreground">{formatDate(u.created_at)}</td>
@@ -630,7 +644,27 @@ function UserActionsMenu({
 
   return (
     <>
-      <DropdownMenu>
+      {/* **`modal={false}` is a bug fix, not a preference.** Cancelling any of
+          the dialogs below used to freeze the whole page until a reload.
+
+          A modal Radix layer sets `document.body.style.pointerEvents = "none"`
+          and saves the previous value in a *module-level* variable, restoring
+          it when the last such layer unmounts. `@radix-ui/react-menu` and
+          `@radix-ui/react-dialog` each bundle their own nested copy of
+          `react-dismissable-layer`, so there are two of those variables and
+          two layer registries that cannot see each other. The menu closes with
+          an exit animation, so it is still mounted — and still holding the
+          lock — when the dialog mounts a commit later and records the body's
+          "previous" pointer-events as `"none"`. The menu then unmounts and
+          correctly restores `""`; on Cancel the dialog restores what it saved,
+          and puts `"none"` back on a page with nothing modal left to remove
+          it.
+
+          Making the menu non-modal takes it out of that handshake entirely:
+          it never writes the body style, so the dialog saves and restores
+          `""`. A `setTimeout` before opening the dialog would also work and
+          would be a race by construction. */}
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button size="sm" variant="outline" className="gap-1" disabled={busy}>
             {busy ? (

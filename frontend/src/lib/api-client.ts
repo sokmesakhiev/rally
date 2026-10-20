@@ -289,6 +289,14 @@ export interface ApiEventType {
   price_cents: number | null; // null = inherit event price
   position: number;
   spots_remaining: number | null; // null = unlimited
+  /** Bib range for this distance. `bib_start` being null is the single switch
+   *  that decides whether automatic assignment numbers this group at all —
+   *  there is deliberately no default, so an organizer who meant 1000–1999
+   *  and forgot to say so is told rather than quietly given 1–143. */
+  bib_prefix: string | null;
+  bib_start: number | null;
+  /** Zero-padding width, digits only: padding 4 with start 7 gives "0007". */
+  bib_padding: number | null;
 }
 
 export interface ApiEventTypeDraft {
@@ -297,6 +305,33 @@ export interface ApiEventTypeDraft {
   capacity?: number | null;
   price_cents?: number | null;
   position: number;
+  bib_prefix?: string | null;
+  bib_start?: number | null;
+  bib_padding?: number | null;
+}
+
+/** One row per event type, plus one for registrations with no type. The
+ *  preview and the result share this shape so the dialog renders the same
+ *  component before and after. */
+export interface ApiBibAssignmentGroup {
+  /** The event type's id, or null for the untyped group. */
+  key: string | null;
+  label: string;
+  /** false means this group has no start number — the one reason assignment
+   *  legitimately does nothing. */
+  configured: boolean;
+  pending_count: number;
+  skipped_count: number;
+  first_number: string | null;
+  last_number: string | null;
+  /** Set when this range would run into the next group's start. Advisory, not
+   *  an error: no two runners can share a number either way. */
+  warning: string | null;
+}
+
+export interface ApiBibAssignment {
+  assigned_count: number;
+  groups: ApiBibAssignmentGroup[];
 }
 
 /** Pagination envelope returned alongside paginated collections. */
@@ -339,6 +374,13 @@ export interface ApiEvent {
    *  whoever receives it, so don't present this to an organizer as access
    *  control. */
   visibility: "public" | "unlisted";
+  /** Event-level bib range. Used **only** for registrations that carry no
+   *  event type — a single-distance event never creates one. Not a fallback
+   *  for typed registrations: which range applies is decided by what the
+   *  registration has, never by precedence. */
+  bib_prefix: string | null;
+  bib_start: number | null;
+  bib_padding: number | null;
   /** True when the organizer closed sign-ups, or a deadline they set has
    *  passed. Distinct from "full": a closed event may have plenty of spots,
    *  and unlike a full one it offers no waitlist. */
@@ -873,6 +915,22 @@ export const registrationsApi = {
    */
   summary(eventId: string) {
     return api.get<{ summary: ApiRegistrationSummary }>(`/events/${eventId}/registrations/summary`);
+  },
+
+  /** Dry run: what assigning bib numbers would do, without doing it. A GET
+   *  rather than a flag on the POST, so the preview is a read by the only
+   *  definition the backend enforces — an impersonated support session can
+   *  look without any chance of numbering somebody's race. */
+  bibAssignmentPreview(eventId: string) {
+    return api.get<ApiBibAssignment>(`/events/${eventId}/bib_assignment`);
+  },
+
+  /** Assigns a number to every live registration that has none. Existing
+   *  numbers are never touched, including those held by withdrawn entries
+   *  whose results and certificates still reference them — so this is safe
+   *  to run again after late entries, which is the expected workflow. */
+  assignBibNumbers(eventId: string) {
+    return api.post<ApiBibAssignment>(`/events/${eventId}/bib_assignment`);
   },
 
   /** Downloads the participant list as a CSV (name, email, event type(s),

@@ -537,6 +537,11 @@ module Api
           # this one isn't listed, which is the difference between "I can't
           # find it again" and "I know why I can't find it again".
           visibility: event.visibility,
+          # Event-level bib range — only ever used for registrations with no
+          # event type. See Registrations::AssignBibNumbers.
+          bib_prefix: event.bib_prefix,
+          bib_start: event.bib_start,
+          bib_padding: event.bib_padding,
           # Two separate facts, not one. `registration_closed` is what the
           # register button branches on; `registration_closes_at` is shown to
           # participants *before* it passes so they know there's a deadline,
@@ -596,7 +601,13 @@ module Api
           capacity:    type.capacity,
           price_cents: type.price_cents,
           position:    type.position,
-          spots_remaining: type.spots_remaining
+          spots_remaining: type.spots_remaining,
+          # The bib range for this distance. `bib_start` being null is what
+          # the assignment preview reports as "not configured" — it is the
+          # single switch that decides whether this group gets numbered.
+          bib_prefix:  type.bib_prefix,
+          bib_start:   type.bib_start,
+          bib_padding: type.bib_padding
         }
       end
     end

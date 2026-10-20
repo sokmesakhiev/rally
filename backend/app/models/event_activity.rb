@@ -21,6 +21,7 @@ class EventActivity < ApplicationRecord
   ACTIONS = %w[
     remove_participant update_event_details
     invite_member revoke_invitation member_joined remove_member change_member_role
+    assign_bib_numbers
   ].freeze
 
   belongs_to :event

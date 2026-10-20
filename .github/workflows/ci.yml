@@ -119,6 +119,9 @@ jobs:
       # "Set up database" step.
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: |
+          # apt-get update first — same stale-index 404 as the Rspec job and
+          # e2e.yml.
+          sudo apt-get update
           sudo apt-get install -y libvips
           bin/importmap audit
 
@@ -195,6 +198,12 @@ jobs:
           # and ruby-vips (Gemfile) is Ruby bindings only — the actual native
           # library isn't bundled with the gem and has to come from apt, same
           # as backend/Dockerfile's production image already does.
+          #
+          # apt-get update first: the runner image's package index is older
+          # than the mirror it points at, so a superseded .deb is gone from
+          # the pool and the fetch 404s. See the matching comment in
+          # e2e.yml, which is where this bit first.
+          sudo apt-get update
           sudo apt-get install -y libpq-dev libvips
           bundle exec rails db:create db:schema:load db:seed
 
