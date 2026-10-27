@@ -50,7 +50,7 @@
     "@radix-ui/react-toggle-group": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
     "@rails/actioncable": "^8.1.400",
-    "@sentry/react": "^11.8.0",
+    "@sentry/react": "^11.9.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-router": "^1.170.46",
